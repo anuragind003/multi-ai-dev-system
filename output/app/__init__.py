@@ -1,23 +1,22 @@
+import os
 import sqlite3
 import uuid
-from flask import Flask, request, jsonify, g
-from werkzeug.exceptions import HTTPException
+import click
 
-# Database configuration
-DATABASE = 'database.db'
+from flask import Flask, request, jsonify, g, current_app
+from werkzeug.exceptions import abort
 
 def get_db():
     """
-    Establishes a database connection or returns the existing one.
-    The connection is stored in Flask's `g` object, which is unique per request.
+    Establishes a database connection for the current request if one doesn't exist.
+    The connection is stored in Flask's `g` object.
     """
     if 'db' not in g:
         g.db = sqlite3.connect(
-            DATABASE,
+            current_app.config['DATABASE'],
             detect_types=sqlite3.PARSE_DECLTYPES
         )
-        # Configure row_factory to return rows that behave like dictionaries
-        g.db.row_factory = sqlite3.Row
+        g.db.row_factory = sqlite3.Row # Allows accessing columns by name
     return g.db
 
 def close_db(e=None):
@@ -30,102 +29,102 @@ def close_db(e=None):
 
 def init_db():
     """
-    Initializes the database schema.
-    This function should be called once, typically via a Flask CLI command.
+    Initializes the database by executing the schema.sql script.
     """
     db = get_db()
-    # Database schema from project context
-    schema = """
-    CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        price REAL NOT NULL,
-        stock_quantity INTEGER NOT NULL
-    );
-    """
-    db.executescript(schema)
-    db.commit()
+    with current_app.open_resource('schema.sql') as f:
+        db.executescript(f.read().decode('utf8'))
 
-def create_app():
-    """
-    Factory function to create and configure the Flask application.
-    """
-    app = Flask(__name__)
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Clear the existing data and create new tables."""
+    init_db()
+    click.echo('Initialized the database.')
 
-    # Register the close_db function to be called after each request
+def create_app(test_config=None):
+    """
+    Flask application factory function.
+    Creates and configures the Flask application.
+    """
+    app = Flask(__name__, instance_relative_config=True)
+
+    # Default configuration
+    app.config.from_mapping(
+        SECRET_KEY='dev', # Should be a strong, random key in production
+        DATABASE=os.path.join(app.instance_path, 'database.db'),
+    )
+
+    if test_config is None:
+        # Load the instance config, if it exists, when not testing
+        app.config.from_pyfile('config.py', silent=True)
+    else:
+        # Load the test config if passed in
+        app.config.from_mapping(test_config)
+
+    # Ensure the instance folder exists
+    try:
+        os.makedirs(app.instance_path)
+    except OSError:
+        pass
+
+    # Register database functions with the app
     app.teardown_appcontext(close_db)
+    app.cli.add_command(init_db_command)
 
-    # Add a command to initialize the database via Flask CLI
-    # To run: flask --app app init-db
-    @app.cli.command('init-db')
-    def init_db_command():
-        """Clear the existing data and create new tables."""
-        init_db()
-        print('Initialized the database.')
+    # A simple health check route
+    @app.route('/')
+    def hello():
+        return 'Product API is running!'
 
-    # Custom error handlers for JSON responses
-    @app.errorhandler(400)
-    def bad_request(error):
-        # For HTTPException, description is usually set. For others, use a default.
-        message = getattr(error, 'description', 'The request could not be understood by the server due to malformed syntax.')
-        return jsonify({"error": "Bad Request", "message": message}), 400
-
-    @app.errorhandler(404)
-    def not_found(error):
-        message = getattr(error, 'description', 'The requested resource was not found on the server.')
-        return jsonify({"error": "Not Found", "message": message}), 404
-
-    # API Endpoints
+    # --- Product API Endpoints ---
 
     @app.route('/products', methods=['POST'])
     def create_product():
         """
         Creates a new product.
-        Expects JSON with 'name', 'price', 'stock_quantity', and optional 'description'.
+        Requires 'name', 'price', 'stock_quantity' in the request body.
         """
         data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON", "message": "Request body must be JSON."}), 400
-
-        name = data.get('name')
-        price = data.get('price')
-        stock_quantity = data.get('stock_quantity')
-        description = data.get('description', '') # Default to empty string if not provided
 
         # Input validation
-        if not isinstance(name, str) or not name.strip():
-            return jsonify({"error": "Validation Error", "message": "Product 'name' is required and must be a non-empty string."}), 400
-        if not isinstance(price, (int, float)) or price < 0:
-            return jsonify({"error": "Validation Error", "message": "Product 'price' is required and must be a non-negative number."}), 400
-        if not isinstance(stock_quantity, int) or stock_quantity < 0:
-            return jsonify({"error": "Validation Error", "message": "Product 'stock_quantity' is required and must be a non-negative integer."}), 400
-        if description is not None and not isinstance(description, str):
-            return jsonify({"error": "Validation Error", "message": "Product 'description' must be a string or null."}), 400
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+        if not data.get('name'):
+            return jsonify({"error": "Product name is required"}), 400
+        if not isinstance(data.get('price'), (int, float)) or data.get('price') <= 0:
+            return jsonify({"error": "Price must be a positive number"}), 400
+        if not isinstance(data.get('stock_quantity'), int) or data.get('stock_quantity') < 0:
+            return jsonify({"error": "Stock quantity must be a non-negative integer"}), 400
 
-        product_id = str(uuid.uuid4())
+        name = data['name']
+        description = data.get('description', '') # Description is optional
+        price = float(data['price'])
+        stock_quantity = int(data['stock_quantity'])
+        product_id = str(uuid.uuid4()) # Generate a unique ID (UUID)
+
         db = get_db()
         try:
             db.execute(
                 "INSERT INTO products (id, name, description, price, stock_quantity) VALUES (?, ?, ?, ?, ?)",
-                (product_id, name.strip(), description.strip(), price, stock_quantity)
+                (product_id, name, description, price, stock_quantity)
             )
             db.commit()
         except sqlite3.Error as e:
-            # Catch specific SQLite errors for better debugging/logging
-            return jsonify({"error": "Database Error", "message": f"Failed to create product: {e}"}), 500
+            current_app.logger.error(f"Database error during product creation: {e}")
+            return jsonify({"error": "Failed to create product due to a database error"}), 500
         except Exception as e:
-            # Catch any other unexpected errors
-            return jsonify({"error": "Internal Server Error", "message": f"An unexpected error occurred: {e}"}), 500
+            current_app.logger.error(f"Unexpected error during product creation: {e}")
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
         new_product = {
             "id": product_id,
-            "name": name.strip(),
-            "description": description.strip(),
+            "name": name,
+            "description": description,
             "price": price,
             "stock_quantity": stock_quantity
         }
-        return jsonify(new_product), 201
+        return jsonify(new_product), 201 # 201 Created
 
     @app.route('/products', methods=['GET'])
     def get_all_products():
@@ -134,94 +133,86 @@ def create_app():
         """
         db = get_db()
         products = db.execute("SELECT * FROM products").fetchall()
-        # Convert Row objects to dictionaries for jsonify
-        return jsonify([dict(product) for product in products]), 200
+        return jsonify([dict(product) for product in products])
 
     @app.route('/products/<string:product_id>', methods=['GET'])
-    def get_product(product_id):
+    def get_product_by_id(product_id):
         """
-        Retrieves details for a specific product by its unique ID.
+        Retrieves details for a specific product by its ID.
         """
         db = get_db()
         product = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         if product is None:
-            return jsonify({"error": "Not Found", "message": f"Product with ID '{product_id}' not found."}), 404
-        return jsonify(dict(product)), 200
+            return jsonify({"error": "Product not found"}), 404
+        return jsonify(dict(product))
 
     @app.route('/products/<string:product_id>', methods=['PUT'])
     def update_product(product_id):
         """
-        Modifies an existing product's details by ID, supporting partial updates.
-        Expects JSON with fields to update.
+        Updates an existing product's details by its ID. Supports partial updates.
         """
         data = request.get_json()
         if not data:
-            return jsonify({"error": "Invalid JSON", "message": "Request body must be JSON."}), 400
+            return jsonify({"error": "Request body must be JSON"}), 400
 
         db = get_db()
         product = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         if product is None:
-            return jsonify({"error": "Not Found", "message": f"Product with ID '{product_id}' not found."}), 404
+            return jsonify({"error": "Product not found"}), 404
 
-        updates = {}
-        # Validate and collect updates
+        # Prepare update fields and values for partial update
+        update_fields = []
+        update_values = []
+
         if 'name' in data:
-            if not isinstance(data['name'], str) or not data['name'].strip():
-                return jsonify({"error": "Validation Error", "message": "Product 'name' must be a non-empty string."}), 400
-            updates['name'] = data['name'].strip()
+            if not data['name']:
+                return jsonify({"error": "Product name cannot be empty"}), 400
+            update_fields.append("name = ?")
+            update_values.append(data['name'])
         if 'description' in data:
-            # Allow description to be null or empty string
-            if data['description'] is not None and not isinstance(data['description'], str):
-                return jsonify({"error": "Validation Error", "message": "Product 'description' must be a string or null."}), 400
-            updates['description'] = data['description'].strip() if data['description'] else ''
+            update_fields.append("description = ?")
+            update_values.append(data['description'])
         if 'price' in data:
-            if not isinstance(data['price'], (int, float)) or data['price'] < 0:
-                return jsonify({"error": "Validation Error", "message": "Product 'price' must be a non-negative number."}), 400
-            updates['price'] = data['price']
+            if not isinstance(data['price'], (int, float)) or data['price'] <= 0:
+                return jsonify({"error": "Price must be a positive number"}), 400
+            update_fields.append("price = ?")
+            update_values.append(float(data['price']))
         if 'stock_quantity' in data:
             if not isinstance(data['stock_quantity'], int) or data['stock_quantity'] < 0:
-                return jsonify({"error": "Validation Error", "message": "Product 'stock_quantity' must be a non-negative integer."}), 400
-            updates['stock_quantity'] = data['stock_quantity']
+                return jsonify({"error": "Stock quantity must be a non-negative integer"}), 400
+            update_fields.append("stock_quantity = ?")
+            update_values.append(int(data['stock_quantity']))
 
-        if not updates:
-            return jsonify({"error": "No Content", "message": "No valid fields provided for update."}), 400
+        if not update_fields:
+            return jsonify({"error": "No valid fields provided for update"}), 400
 
-        # Construct the UPDATE query dynamically
-        set_clauses = []
-        values = []
-        for key, value in updates.items():
-            set_clauses.append(f"{key} = ?")
-            values.append(value)
-
-        values.append(product_id) # Add product_id for the WHERE clause
+        update_query = "UPDATE products SET " + ", ".join(update_fields) + " WHERE id = ?"
+        update_values.append(product_id)
 
         try:
-            db.execute(
-                f"UPDATE products SET {', '.join(set_clauses)} WHERE id = ?",
-                tuple(values)
-            )
+            db.execute(update_query, tuple(update_values))
             db.commit()
         except sqlite3.Error as e:
-            return jsonify({"error": "Database Error", "message": f"Failed to update product: {e}"}), 500
+            current_app.logger.error(f"Database error during product update: {e}")
+            return jsonify({"error": "Failed to update product due to a database error"}), 500
         except Exception as e:
-            return jsonify({"error": "Internal Server Error", "message": f"An unexpected error occurred during update: {e}"}), 500
+            current_app.logger.error(f"Unexpected error during product update: {e}")
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
-        # Retrieve and return the updated product details
+        # Fetch the updated product to return the latest state
         updated_product = db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
-        return jsonify(dict(updated_product)), 200
+        return jsonify(dict(updated_product))
 
     @app.route('/products/<string:product_id>', methods=['DELETE'])
     def delete_product(product_id):
         """
-        Removes a product from the system using its ID.
+        Deletes a product from the system by its ID.
         """
         db = get_db()
         cursor = db.execute("DELETE FROM products WHERE id = ?", (product_id,))
         db.commit()
-
         if cursor.rowcount == 0:
-            return jsonify({"error": "Not Found", "message": f"Product with ID '{product_id}' not found."}), 404
-        
-        return jsonify({"message": "Product deleted successfully."}), 200
+            return jsonify({"error": "Product not found"}), 404
+        return '', 204 # 204 No Content on successful deletion
 
     return app
