@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13-alpine
+    container_name: cdp_postgres_db
+    environment:
+      POSTGRES_DB: cdp_db
+      POSTGRES_USER: cdp_user
+      POSTGRES_PASSWORD: cdp_password
+    volumes:
+      - cdp_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cdp_user -d cdp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cdp_fastapi_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://cdp_user:cdp_password@db:5432/cdp_db
+      # Example of other environment variables that might be needed by the backend
+      # MOENGAGE_API_KEY: your_moengage_api_key_here
+      # CUSTOMER360_API_URL: http://customer360-service:port
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app  # Mount the backend code for live reloading during development
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cdp_vue_frontend
+    ports:
+      - "5173:5173" # Default port for Vite development server
+    environment:
+      # This URL is for the frontend to communicate with the backend.
+      # When running via docker-compose, localhost:8000 refers to the host machine's exposed port.
+      VITE_APP_BACKEND_URL: http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_started # Frontend doesn't strictly need backend to be healthy, just started.
+    volumes:
+      - ./frontend:/app # Mount the frontend code for live reloading during development
+      - /app/node_modules # Exclude node_modules from host mount to prevent issues with different OS/architecture binaries
+    command: npm run dev --host 0.0.0.0 --port 5173 # Command to start Vue/Vite dev server
+
+volumes:
+  cdp_db_data:

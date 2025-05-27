@@ -29,7 +29,7 @@ BASE_DIR = pathlib.Path(__file__).parent
 INPUT_DIR = os.path.join(BASE_DIR, "brds")
 PROJECT_BRDS_DIR = INPUT_DIR  # Add this line - alias for INPUT_DIR for backward compatibility
 PROJECT_OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-PROJECT_CONTEXT_FILE = os.path.join(PROJECT_OUTPUT_DIR, "project_context.json")
+
 
 # Ensure output directory exists
 try:

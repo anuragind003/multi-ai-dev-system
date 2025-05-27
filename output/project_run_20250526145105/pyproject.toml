@@ -1,0 +1,94 @@
+[project]
+name = "ltfs-offer-cdp"
+version = "0.1.0"
+description = "LTFS Offer Customer Data Platform (CDP) for Consumer Loans to eliminate manual processes, accelerate operations, and prevent errors in creating, managing, and campaigning consumer loan offers."
+authors = [
+    { name = "LTFS CDP Team", email = "dev@ltfs.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["FastAPI", "CDP", "Customer Data Platform", "Loans", "PostgreSQL"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+[project.dependencies]
+fastapi = "^0.111.0"
+uvicorn = { extras = ["standard"], version = "^0.30.1" }
+asyncpg = "^0.29.0"
+sqlalchemy = "^2.0.30"
+"sqlalchemy-utils" = "^0.41.1"
+pydantic = "^2.7.1"
+"pydantic-settings" = "^2.2.1"
+python-dotenv = "^1.0.1"
+pandas = "^2.2.2"
+openpyxl = "^3.1.2"
+python-multipart = "^0.0.9"
+loguru = "^0.7.2"
+alembic = "^1.13.1"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.6",
+    "httpx>=0.27.0",
+    "ruff>=0.4.4",
+    "mypy>=1.10.0",
+    "pre-commit>=3.7.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes errors
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "B",   # flake8-bugbear
+    "C",   # flake8-comprehensions
+    "A",   # flake8-builtins
+    "S",   # flake8-bandit (security)
+    "T",   # flake8-print
+    "PIE", # flake8-pie
+    "PL",  # pylint (subset)
+    "RUF", # ruff specific rules
+    "UP",  # pyupgrade
+    "YTT", # flake8-2020
+]
+ignore = [
+    "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
+    "D105", # Missing docstring in public method
+    "D107", # Missing docstring in __init__
+    "D203", # 1 blank line required before class docstring (conflicts with D211)
+    "D213", # Multi-line docstring summary should start on the second line (conflicts with D206)
+]
+fix = true
+unfixable = ["T20"] # Don't auto-fix print statements, force manual removal
+
+[tool.ruff.isort]
+known-first-party = ["app"]
+force-single-line = false
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --cov=app --cov-report=term-missing --no-cov-on-fail"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

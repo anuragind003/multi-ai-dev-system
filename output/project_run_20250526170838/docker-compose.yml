@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: cdp_db
+      POSTGRES_USER: cdp_user
+      POSTGRES_PASSWORD: cdp_password
+    volumes:
+      - cdp_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local access/debugging, remove in production if not needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cdp_user -d cdp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ./backend # Assumes Flask app is in a 'backend' directory
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_APP: app.py # Or your main Flask application file
+      FLASK_ENV: development # Set to 'production' for production deployments
+      DATABASE_URL: postgresql://cdp_user:cdp_password@db:5432/cdp_db
+    volumes:
+      - ./backend:/app # Mount the backend code for live reloading during development
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is healthy before starting app
+    command: flask run --host 0.0.0.0 --port 5000 # Command to run Flask development server
+
+  frontend:
+    build:
+      context: ./frontend # Assumes Vue.js app is in a 'frontend' directory
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend:/app # Mount the frontend code for live reloading during development
+    depends_on:
+      - app # Frontend depends on backend for API calls
+    command: npm run serve # Command to run Vue development server
+
+volumes:
+  cdp_db_data: # Named volume for PostgreSQL data persistence

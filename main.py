@@ -1,7 +1,7 @@
 import os
-import json # Added for better printing of intermediate outputs
-import shutil # For potential cleanup of output directory
-import datetime # For potential timestamped output directories
+import json
+import shutil
+import datetime
 
 from shared_memory import SharedProjectMemory
 from config import get_gemini_model, PROJECT_BRDS_DIR, PROJECT_OUTPUT_DIR
@@ -13,40 +13,68 @@ from agents.test_case_generator import TestCaseGeneratorAgent
 from agents.code_quality_agent import CodeQualityAgent
 from agents.test_validation_agent import TestValidationAgent
 from tools.code_execution_tool import CodeExecutionTool
+from tools.document_parser import DocumentParser # <--- NEW IMPORT
 
 
-def load_brd_from_file(file_path):
-    """Loads BRD content from a specified file."""
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"BRD file not found: {file_path}")
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return f.read()
+# The old load_brd_from_file function is now replaced by DocumentParser
+# No need for this function definition anymore.
 
 def run_project_workflow():
     print("--- Starting Multi-AI Agentic System Workflow ---")
 
-    memory = SharedProjectMemory()
+    # Create a unique directory for each run's generated project and memory DB
+    project_run_dir = os.path.join(PROJECT_OUTPUT_DIR, f"project_run_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
+    os.makedirs(project_run_dir, exist_ok=True)
+    print(f"All generated code and tests for this run will be placed in: {project_run_dir}")
+    
+    # 1. Initialize Shared Project Memory - NOW PASSES THE RUN DIRECTORY
+    memory = SharedProjectMemory(run_dir=project_run_dir)
     print("Shared Project Memory initialized.")
 
+    # 2. Get LLM Model
     llm = get_gemini_model()
     print(f"Gemini model '{llm.model_name}' loaded.")
 
+    # 3. Initialize the DocumentParser tool
+    document_parser = DocumentParser()
+    print("DocumentParser initialized for multi-format BRD input.")
+
     # --- Phase 1 Steps (Sequential Execution) ---
 
-    # Step 1: Taking BRD as Input
-    brd_file_path = os.path.join(PROJECT_BRDS_DIR, "simple_crud_api.md")
+    # Step 1: Taking BRD as Input (Now supports multi-format files)
+    print("\n--- Step 1: BRD Analysis ---")
+    
+    # Prompt user for BRD file path
+    brd_file_path = input(
+        f"Please enter the path to your BRD file "
+        f"(e.g., {os.path.join(PROJECT_BRDS_DIR, 'CDP.pdf')} or a .pdf/.docx file): "
+    ).strip()
+    
+    if not brd_file_path:
+        print("No BRD file path provided. Exiting.")
+        return
+
     try:
-        raw_brd = load_brd_from_file(brd_file_path)
-        memory.set("raw_brd", raw_brd)
-        print(f"\n--- Step 1: BRD Analysis (Input: {brd_file_path}) ---")
+        # Use the DocumentParser to extract text from the BRD file
+        raw_brd = document_parser.parse_document(brd_file_path)
+        memory.set("raw_brd", raw_brd) # Store raw BRD text for reference
+        memory.set("brd_file_path_used", brd_file_path) # Store the path used
+        print(f"BRD loaded from {brd_file_path} (Parsed text length: {len(raw_brd)} chars).")
+
         brd_analyst_agent = BRDAnalystAgent(llm=llm, memory=memory)
         brd_analysis_output = brd_analyst_agent.run(raw_brd)
         memory.set("brd_analysis", brd_analysis_output)
         print("BRD Analysis Complete. Output stored in memory.")
         print(f"Summary: {brd_analysis_output.get('summary', 'N/A')}")
         # print(json.dumps(brd_analysis_output, indent=2)) # Uncomment to see full output
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return # Stop workflow on critical error
+    except ValueError as e: # Catch unsupported format or parsing errors
+        print(f"Error parsing BRD: {e}")
+        return
     except Exception as e:
-        print(f"Error during BRD Analysis: {e}")
+        print(f"An unexpected error occurred during BRD Analysis: {e}")
         return # Stop workflow on critical error
 
     # Step 2: Deciding Tech Stack
@@ -82,21 +110,19 @@ def run_project_workflow():
 
     # --- Phase 2: Introduce Basic Testing & Quality (Iterative Loop) ---
 
-    # Dynamic project root based on initial CodeGenAgent output or a fixed name
-    # For a simple CRUD API, LLM often suggests `app/` structure.
-    # Let's clean the output directory for each full run of the workflow for simplicity in MVP.
-    # In a real system, you'd version outputs (e.g., output/run_YYYYMMDD_HHMMSS/)
+    # Create a unique directory for each run's generated project to keep outputs clean
     project_run_dir = os.path.join(PROJECT_OUTPUT_DIR, f"project_run_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
     os.makedirs(project_run_dir, exist_ok=True)
-    print(f"\nAll generated code and tests will be placed in: {project_run_dir}")
+    print(f"\nAll generated code and tests for this run will be placed in: {project_run_dir}")
     
+    # Initialize Code Execution Tool with the specific run directory
     code_execution_tool = CodeExecutionTool(output_dir=project_run_dir)
 
-    max_code_gen_retries = 3 # Max attempts for the code-test-fix loop
+    max_code_gen_retries = 5 # Max attempts for the code-test-fix loop
     current_code_gen_retry = 0
     code_is_acceptable = False
     
-    # Initialize feedback in memory
+    # Initialize feedback in memory, important for the first iteration
     memory.set("code_quality_feedback", "")
     memory.set("test_results_feedback", "")
 
@@ -107,6 +133,9 @@ def run_project_workflow():
         # Combine feedback from previous iteration if any
         combined_feedback = (memory.get("code_quality_feedback", "") + "\n" + 
                              memory.get("test_results_feedback", "")).strip()
+        if combined_feedback:
+            print(f"  Attempting to fix issues based on feedback:\n{combined_feedback}")
+
 
         # Step 4: Writing Whole Code (CodeGenerationAgent)
         print("\n--- Step 4: Writing Whole Code ---")
@@ -121,23 +150,21 @@ def run_project_workflow():
             # Ensure generated_code_files is not empty or None for subsequent steps
             if not generated_code_files:
                 print("Critical: Code generation failed to produce any files. Cannot proceed with validation.")
-                break
+                # This breaks the outer while loop as `code_is_acceptable` remains False
+                break 
             memory.set("generated_code_files", generated_code_files)
-            # Update the specific generated app root for subsequent agents if CodeGenAgent returns it
-            # For our current simple case, it's just project_run_dir
-            memory.set("generated_app_root_path", project_run_dir) 
+            memory.set("generated_app_root_path", project_run_dir) # Ensure this is always the root of the generated project
             print("Code Generation complete. Files written to output directory.")
             
-            # Clear feedback for new iteration (will be set again by quality/test agents)
+            # Clear feedback as new code has been generated
             memory.set("code_quality_feedback", "")
             memory.set("test_results_feedback", "")
 
         except Exception as e:
             print(f"Error during Code Generation (Iteration {current_code_gen_retry}): {e}")
-            memory.set("code_quality_feedback", f"Code generation failed with error: {e}. Attempting regeneration.")
-            continue # Try next iteration
+            memory.set("code_quality_feedback", f"Code generation failed with error: {e}. Attempting regeneration in next iteration.")
+            continue # Continue to next iteration to allow CodeGenAgent to fix itself
 
-        # Get the actual generated app root path for tools
         current_app_root = memory.get("generated_app_root_path", project_run_dir)
 
         # First, install dependencies for the generated code
@@ -172,7 +199,7 @@ def run_project_workflow():
 
         except Exception as e:
             print(f"Error during Code Quality Check (Iteration {current_code_gen_retry}): {e}")
-            memory.set("code_quality_feedback", f"Code quality check failed with error: {e}. Please investigate.")
+            memory.set("code_quality_feedback", f"Code quality check failed with error: {e}. Please investigate and attempt regeneration.")
             continue
 
         # Step 5: Writing Test Cases (TestCaseGeneratorAgent) - moved AFTER initial quality check for better tests
@@ -204,11 +231,10 @@ def run_project_workflow():
             memory.set("test_results_report", test_results)
             print("Test Validation complete. Report stored in memory.")
             
-            # Criteria for acceptable code: All tests passed AND a minimum coverage threshold
             min_coverage_percent = 50 # Example: at least 50% coverage
             actual_coverage = test_results.get("coverage_percentage", 0)
-            if isinstance(actual_coverage, str) and actual_coverage.startswith("N/A"): # Handle N/A string
-                 actual_coverage = 0 # Treat N/A as 0 for threshold check
+            if isinstance(actual_coverage, str) and actual_coverage.startswith("N/A"):
+                 actual_coverage = 0
 
             if test_results.get("all_tests_passed", False) and actual_coverage >= min_coverage_percent:
                 print(f"All tests passed and {actual_coverage}% coverage (>= {min_coverage_percent}%). Code is considered acceptable.")
@@ -217,12 +243,12 @@ def run_project_workflow():
                 print(f"Tests failed or coverage ({actual_coverage}%) too low. Requesting code regeneration.")
                 feedback = test_results.get("summary", "Tests failed or coverage too low.")
                 memory.set("test_results_feedback", feedback)
-                continue # Go to next iteration (Code Gen to fix)
+                continue # Go to next iteration
 
         except Exception as e:
             print(f"Error during Test Validation (Iteration {current_code_gen_retry}): {e}")
             memory.set("test_results_feedback", f"Test validation failed with error: {e}. Cannot confirm code correctness.")
-            continue # Go to next iteration
+            continue
 
     if code_is_acceptable:
         print("\n--- Phase 2 Complete: Code Generated & Validated Successfully! ---")
@@ -230,7 +256,8 @@ def run_project_workflow():
         print(f"\n--- Phase 2 Ended: Failed to produce acceptable code after {max_code_gen_retries} iterations. ---")
         print("Manual intervention may be required to resolve persistent issues.")
     
-    print(f"Final project context saved to {PROJECT_CONTEXT_FILE}")
+    # Save the final project context at the end of the entire workflow
+    memory.save_context()
 
 
 if __name__ == "__main__":

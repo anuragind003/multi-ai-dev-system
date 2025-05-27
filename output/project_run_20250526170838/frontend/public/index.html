@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTFS Offer Customer Data Platform</title>
+    <link rel="icon" href="/favicon.ico">
+    <!-- Basic inline styles for a minimal portal look. In a full Vue app,
+         styling would typically be handled by a CSS framework or component-scoped styles. -->
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+        #app {
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            min-height: 80vh; /* Ensure it takes up some vertical space */
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background-color: #0056b3; /* A shade of blue, common for corporate branding */
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+        nav {
+            background-color: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap; /* Allow navigation items to wrap on smaller screens */
+        }
+        nav a {
+            text-decoration: none;
+            color: #0056b3;
+            font-weight: bold;
+            padding: 8px 15px;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+        nav a:hover {
+            background-color: #d6d8db;
+        }
+        main {
+            flex-grow: 1; /* Allow main content to take available space */
+            padding: 10px;
+        }
+        footer {
+            margin-top: 30px;
+            padding: 15px;
+            text-align: center;
+            color: #777;
+            font-size: 0.9em;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- This is the root element where the Vue.js application will be mounted. -->
+        <header>
+            <h1>LTFS Offer Customer Data Platform</h1>
+        </header>
+
+        <nav>
+            <!-- These links will be handled by Vue Router in the main.js file -->
+            <a href="#/upload">Upload Customer Data</a>
+            <a href="#/downloads">Download Reports</a>
+            <a href="#/daily-reports">Daily Data Tally</a>
+            <a href="#/customer-view">Customer Journey View</a>
+        </nav>
+
+        <main>
+            <!-- Vue Router will render the appropriate component here based on the URL hash. -->
+            <p>Loading application...</p>
+            <p>Please ensure JavaScript is enabled in your browser.</p>
+        </main>
+
+        <footer>
+            <p>&copy; 2023 LTFS. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Vue.js library (using CDN for rapid prototyping/MVP).
+         In a production environment, Vue would typically be installed via npm/yarn
+         and bundled by a build tool like Vite or Webpack. -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.prod.js"></script>
+
+    <!-- The main application script. This file will contain the Vue app instance,
+         Vue Router setup, and import/mount the root Vue component. -->
+    <script src="/js/main.js"></script>
+</body>
+</html>
