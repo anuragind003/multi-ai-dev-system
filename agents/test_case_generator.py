@@ -1,12 +1,26 @@
 import json
 import os
 from google.generativeai.types import HarmBlockThreshold, HarmCategory
+from langchain_core.retrievers import BaseRetriever # NEW IMPORT
 
 class TestCaseGeneratorAgent:
-    def __init__(self, llm, memory, output_dir: str):
+    def __init__(self, llm, memory, output_dir: str, rag_retriever: BaseRetriever = None): # NEW PARAM
         self.llm = llm
         self.memory = memory
         self.output_dir = output_dir
+        self.rag_retriever = rag_retriever # Store retriever
+
+    def _get_relevant_context_from_rag(self, query: str) -> str:
+        """Retrieves relevant documents from the RAG store based on a query."""
+        if self.rag_retriever:
+            try:
+                docs = self.rag_retriever.invoke(query)
+                # Concatenate the content of the retrieved documents
+                return "\n\n".join([doc.page_content for doc in docs])
+            except Exception as e:
+                print(f"Warning: RAG retrieval failed: {e}. Proceeding without RAG context.")
+                return ""
+        return ""
 
     def run(self, brd_analysis: dict, system_design: dict, generated_code_files: dict, tech_stack: dict) -> dict:
         print("Test Case Generator Agent: Generating test cases...")
@@ -15,53 +29,47 @@ class TestCaseGeneratorAgent:
         test_framework = "pytest" if "python" in backend_name else "jest" if "node.js" in backend_name else "unspecified"
         test_file_extension = ".py" if "python" in backend_name else ".js"
 
-        # Get the assumed project root within the output directory (e.g., output/app_project)
-        # This is a critical assumption. If CodeGenAgent outputs directly to output_dir, use output_dir.
-        generated_app_root = os.path.join(self.output_dir, "app_project")
-        # For simplicity, if CodeGen creates directly in PROJECT_OUTPUT_DIR:
-        generated_app_root = self.output_dir
-
+        generated_app_root = self.output_dir # Assuming generated code is directly in output_dir/project_run_XYZ
 
         # We need the code to generate relevant tests.
-        # Iterate over generated_code_files to get an overview, but don't dump all code into prompt.
-        code_overview = {}
-        for path, content in generated_code_files.items():
-            if path.endswith((".py", ".js", ".java")): # Only show code files
-                # Take first 10 lines or 500 chars as a snippet
-                snippet = "\n".join(content.splitlines()[:10])
-                if len(content) > 500:
-                    snippet += "\n..."
-                code_overview[path] = snippet
+        # Instead of dumping all code snippets into prompt, rely on RAG.
+        # We'll still give the LLM a general idea of what files exist to guide its RAG queries.
+        code_file_list = [f for f in generated_code_files.keys() if f.lower().endswith((".py", ".js", ".java"))]
 
+        # Prepare core context for the prompt
+        core_context_string = json.dumps({
+            "brd_analysis": brd_analysis,
+            "system_design": system_design,
+            "tech_stack": tech_stack,
+            "generated_code_files_list": code_file_list # List of generated code files for agent's awareness
+        }, indent=2)
 
         prompt = f"""
         You are an expert Test Engineer AI.
-        Your task is to generate automated test cases for the application based on the BRD analysis, system design,
-        and an overview of the generated code.
+        Your task is to generate automated test cases for the application.
 
-        **Project Context:**
-        - **BRD Analysis:** {json.dumps(brd_analysis, indent=2)}
-        - **System Design:** {json.dumps(system_design, indent=2)}
-        - **Chosen Tech Stack:** {json.dumps(tech_stack, indent=2)}
-        - **Generated Code Overview (snippets for context):**
-          {json.dumps(code_overview, indent=2)}
+        **Project Core Context:**
+        {core_context_string}
 
         **Instructions:**
         1.  **Test Types:** Focus on generating unit tests for core logic/functions and integration tests for API endpoints.
         2.  **Test Framework:** Use `{test_framework}`.
-        3.  **Coverage:** Aim for good coverage, covering happy paths, edge cases, and error conditions (e.g., invalid input, resource not found).
+        3.  **Coverage:** Aim for good coverage, covering happy paths, edge cases, and error conditions (e.g., invalid input, resource not found) for the *implemented functionality*.
         4.  **Data Persistence:** Ensure tests cover CRUD operations interacting with the database.
-        5.  **Output Format:** Provide a JSON object where keys are the relative file paths (e.g., `tests/test_products{test_file_extension}`, `app/tests/unit/test_utils{test_file_extension}`)
+        5.  **Use RAG for Code Details:** To get details about specific files (e.g., models.py, routes.py), formulate queries (e.g., "Retrieve the code content for app/models.py", "Show API endpoints from system design") and use the RAG retriever to get relevant code snippets or design details. Incorporate the retrieved snippets into your test generation. The RAG will provide specific context from the BRD, system design, and generated code.
+        6.  **Output Format:** Provide a JSON object where keys are the relative file paths (e.g., `tests/test_products{test_file_extension}`, `app/tests/unit/test_utils{test_file_extension}`)
             and values are the complete code content for that test file.
-        6.  **DO NOT** include markdown fences (```) or explanatory text outside the JSON. The values are pure code.
+        7.  **DO NOT** include markdown fences (```) or explanatory text outside the JSON. The values are pure code.
 
         Example JSON output for a Flask app with Pytest:
         ```json
         {{
             "tests/test_products{test_file_extension}": \"\"\"
 import pytest
-from app import create_app
-from app.models import Product # Assuming you have a Product model and Flask-SQLAlchemy
+from app import create_app # Assuming this is your app factory
+# Example of how you might use RAG to get model details:
+# relevant_model_context = get_relevant_context_from_rag("database schema and Product model definition")
+# Based on retrieved_model_context, construct your test data or mock objects.
 
 @pytest.fixture
 def client():
@@ -71,17 +79,15 @@ def client():
     }})
     with app.test_client() as client:
         with app.app_context():
-            # setup db
-            # Product.query.delete()
+            # setup db, e.g., db.create_all() or initialize_test_db() based on context
         yield client
 
 def test_create_product(client):
     response = client.post('/products', json={{"name": "Laptop", "price": 1200.0, "stock_quantity": 5}})
     assert response.status_code == 201
-    assert response.json['name'] == 'Laptop'
+    assert 'id' in response.json and response.json['name'] == 'Laptop'
 
 def test_get_all_products(client):
-    # Add products first if necessary
     response = client.get('/products')
     assert response.status_code == 200
     assert isinstance(response.json, list)
@@ -114,7 +120,6 @@ def test_get_all_products(client):
             generated_test_files = json.loads(raw_json_output)
             
             # Save generated test files to disk within the generated application's structure
-            # Ensure the test files are placed correctly relative to the generated app root
             saved_files = {}
             for file_path, content in generated_test_files.items():
                 full_path = os.path.join(generated_app_root, file_path)

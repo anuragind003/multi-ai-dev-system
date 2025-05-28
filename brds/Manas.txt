@@ -1,0 +1,157 @@
+
+Document Title: OCR-Based Identity Document and Bank Passbook Data Extraction System
+
+Version: 1.0
+
+Date: May 27, 2025
+
+Prepared By: ML.NET Team
+
+1. Introduction
+1.1 Purpose of this Document
+The purpose of this Business Requirements Document (BRD) is to outline the requirements for an Optical Character Recognition (OCR) based system that can extract and identify key data points from various Indian identity documents (Aadhar Card, Driving License, Passport, Voter ID, PAN Card, Ration Card) and bank passbooks. The extracted data will be categorized, stored, and made accessible as variables for further processing. This document will serve as a guiding resource for the development team, ensuring alignment with business objectives.
+
+1.2 Scope of the Project
+The scope of this project is to develop an automated solution that:
+
+Receives image inputs of specified documents.
+Identifies the type of document from the image.
+Performs OCR to extract text from the identified document.
+Parses and categorizes the extracted text into predefined data fields (e.g., Name, Date of Birth, Address, Document Number).
+Stores the extracted and categorized data in a structured format.
+Provides the extracted data as accessible variables.
+1.3 Business Need
+Currently, the process of extracting information from identity documents and bank passbooks is manual, time-consuming, and prone to human error. This often leads to delays in onboarding processes, data entry inaccuracies, and increased operational costs. An automated OCR-based system is needed to:
+
+Improve data accuracy and reduce errors.
+Expedite data capture and processing.
+Enhance operational efficiency.
+Reduce manual effort and associated costs.
+Ensure compliance by accurately capturing required information.
+1.4 Target Audience
+This document is intended for:
+
+Business Stakeholders
+Project Managers
+Development Team
+Quality Assurance Team
+Solution Architects
+2. Business Goals and Objectives
+2.1 Business Goals
+Automate data extraction from key identity documents and bank passbooks.
+Achieve a high level of accuracy in data extraction.
+Reduce manual data entry efforts by at least X% (e.g., 80%).
+Decrease processing time for document verification by at least Y% (e.g., 70%).
+2.2 Business Objectives
+Develop an OCR system capable of identifying and processing at least 7 distinct document types (Aadhar, DL, Passport, Voter ID, PAN, Ration Card, Bank Passbook).
+Achieve an average data extraction accuracy of 95% or higher for critical fields (Name, Document ID, DoB).
+Ensure the extracted data can be stored in a structured, easily retrievable format.
+Provide a mechanism to output extracted data as variables for integration with downstream systems.
+Develop a user-friendly interface for image input and result display (if applicable for a specific phase).
+3. Current State / As-Is Process (Optional, if a manual process exists)
+Currently, the process involves:
+
+Receiving physical or digital copies of documents.
+Manually reviewing each document to identify its type.
+Manually extracting relevant information from the document.
+Manually entering the extracted data into a system/database.
+Performing manual validation of the entered data.
+4. Future State / To-Be Process
+The future state process will involve:
+
+Image Input: An image of an identity document or bank passbook is provided to the system.
+Document Type Identification: The system automatically identifies the type of document (e.g., Aadhar Card, Driving License).
+OCR Processing: OCR is performed on the identified document to extract all discernible text.
+Data Extraction and Categorization: The system intelligently parses the extracted text and categorizes it into predefined fields (e.g., Name, Date of Birth, Address, Document Number, Father's Name, etc.).
+Data Storage: The extracted and categorized data is stored in a structured format.
+Variable Output: The extracted data is made available as variables for further system integration or display.
+5. Functional Requirements
+The system shall:
+
+5.1 Document Identification
+FR-DI-001: Accurately identify the following document types from an image input:
+Aadhar Card
+Driving License (DL)
+Passport
+Voter ID
+PAN Card
+Ration Card
+Bank Passbook
+FR-DI-002: Be able to identify documents regardless of minor variations in layout, orientation, or lighting conditions (within reasonable limits).
+FR-DI-003: Provide a confidence score for document identification.
+5.2 OCR Processing
+FR-OCR-001: Perform OCR on the entire document image.
+FR-OCR-002: Handle images with varying resolutions and quality.
+FR-OCR-003: Be robust to minor image distortions, rotations, and skewed text.
+FR-OCR-004: Support character recognition for both English and relevant regional Indian languages (e.g., Hindi, as found on Aadhar/Passbook).
+5.3 Data Extraction and Categorization
+FR-DEC-001: Extract and categorize the following common data fields, if present, from all document types:
+Name (Full Name, First Name, Last Name)
+Date of Birth (DoB)
+Address (Full Address, Line 1, Line 2, City, State, Pincode)
+Gender
+FR-DEC-002: Extract and categorize document-specific data fields for each document type:
+Aadhar Card: Aadhar Number, Father/Husband's Name, Photo.
+Driving License: License Number, Issue Date, Expiry Date, Father/Husband's Name, Blood Group, Vehicle Type.
+Passport: Passport Number, Place of Issue, Date of Issue, Date of Expiry, Place of Birth, Father/Husband's Name, Mother's Name, Spouse's Name, File Number, Photo.
+Voter ID: EPIC Number, Father/Husband's Name, Photo.
+PAN Card: PAN Number, Father's Name.
+Ration Card: Ration Card Number, Type (APL/BPL/Antyodaya), Head of Family Name, Member Details (Name, Relationship, Age/DoB if available).
+Bank Passbook: Account Holder Name, Account Number, IFSC Code, Bank Name, Branch Name, Branch Address, MICR Code, Transaction Details (Date, Description, Debit, Credit, Balance - this could be a stretch goal or phased approach).
+FR-DEC-003: Provide a confidence score for each extracted data field.
+FR-DEC-004: Handle multiple lines of address and concatenate them appropriately.
+FR-DEC-005: Standardize date formats (e.g., DD-MM-YYYY).
+5.4 Data Storage
+FR-DS-001: Store the extracted data in a structured, queryable format (e.g., JSON, XML, relational database).
+FR-DS-002: Associate the extracted data with the original image (or a reference to it).
+5.5 Data Output
+FR-DO-001: Make the extracted data accessible as variables within the system.
+FR-DO-002: Provide a programmatic interface (e.g., API) to retrieve the extracted data.
+6. Non-Functional Requirements
+6.1 Performance
+NFR-PER-001: The system shall process a single document image and extract data within [X] seconds (e.g., 5-10 seconds) for typical image quality.
+NFR-PER-002: The system shall be scalable to handle [Y] number of images per hour/day.
+6.2 Accuracy
+NFR-ACC-001: Achieve a minimum of 95% accuracy for critical data fields (Name, DoB, Document Number) after human review/correction.
+NFR-ACC-002: Achieve a minimum of 90% accuracy for all other extracted fields.
+6.3 Security
+NFR-SEC-001: All data, especially personally identifiable information (PII), shall be encrypted at rest and in transit.
+NFR-SEC-002: The system shall adhere to relevant data privacy regulations (e.g., GDPR, India's Personal Data Protection Bill if applicable).
+NFR-SEC-003: Access to the system and extracted data shall be role-based and secured with strong authentication mechanisms.
+NFR-SEC-004: Implement audit logging for all data access and modification activities.
+6.4 Reliability
+NFR-REL-001: The system shall have an uptime of 99.5% during operational hours.
+NFR-REL-002: The system shall have robust error handling and logging mechanisms for failed OCR or data extraction attempts.
+6.5 Maintainability
+NFR-MNT-001: The system's codebase shall be well-documented and modular for ease of future enhancements and bug fixes.
+NFR-MNT-002: The system should allow for easy updates to the OCR models and data parsing rules.
+6.6 Usability (if a user interface is part of the scope)
+NFR-USG-001: The user interface for image upload shall be intuitive and easy to use.
+NFR-USG-002: The display of extracted data shall be clear and well-organized.
+7. Data Requirements
+DR-001: Definition of all data fields to be extracted (refer to Section 5.3).
+DR-002: Data types and formats for each extracted field (e.g., Name: String, DoB: Date (DD-MM-YYYY), Aadhar Number: 12-digit numeric string).
+DR-003: Data validation rules (e.g., Aadhar number checksum, date validity).
+8. System Integration Requirements
+SIR-001: The system shall provide an API (RESTful preferred) for external systems to submit images and retrieve extracted data.
+SIR-002: The API shall support JSON as the data exchange format.
+SIR-003: The system shall be able to integrate with existing customer relationship management (CRM) or core banking systems (if applicable).
+9. Assumptions
+AS-001: Input images will be of reasonable quality (not excessively blurry, crumpled, or obscured).
+AS-002: Documents presented will be authentic and not tampered with. (Note: Fraud detection is out of scope for this phase unless explicitly added).
+AS-003: The project will have access to a sufficient dataset of sample documents for training and testing the OCR model.
+AS-004: Legal and compliance teams will provide necessary guidance regarding data privacy and security.
+10. Constraints
+CON-001: Project timeline: [Start Date] to [End Date].
+CON-002: Budget: [Budget Amount].
+CON-003: Technology stack may be limited by existing organizational infrastructure or expertise.
+11. Success Metrics
+SM-001: Average data extraction accuracy of 95% for critical fields.
+SM-002: Reduction in manual data entry time by 80%.
+SM-003: Average processing time per document within 10 seconds.
+SM-004: System adoption rate by users (if applicable).
+12. Open Issues / Future Considerations
+OI-001: Integration with an existing workflow management system.
+OI-002: Implementation of an auto-correction or human-in-the-loop validation process for low-confidence extractions.
+OI-003: Support for additional regional languages.
+OI-004: Fraud detection or document authenticity verification features.

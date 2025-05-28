@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import pathlib
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +24,16 @@ GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 def get_gemini_model():
     """Initializes and returns the configured Gemini GenerativeModel."""
     return genai.GenerativeModel(GEMINI_MODEL_NAME)
+
+
+
+# Define the Gemini embedding model
+GEMINI_EMBEDDING_MODEL = "models/embedding-001" # Or 'text-embedding-004' depending on access
+
+def get_gemini_embedding_model():
+    """Initializes and returns the configured Gemini Embedding Model."""
+    # Using LangChain's GoogleGenerativeAIEmbeddings for compatibility with LangChain's vectorstore integrations
+    return GoogleGenerativeAIEmbeddings(model=GEMINI_EMBEDDING_MODEL, google_api_key=GEMINI_API_KEY)
 
 # --- Other Configurations (can add more later) ---
 BASE_DIR = pathlib.Path(__file__).parent
