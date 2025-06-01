@@ -1,0 +1,95 @@
+server:
+  port: 8082 # Unique port for the Data Validation Service
+
+spring:
+  application:
+    name: data-validation-service # Name of the Spring Boot application
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_validation_db # Database URL for PostgreSQL
+    username: cdp_user # Database username
+    password: cdp_password # Database password (use environment variables or a configuration server in production)
+    driver-class-name: org.postgresql.Driver # JDBC driver for PostgreSQL
+    hikari: # HikariCP connection pool configuration
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 2 # Minimum number of idle connections to maintain
+      idle-timeout: 30000 # Maximum idle time for a connection in the pool (30 seconds)
+      connection-timeout: 30000 # Maximum wait for a connection from the pool (30 seconds)
+      pool-name: DataValidationServicePool # Name of the connection pool
+
+  jpa:
+    hibernate:
+      ddl-auto: none # 'none' for production to prevent schema changes. Use 'update' or 'create-drop' for development/testing.
+    show-sql: false # Set to true for debugging SQL queries, but keep false in production for performance
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Hibernate dialect for PostgreSQL
+        format_sql: false # Do not format SQL logs for readability, keep it concise
+
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker addresses (comma-separated for multiple brokers)
+    consumer:
+      group-id: data-validation-group # Consumer group ID for this service
+      auto-offset-reset: earliest # Start reading from the beginning if no offset is committed for the group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payloads)
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.datavalidation.model.*, com.ltfs.cdp.datavalidation.dto.*" # Specify trusted packages for JSON deserialization for security
+        spring.json.value.default.type: com.ltfs.cdp.datavalidation.model.CustomerOfferData # Default type for JSON deserialization if type headers are not present
+    producer:
+      retries: 0 # Number of times to retry sending a message
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON payloads)
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers to JSON messages if not required by consumers
+
+# Custom properties for the Data Validation Service
+app:
+  validation:
+    # Kafka topics for incoming data to be validated and outgoing validation results
+    input-topic: offer-data-raw # Topic where raw offer data is received for validation
+    output-topic-valid: offer-data-validated # Topic for data that passes validation
+    output-topic-invalid: offer-data-invalid # Topic for data that fails validation
+    # Configuration for validation rules. This could be a path to a file, a URL, or a direct configuration.
+    rules-config-path: classpath:config/validation-rules.json # Example: Path to a JSON file containing validation rules
+    # Example of a specific validation parameter
+    min-loan-amount: 1000 # Minimum allowed loan amount for validation
+
+  deduplication:
+    # Kafka topics for incoming data to be deduped and outgoing deduplication results
+    input-topic: customer-data-for-dedupe # Topic where customer data is received for deduplication
+    output-topic-deduped: customer-data-deduped # Topic for deduped customer data
+    output-topic-duplicates: customer-data-duplicates # Topic for identified duplicate records
+    # External service URL for Customer 360 (live book) for real-time deduplication checks
+    customer360-api-url: http://customer360-service:8080/api/v1/customers/check-dedupe # URL for Customer 360 service endpoint
+    # Deduplication strategy or rules, e.g., 'exact-match', 'fuzzy-matching', 'hybrid'
+    dedupe-strategy: hybrid # Defines the overall deduplication approach
+    fuzzy-match-threshold: 0.8 # Similarity threshold for fuzzy matching algorithms (0.0 to 1.0)
+    # Specific rules for top-up loan offers deduplication
+    topup-loan-dedupe-enabled: true # Flag to enable specific top-up loan deduplication logic
+
+# Logging configuration for the application
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    com.ltfs.cdp.datavalidation: DEBUG # Specific logging level for the application's package for more detailed logs
+    org.springframework: INFO # Spring framework logging level
+    org.hibernate: INFO # Hibernate logging level
+  file:
+    name: logs/data-validation-service.log # Path to the log file for file-based logging
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # Console log pattern
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # File log pattern
+
+# Spring Boot Actuator endpoints for monitoring and management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose common endpoints for monitoring
+  endpoint:
+    health:
+      show-details: always # Show full health details, including database and Kafka health
+    prometheus:
+      enabled: true # Enable Prometheus endpoint for metrics scraping
+      path: /actuator/prometheus # Custom path for Prometheus endpoint

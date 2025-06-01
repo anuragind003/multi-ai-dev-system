@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-validation-service
+  labels:
+    app: data-validation-service
+    project: ltfs-cdp
+    tier: backend
+spec:
+  replicas: 3 # Scalability: Start with 3 replicas for high availability and load distribution.
+  selector:
+    matchLabels:
+      app: data-validation-service
+  template:
+    metadata:
+      labels:
+        app: data-validation-service
+        project: ltfs-cdp
+        tier: backend
+    spec:
+      containers:
+        - name: data-validation-service
+          image: ltfs-cdp/data-validation-service:1.0.0 # Placeholder for the Docker image. Replace with actual image name and tag.
+          imagePullPolicy: Always # Ensures the latest image is pulled, useful during development/updates.
+          ports:
+            - containerPort: 8080 # Default Spring Boot application port.
+          env:
+            - name: SPRING_APPLICATION_NAME
+              value: data-validation-service
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod # Set active Spring profile, e.g., 'prod', 'dev'.
+            # Database connection details (example - ideally from Kubernetes Secrets)
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_db # Assuming a PostgreSQL service named 'postgresql-service'
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: password
+            # Kafka/Event Bus configuration (if applicable for event-driven components)
+            # - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+          resources:
+            requests:
+              memory: "512Mi" # Performance: Request minimum memory.
+              cpu: "500m"    # Performance: Request minimum CPU (50% of a core).
+            limits:
+              memory: "1024Mi" # Performance: Limit maximum memory to prevent resource exhaustion.
+              cpu: "1000m"   # Performance: Limit maximum CPU (1 full core).
+          livenessProbe: # Health check to determine if the container is still running.
+            httpGet:
+              path: /actuator/health/liveness # Standard Spring Boot Actuator liveness endpoint.
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up.
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe: # Health check to determine if the container is ready to serve traffic.
+            httpGet:
+              path: /actuator/health/readiness # Standard Spring Boot Actuator readiness endpoint.
+              port: 8080
+            initialDelaySeconds: 45 # Give the application time to initialize dependencies (e.g., DB connections).
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # imagePullSecrets: # Uncomment and configure if pulling from a private registry
+      #   - name: regcred
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-validation-service # Name of the Kubernetes Service.
+  labels:
+    app: data-validation-service
+    project: ltfs-cdp
+    tier: backend
+spec:
+  selector:
+    app: data-validation-service # Selects pods with this label to route traffic to.
+  ports:
+    - protocol: TCP
+      port: 80 # Service port (internal to cluster).
+      targetPort: 8080 # Port on the container that the service will forward traffic to.
+      name: http
+  type: ClusterIP # Exposes the service on a cluster-internal IP. Only accessible from within the cluster.
+                  # Use LoadBalancer or NodePort if external access is required (unlikely for an internal validation service).

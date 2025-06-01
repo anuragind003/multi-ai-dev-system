@@ -1,0 +1,251 @@
+package com.ltfs.cdp.offercdp.rules;
+
+// Import necessary DTOs/Fact classes that will be inserted into the Drools working memory.
+// These classes represent the data entities involved in the attribution process.
+import com.ltfs.cdp.offercdp.model.CustomerProfile;
+import com.ltfs.cdp.offercdp.model.Offer;
+import com.ltfs.cdp.offercdp.model.OfferStatus;
+import com.ltfs.cdp.offercdp.model.OfferType;
+
+/**
+ * Drools rules for Offer Attribution Logic (BR009-BR016).
+ * These rules are designed to determine the "best" offer to be attributed to a customer
+ * from a set of eligible offers, based on various business criteria.
+ *
+ * The rules operate by assigning and refining an 'attributionScore' to each offer.
+ * Offers with higher scores are prioritized.
+ *
+ * Salience is used to control the order of rule execution:
+ * - Higher salience rules run first (e.g., rejection rules).
+ * - Scoring rules run next, from general to specific.
+ * - Final selection and cleanup rules run last.
+ */
+
+// --- Rule Set: BR012 - Handle Deduplication Status ---
+// BR012: Offers marked for removal due to prior deduplication should be immediately rejected
+// and excluded from any further attribution consideration.
+rule "BR012_Reject_Deduped_Offers_For_Removal"
+    salience 150 // High salience to ensure these offers are processed and removed early.
+    when
+        // Find an Offer that is marked for removal due to deduplication and is currently eligible.
+        $offer : Offer( isDedupedForRemoval == true, status == OfferStatus.ELIGIBLE )
+    then
+        // Change the offer's status to indicate it was rejected due to deduplication.
+        $offer.setStatus( OfferStatus.REJECTED_DEDUPED );
+        // Set a very low score to ensure it's never picked even if its status was somehow overlooked.
+        $offer.setAttributionScore( -9999 );
+        // Update the fact in the working memory to reflect the changes.
+        update( $offer );
+end
+
+// --- Rule Set: BR014 - Top-up Loan Specific Deduplication/Attribution ---
+// BR014: Top-up loan offers must be deduped only within other Top-up offers,
+// and matches found should be removed. This rule iteratively rejects all but the "best"
+// eligible Top-up offer for a given customer, based on their current attribution score
+// and then creation timestamp as a tie-breaker.
+rule "BR014_Select_Single_TopUp_Offer"
+    salience 140 // Runs after initial rejections (BR012) but before general scoring.
+    when
+        // Find a CustomerProfile to scope the offers to a specific customer.
+        $customerProfile : CustomerProfile()
+        // Find a Top-up offer ($topUpOffer1) that is eligible for this customer.
+        $topUpOffer1 : Offer(
+            customerId == $customerProfile.getCustomerId(),
+            offerType == OfferType.TOP_UP,
+            status == OfferStatus.ELIGIBLE,
+            $score1 : attributionScore, // Capture its current score.
+            $creationTimestamp1 : creationTimestamp // Capture its creation timestamp for tie-breaking.
+        )
+        // Find another Top-up offer ($topUpOffer2) for the same customer that is eligible,
+        // is different from $topUpOffer1, and is considered "better".
+        $topUpOffer2 : Offer(
+            customerId == $customerProfile.getCustomerId(),
+            offerType == OfferType.TOP_UP,
+            status == OfferStatus.ELIGIBLE,
+            $score2 : attributionScore, // Capture its score.
+            $creationTimestamp2 : creationTimestamp, // Capture its creation timestamp.
+            this != $topUpOffer1, // Ensure it's a different offer instance.
+            // Condition to determine if $topUpOffer2 is "better" than $topUpOffer1:
+            // Either $topUpOffer2 has a strictly higher score,
+            // OR they have the same score AND $topUpOffer2 was created more recently (newer).
+            ( $score2 > $score1 || ($score2 == $score1 && $creationTimestamp2.isAfter($creationTimestamp1)) )
+        )
+    then
+        // If a "better" $topUpOffer2 is found, mark $topUpOffer1 as a duplicate and reject it.
+        $topUpOffer1.setStatus( OfferStatus.REJECTED_TOPUP_DUPLICATE );
+        // Set a very low score to ensure it's not considered further.
+        $topUpOffer1.setAttributionScore( -9998 );
+        update( $topUpOffer1 );
+end
+
+// --- Rule Set: BR009 - Offer Prioritization by Type ---
+// BR009: Assigns a base priority score to offers based on their type.
+// Higher scores indicate higher priority. These rules establish an initial ranking.
+rule "BR009_Prioritize_PreApproved_Offers"
+    salience 100 // High salience to apply initial type-based scoring.
+    when
+        // Find an eligible Pre-approved Offer.
+        $offer : Offer( offerType == OfferType.PRE_APPROVED, status == OfferStatus.ELIGIBLE )
+    then
+        // Add a significant score boost for Pre-approved offers.
+        $offer.setAttributionScore( $offer.getAttributionScore() + 1000 );
+        update( $offer );
+end
+
+rule "BR009_Prioritize_Loyalty_Offers"
+    salience 90
+    when
+        // Find an eligible Loyalty Offer.
+        $offer : Offer( offerType == OfferType.LOYALTY, status == OfferStatus.ELIGIBLE )
+    then
+        // Add a high score boost for Loyalty offers.
+        $offer.setAttributionScore( $offer.getAttributionScore() + 800 );
+        update( $offer );
+end
+
+rule "BR009_Prioritize_EAggregator_Offers"
+    salience 80
+    when
+        // Find an eligible E-aggregator Offer.
+        $offer : Offer( offerType == OfferType.E_AGGREGATOR, status == OfferStatus.ELIGIBLE )
+    then
+        // Add a medium score boost for E-aggregator offers.
+        $offer.setAttributionScore( $offer.getAttributionScore() + 600 );
+        update( $offer );
+end
+
+// Note: TOP_UP offers are handled by BR014 for specific deduplication,
+// but they also receive a base score here to participate in general scoring
+// if multiple distinct TOP_UP offers exist for different customers, or if BR014
+// has already narrowed down to one per customer.
+rule "BR009_Prioritize_TopUp_Offers_Base_Score"
+    salience 70
+    when
+        // Find an eligible Top-up Offer.
+        $offer : Offer( offerType == OfferType.TOP_UP, status == OfferStatus.ELIGIBLE )
+    then
+        // Add a base score for Top-up offers.
+        $offer.setAttributionScore( $offer.getAttributionScore() + 900 ); // Can be higher than E-aggregator, but lower than Pre-approved/Loyalty.
+        update( $offer );
+end
+
+// --- Rule Set: BR010 - Prioritize Offers by Loan Amount ---
+// BR010: For offers of the same type and customer, prioritize the one with the highest loan amount.
+// This rule penalizes offers that are not the highest amount within their group.
+rule "BR010_Prioritize_By_Loan_Amount"
+    salience 60 // Runs after type prioritization.
+    when
+        // Find an eligible Offer ($offer) and capture its customer ID, type, and loan amount.
+        $offer : Offer( status == OfferStatus.ELIGIBLE, $customerId : customerId, $offerType : offerType, $currentAmount : loanAmount )
+        // Check if there exists another eligible offer for the same customer and of the same type,
+        // but with a strictly higher loan amount.
+        exists Offer(
+            customerId == $customerId,
+            offerType == $offerType,
+            status == OfferStatus.ELIGIBLE,
+            loanAmount > $currentAmount,
+            this != $offer // Ensure it's a different offer.
+        )
+    then
+        // If a higher amount offer exists, reduce the score of the current offer.
+        $offer.setAttributionScore( $offer.getAttributionScore() - 50 ); // Apply a penalty.
+        update( $offer );
+end
+
+// --- Rule Set: BR011 - Prioritize Offers by Expiry Date (earliest first) ---
+// BR011: For offers of similar priority, prioritize the one expiring sooner.
+// This rule penalizes offers that expire later than another eligible offer for the same customer.
+rule "BR011_Prioritize_By_Expiry_Date"
+    salience 50 // Runs after loan amount prioritization.
+    when
+        // Find an eligible Offer ($offer) and capture its customer ID and expiry date.
+        $offer : Offer( status == OfferStatus.ELIGIBLE, $customerId : customerId, $currentExpiry : expiryDate )
+        // Check if there exists another eligible offer for the same customer that expires earlier.
+        exists Offer(
+            customerId == $customerId,
+            status == OfferStatus.ELIGIBLE,
+            expiryDate.isBefore($currentExpiry), // Using isBefore for LocalDateTime comparison.
+            this != $offer // Ensure it's a different offer.
+        )
+    then
+        // If an earlier expiring offer exists, reduce the score of the current offer.
+        $offer.setAttributionScore( $offer.getAttributionScore() - 20 ); // Apply a smaller penalty.
+        update( $offer );
+end
+
+// --- Rule Set: BR015 - Default Attribution (e.g., by creation timestamp) ---
+// BR015: If multiple offers still have the same highest score after all other criteria,
+// prioritize the one created most recently (newest). This acts as a final tie-breaker.
+rule "BR015_Default_Attribution_By_Creation_Timestamp"
+    salience 40 // Runs after other specific prioritizations.
+    when
+        // Find an eligible Offer ($offer) and capture its customer ID, current score, and creation timestamp.
+        $offer : Offer( status == OfferStatus.ELIGIBLE, $customerId : customerId, $currentScore : attributionScore, $currentCreation : creationTimestamp )
+        // Check if there exists another eligible offer for the same customer with the exact same score,
+        // but which was created earlier than the current offer.
+        exists Offer(
+            customerId == $customerId,
+            status == OfferStatus.ELIGIBLE,
+            attributionScore == $currentScore,
+            creationTimestamp.isBefore($currentCreation), // Using isBefore for LocalDateTime comparison.
+            this != $offer // Ensure it's a different offer.
+        )
+    then
+        // If an older, equally-scored offer exists, slightly reduce the score of the current offer.
+        // This ensures the newest among equally scored offers will have the highest final score.
+        $offer.setAttributionScore( $offer.getAttributionScore() - 1 ); // Apply a tiny penalty to break ties.
+        update( $offer );
+end
+
+// --- Rule Set: BR013 & BR016 - Final Attribution and Status Update ---
+// BR013: Assign the selected offer to the customer profile.
+// BR016: Mark the chosen offer as 'ATTRIBUTED' and other eligible offers as 'REJECTED_ATTRIBUTED_OTHER'.
+rule "BR013_BR016_Final_Offer_Attribution"
+    salience 10 // Low salience to ensure this rule runs only after all scoring is complete.
+    when
+        // Find a CustomerProfile.
+        $customerProfile : CustomerProfile( $customerId : customerId )
+        // Find the "best" eligible offer for this customer.
+        // This offer must have the highest attribution score among all eligible offers for this customer.
+        $bestOffer : Offer(
+            customerId == $customerId,
+            status == OfferStatus.ELIGIBLE,
+            $bestScore : attributionScore
+        )
+        // Ensure that no other eligible offer for the same customer has a higher score.
+        not Offer(
+            customerId == $customerId,
+            status == OfferStatus.ELIGIBLE,
+            attributionScore > $bestScore,
+            this != $bestOffer
+        )
+    then
+        // Mark the identified best offer as ATTRIBUTED.
+        $bestOffer.setStatus( OfferStatus.ATTRIBUTED );
+        update( $bestOffer );
+
+        // Link the attributed offer's ID to the customer profile.
+        $customerProfile.setAttributedOfferId( $bestOffer.getOfferId() );
+        update( $customerProfile );
+end
+
+// --- Cleanup Rule: Mark remaining eligible offers as rejected after one is attributed ---
+// BR016 (continued): This rule ensures that any other offers for a customer,
+// which were eligible but not chosen, are explicitly marked as rejected.
+rule "BR016_Cleanup_Reject_Other_Eligible_Offers"
+    salience 5 // Very low salience to run after the primary attribution rule has fired.
+    when
+        // Find a CustomerProfile for which an offer has already been attributed.
+        $customerProfile : CustomerProfile( $customerId : customerId, $attributedOfferId : attributedOfferId != null )
+        // Find any other offer for the same customer that is still ELIGIBLE
+        // and is not the one that was just attributed.
+        $otherOffer : Offer(
+            customerId == $customerId,
+            status == OfferStatus.ELIGIBLE, // Only target offers that are still considered eligible.
+            offerId != $attributedOfferId // Exclude the offer that was just attributed.
+        )
+    then
+        // Mark these remaining eligible offers as rejected because another offer was chosen.
+        $otherOffer.setStatus( OfferStatus.REJECTED_ATTRIBUTED_OTHER );
+        update( $otherOffer );
+end

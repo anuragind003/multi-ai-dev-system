@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: offer-service # Defines the name of this microservice for Spring Cloud Config and Eureka
+  cloud:
+    config:
+      uri: http://localhost:8888 # Specifies the URI of the Spring Cloud Config Server. In a production environment, this would typically be an externalized URL or managed by service discovery.
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the Config Server. Recommended for production.
+      # profile: default # Optional: Specifies the profile to fetch configurations for (e.g., dev, qa, prod). If not specified, 'default' is used.
+      # label: main # Optional: Specifies the Git branch/label to fetch configurations from. If not specified, 'main' or 'master' is used.
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # Specifies the URI of the Eureka Server for service registration and discovery.
+    enabled: true # Ensures that the Eureka client is enabled for service registration.
+    fetch-registry: true # Indicates whether the client should fetch the Eureka registry. Set to true for microservices.
+    register-with-eureka: true # Indicates whether the client should register itself with Eureka. Set to true for microservices.
+  instance:
+    hostname: localhost # For local development, the hostname to register with Eureka. In a containerized environment, this would typically be the container's IP or hostname.
+    preferIpAddress: true # Instructs Eureka to register the instance's IP address rather than its hostname. Useful in environments where hostnames are not reliably resolvable.
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique ID for this instance, useful for multiple instances of the same service.

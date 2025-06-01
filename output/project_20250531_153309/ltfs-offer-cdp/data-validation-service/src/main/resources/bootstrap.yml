@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: data-validation-service # Unique name for this microservice, used by Eureka and Config Server
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server
+      enabled: true # Enable Spring Cloud Config client
+      fail-fast: true # Fail fast if Config Server is not reachable during startup, crucial for production readiness
+      # profile: default # Optional: Specify a profile to fetch from Config Server, e.g., 'dev', 'prod'
+      # label: main # Optional: Specify a Git branch/label for configuration
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Discovery Server
+    enabled: true # Enable Eureka client for service registration and discovery
+    fetch-registry: true # Whether to fetch the registry information from Eureka server
+    register-with-eureka: true # Whether to register this application with Eureka server
+  instance:
+    hostname: localhost # Hostname for Eureka registration (can be dynamic in production environments)
+    prefer-ip-address: true # Prefer IP address over hostname for Eureka registration, useful in containerized deployments
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique instance ID for Eureka, helps distinguish multiple instances of the same service

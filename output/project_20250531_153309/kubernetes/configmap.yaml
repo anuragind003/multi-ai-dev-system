@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ltfs-cdp-application-config
+  namespace: ltfs-cdp # Recommended namespace for the LTFS CDP project
+  labels:
+    app.kubernetes.io/name: ltfs-cdp
+    app.kubernetes.io/instance: ltfs-cdp-instance
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: shared-config
+    app.kubernetes.io/part-of: ltfs-offer-cdp
+    app.kubernetes.io/managed-by: kubectl
+data:
+  application.yaml: |
+    # Common application properties for LTFS Offer CDP microservices
+    # These properties will be mounted into the Spring Boot applications.
+
+    spring:
+      application:
+        name: ltfs-offer-cdp-service # Default application name, can be overridden per service
+
+      # PostgreSQL Database Configuration
+      datasource:
+        url: jdbc:postgresql://ltfs-cdp-postgresql:5432/cdp_db # Service name for PostgreSQL within Kubernetes
+        username: cdp_user # Default database username
+        # IMPORTANT: Database password should be managed via Kubernetes Secrets,
+        # and injected as an environment variable (e.g., DB_PASSWORD)
+        # spring.datasource.password: ${DB_PASSWORD}
+        driver-class-name: org.postgresql.Driver
+        hikari:
+          maximum-pool-size: 10 # Max connections in the pool
+          minimum-idle: 5     # Min idle connections
+          idle-timeout: 30000 # Idle connection timeout in ms (30 seconds)
+          connection-timeout: 30000 # Connection timeout in ms (30 seconds)
+          pool-name: CdpHikariPool
+
+      jpa:
+        hibernate:
+          ddl-auto: validate # 'validate' ensures schema matches entities, 'none' for no DDL operations
+                             # Use 'update' or 'create-drop' ONLY for development/testing
+        show-sql: false # Do not show SQL queries in logs in production
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQLDialect # Specify PostgreSQL dialect
+            format_sql: false # Do not format SQL in logs
+
+    # Server Port for Spring Boot applications
+    server:
+      port: 8080 # Default port for microservices
+
+    # Logging Configuration
+    logging:
+      level:
+        root: INFO # Default logging level for all packages
+        com.ltfs.cdp: INFO # Specific logging level for application packages
+        org.springframework: INFO # Spring Framework logging
+        org.hibernate: WARN # Hibernate logging (reduce verbosity)
+        org.postgresql: WARN # PostgreSQL driver logging
+      file:
+        name: /var/log/ltfs-cdp/application.log # Path for log files within the container (if file logging is enabled)
+      pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+        file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+    # External Service URLs (Examples for microservice communication)
+    # These URLs should point to Kubernetes internal service names
+    external:
+      customer360:
+        url: http://customer360-service:8080/api/v1/customer # URL for Customer 360 service
+        timeout-ms: 5000 # Timeout for calls to Customer 360
+      offermart:
+        url: http://offermart-service:8080/api/v1/offers # URL for Offermart service
+        timeout-ms: 5000 # Timeout for calls to Offermart
+
+    # Application-specific configurations based on functional requirements
+    app:
+      deduplication:
+        # Enable/disable deduplication logic globally or per type
+        customer-loan-dedupe-enabled: true
+        top-up-loan-dedupe-enabled: true
+        # Thresholds or rules for deduplication (example)
+        match-score-threshold: 0.85
+      validation:
+        # Enable/disable column-level validation
+        column-level-validation-enabled: true
+        # Configuration for validation rules (e.g., max length, regex)
+        # validation-rules-config-path: /app/config/validation-rules.json # Example for external validation rules
+      campaign:
+        # Campaign processing batch size or frequency
+        processing-batch-size: 1000
+        processing-interval-minutes: 15
+      feature-toggles:
+        # Example feature toggles
+        new-offer-processing-flow-enabled: false
+        audit-logging-enabled: true
+
+    # Event-Driven Architecture Configuration (e.g., Kafka/RabbitMQ)
+    # Assuming a message broker service within Kubernetes
+    message-broker:
+      host: ltfs-cdp-kafka-broker:9092 # Example Kafka broker service
+      # host: ltfs-cdp-rabbitmq:5672 # Example RabbitMQ host
+      topics:
+        customer-events: customer.profile.events
+        offer-events: offer.lifecycle.events
+        campaign-events: campaign.management.events
+      producer:
+        acks: all
+        retries: 3
+      consumer:
+        group-id: ltfs-cdp-consumer-group
+        auto-offset-reset: latest

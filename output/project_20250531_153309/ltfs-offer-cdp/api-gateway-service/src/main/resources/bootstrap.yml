@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: api-gateway-service # Unique name for this microservice, used for service discovery and configuration retrieval
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the Config Server
+      # profile: dev # Uncomment and set if a specific profile needs to be fetched from the config server
+      # label: main # Uncomment and set if a specific Git branch/label needs to be fetched from the config server
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Server for service registration and discovery
+    enabled: true # Enable Eureka client for service discovery
+    fetch-registry: true # Whether to fetch the registry information from Eureka server
+    register-with-eureka: true # Whether to register this application with Eureka server
+  instance:
+    hostname: localhost # Hostname to register with Eureka (can be dynamic in production environments)
+    prefer-ip-address: true # Prefer IP address over hostname for Eureka registration

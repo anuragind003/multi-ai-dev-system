@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: campaign-service # Unique name for this microservice within the ecosystem
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server. This should be updated for different environments (e.g., dev, prod)
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the config server. Recommended for production.
+      # profile: default # Optional: Specifies the profile to fetch from the config server. If not specified, 'default' is used.
+      # label: main # Optional: Specifies the Git branch or label to fetch configuration from. Defaults to 'main' or 'master'.
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Discovery Server. This should be updated for different environments.
+    enabled: true # Enables the Eureka client. Set to false to disable service discovery.
+    fetch-registry: true # Indicates whether the Eureka client should fetch the registry information from the Eureka server.
+    register-with-eureka: true # Indicates whether the Eureka client should register itself with the Eureka server.
+  instance:
+    hostname: localhost # Hostname to register with Eureka. In a production environment, this might be dynamically resolved or set to the actual host.
+    prefer-ip-address: true # If true, the IP address will be used instead of the hostname for registration with Eureka. Useful in containerized environments.
+    # instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Optional: Custom instance ID for Eureka registration. Useful for multiple instances on the same host.

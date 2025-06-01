@@ -1,0 +1,214 @@
+# Default values for ltfs-cdp Helm chart.
+# This file is used to provide default configuration values for the ltfs-cdp application
+# when deployed via Helm. These values can be overridden during chart installation
+# using the --set flag or by providing a custom values file.
+
+# Global settings applicable across the deployment.
+global:
+  # The environment where the application is deployed (e.g., dev, qa, prod).
+  environment: "dev"
+  # The default number of replicas for the application pods.
+  replicaCount: 1
+
+# Image configuration for the ltfs-cdp application.
+image:
+  # The Docker image repository name.
+  repository: "ltfs-offer-cdp"
+  # The Docker image tag (version). Use a specific version in production.
+  tag: "latest"
+  # The image pull policy (Always, IfNotPresent, Never).
+  pullPolicy: "IfNotPresent"
+  # Optional: List of secrets to use when pulling images from a private registry.
+  # imagePullSecrets:
+  #   - name: regcred
+
+# Service configuration for exposing the application.
+service:
+  # The type of Kubernetes service (ClusterIP, NodePort, LoadBalancer).
+  type: ClusterIP
+  # The port on which the application listens inside the container.
+  port: 8080
+  # The target port for the service, usually the same as 'port'.
+  targetPort: 8080
+
+# Ingress configuration for external access to the application.
+ingress:
+  # Enable or disable Ingress.
+  enabled: false
+  # Optional: Specify an IngressClass name if using multiple Ingress controllers.
+  className: ""
+  # Optional: Annotations to add to the Ingress resource.
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+  # List of hostnames and paths for Ingress rules.
+  hosts:
+    - host: cdp.example.com # Replace with your actual domain
+      paths:
+        - path: /
+          pathType: Prefix # Or Exact, ImplementationSpecific
+  # TLS configuration for Ingress.
+  tls: []
+    # - secretName: ltfs-cdp-tls-secret # Kubernetes secret containing TLS certificate and key
+    #   hosts:
+    #     - cdp.example.com
+
+# Resource requests and limits for the application containers.
+resources:
+  requests:
+    cpu: "200m"  # 0.2 CPU core
+    memory: "512Mi" # 512 MiB
+  limits:
+    cpu: "1000m" # 1 CPU core
+    memory: "1024Mi" # 1024 MiB (1 GiB)
+
+# Environment variables for the Spring Boot application.
+# Sensitive values like database passwords should be managed via Kubernetes Secrets.
+env:
+  # Spring Boot profile to activate (e.g., dev, qa, prod).
+  SPRING_PROFILES_ACTIVE: "dev"
+  # Database connection details.
+  # It is highly recommended to manage SPRING_DATASOURCE_PASSWORD via Kubernetes Secrets.
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql-service.default.svc.cluster.local:5432/ltfscdpdb" # Placeholder
+  SPRING_DATASOURCE_USERNAME: "ltfscdpuser" # Placeholder
+  SPRING_DATASOURCE_PASSWORD: "changeme" # !!! IMPORTANT: Use Kubernetes Secrets for production !!!
+  # Kafka/Event-driven components configuration.
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka-broker.default.svc.cluster.local:9092" # Placeholder
+  # Application-specific configurations.
+  # API endpoint for Offermart system.
+  APP_OFFERMART_API_URL: "http://offermart-api.default.svc.cluster.local:8080/api/offermart" # Placeholder
+  # API endpoint for Customer 360 system.
+  APP_CUSTOMER360_API_URL: "http://customer360-api.default.svc.cluster.local:8080/api/customer360" # Placeholder
+  # Flag to enable/disable deduplication logic.
+  APP_DEDUPE_LOGIC_ENABLED: "true"
+  # Configuration for top-up loan offer deduplication.
+  APP_TOPUP_DEDUPE_ENABLED: "true"
+  # Max number of concurrent offer processing threads.
+  APP_PROCESSING_THREADS: "5"
+  # Log level for the application.
+  LOGGING_LEVEL_ROOT: "INFO" # DEBUG, INFO, WARN, ERROR
+
+# Liveness probe configuration for health checks.
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness # Spring Boot Actuator Liveness endpoint
+    port: 8080
+  initialDelaySeconds: 60 # Initial delay before liveness checks start.
+  periodSeconds: 10     # How often to perform the check.
+  timeoutSeconds: 5     # When the probe times out.
+  failureThreshold: 6   # Number of consecutive failures before marking as unhealthy.
+
+# Readiness probe configuration for health checks.
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness # Spring Boot Actuator Readiness endpoint
+    port: 8080
+  initialDelaySeconds: 30 # Initial delay before readiness checks start.
+  periodSeconds: 10     # How often to perform the check.
+  timeoutSeconds: 5     # When the probe times out.
+  failureThreshold: 3   # Number of consecutive failures before marking as unready.
+
+# Horizontal Pod Autoscaler (HPA) configuration.
+autoscaling:
+  # Enable or disable HPA.
+  enabled: false
+  # Minimum number of replicas.
+  minReplicas: 1
+  # Maximum number of replicas.
+  maxReplicas: 5
+  # Target CPU utilization percentage to trigger scaling.
+  targetCPUUtilizationPercentage: 80
+  # Target memory utilization percentage to trigger scaling.
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Security Context settings.
+podSecurityContext:
+  # Run the container as a non-root user.
+  runAsNonRoot: true
+  # The user ID for the container process.
+  runAsUser: 10001 # Example: A non-root user ID
+  # The group ID for the container's primary group.
+  fsGroup: 10001 # Example: A non-root group ID
+
+# Container Security Context settings.
+securityContext:
+  # Prevent privilege escalation.
+  allowPrivilegeEscalation: false
+  # Mount the root filesystem as read-only.
+  readOnlyRootFilesystem: true
+  # Drop all Linux capabilities.
+  capabilities:
+    drop:
+      - ALL
+
+# JVM options for the Spring Boot application.
+# These are typically passed via JAVA_OPTS environment variable.
+javaOpts:
+  # Initial heap size.
+  xms: "256m"
+  # Maximum heap size.
+  xmx: "768m"
+  # Optional: Additional JVM arguments, e.g., GC tuning.
+  # extraArgs: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+# Node selector to schedule pods on specific nodes.
+nodeSelector: {}
+  # kubernetes.io/os: linux
+  # app-tier: backend
+
+# Tolerations for scheduling pods on tainted nodes.
+tolerations: []
+  # - key: "example-key"
+  #   operator: "Exists"
+  #   effect: "NoSchedule"
+
+# Affinity rules for advanced pod scheduling.
+affinity: {}
+
+# Service Account configuration.
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created.
+  create: true
+  # The name of the ServiceAccount to use. If not set and create is true, a name is generated.
+  name: ""
+
+# Pod Disruption Budget (PDB) configuration.
+pdb:
+  # Enable or disable PDB.
+  enabled: false
+  # Minimum number of available pods during a voluntary disruption.
+  minAvailable: 1
+  # Maximum number of unavailable pods during a voluntary disruption.
+  # maxUnavailable: 1
+
+# Custom annotations for the Kubernetes Deployment and Pods.
+deploymentAnnotations: {}
+podAnnotations: {}
+
+# Priority Class Name for the pods.
+priorityClassName: ""
+
+# Topology Spread Constraints for distributing pods across failure domains.
+topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: kubernetes.io/hostname
+  #   whenUnsatisfiable: DoNotSchedule
+  #   labelSelector:
+  #     matchLabels:
+  #       app.kubernetes.io/name: ltfs-cdp
+
+# Prometheus monitoring configuration (if Prometheus Operator is used).
+monitoring:
+  # Enable or disable creation of a ServiceMonitor resource.
+  serviceMonitor:
+    enabled: false
+    # Labels to add to the ServiceMonitor.
+    labels: {}
+    # Scrape interval for Prometheus.
+    interval: 30s
+    # Scrape timeout for Prometheus.
+    scrapeTimeout: 10s
+    # Path to the metrics endpoint.
+    path: /actuator/prometheus
+    # Port for the metrics endpoint.
+    port: http-metrics # Name of the port in the service, e.g., 'http-metrics' or '8080'

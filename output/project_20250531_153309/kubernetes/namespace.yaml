@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  # The name of the Kubernetes Namespace.
+  # This namespace will house all resources related to the LTFS Offer CDP project.
+  # It follows a common naming convention: <project-name>.
+  name: ltfs-offer-cdp
+  labels:
+    # Standard label to identify the application this namespace belongs to.
+    app: ltfs-offer-cdp
+    # Label to categorize by project.
+    project: ltfs-offer-cdp
+    # Environment label (can be extended for dev, staging, prod if needed).
+    # For a generic namespace, 'production' or 'default' is often used,
+    # but for a new project, it's better to keep it flexible.
+    environment: production # Assuming this is for a production-like deployment
+  annotations:
+    # A brief description of the purpose of this namespace.
+    description: "Kubernetes Namespace for the LTFS Offer CDP (Customer Data Platform) project."
+    # Owner information for operational purposes.
+    owner: "CDP Development Team"
+    # Creation timestamp for tracking.
+    kubernetes.io/created-by: "Code Generation Agent"
+    # Optional: Link to project documentation or repository.
+    # project-url: "https://github.com/ltfs/offer-cdp"

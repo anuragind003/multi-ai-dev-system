@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campaign-service-deployment
+  labels:
+    app: campaign-service
+    environment: production # Environment tag for easier filtering and management
+    project: ltfs-offer-cdp # Project identifier
+spec:
+  replicas: 2 # Number of desired pod replicas for high availability and load balancing
+  selector:
+    matchLabels:
+      app: campaign-service # Selector to identify pods managed by this deployment
+  template:
+    metadata:
+      labels:
+        app: campaign-service # Labels applied to the pods created by this deployment
+        project: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: campaign-service # Name of the container within the pod
+          image: ltfs-offer-cdp/campaign-service:1.0.0 # Docker image for the Campaign Service. Use a specific version tag for production stability.
+          imagePullPolicy: IfNotPresent # Policy for pulling the image: IfNotPresent avoids pulling if image already exists locally. Use Always for development or frequent updates.
+          ports:
+            - containerPort: 8080 # The port on which the Spring Boot application listens inside the container
+          env:
+            # Spring Boot profile for Kubernetes-specific configurations
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL for PostgreSQL. Assumes 'postgresql-service' is the Kubernetes Service name for the PostgreSQL database.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_campaign_db
+            # Database username fetched from a Kubernetes Secret named 'db-credentials'
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials # Name of the Kubernetes Secret
+                  key: username # Key within the secret that holds the username
+            # Database password fetched from a Kubernetes Secret named 'db-credentials'
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials # Name of the Kubernetes Secret
+                  key: password # Key within the secret that holds the password
+            # Kafka bootstrap servers fetched from a Kubernetes ConfigMap named 'application-config'
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: application-config # Name of the Kubernetes ConfigMap
+                  key: kafka-bootstrap-servers # Key within the ConfigMap that holds Kafka server addresses
+            # Explicitly set the server port for the Spring Boot application
+            - name: SERVER_PORT
+              value: "8080"
+            # Add any other necessary environment variables here, e.g., for logging, external API keys, etc.
+          resources:
+            requests:
+              memory: "512Mi" # Minimum memory requested by the container
+              cpu: "500m"    # Minimum CPU requested (500m = 0.5 CPU core)
+            limits:
+              memory: "1024Mi" # Maximum memory the container can use before being OOMKilled
+              cpu: "1000m"   # Maximum CPU the container can use (1000m = 1 CPU core)
+          livenessProbe:
+            # Liveness probe checks if the application is running and healthy. If it fails, Kubernetes restarts the pod.
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator endpoint for liveness checks
+              port: 8080
+            initialDelaySeconds: 60 # Time to wait before the first liveness probe is performed (allows app to start)
+            periodSeconds: 10 # How often (in seconds) to perform the probe
+            timeoutSeconds: 5 # Number of seconds after which the probe times out
+            failureThreshold: 3 # Number of consecutive failures before Kubernetes considers the probe failed
+          readinessProbe:
+            # Readiness probe checks if the application is ready to serve traffic. If it fails, Kubernetes stops sending traffic to the pod.
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator endpoint for readiness checks
+              port: 8080
+            initialDelaySeconds: 30 # Time to wait before the first readiness probe is performed
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # imagePullSecrets: # Uncomment and configure if your Docker image registry requires authentication
+      #   - name: regcred # Name of the Secret containing Docker registry credentials
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campaign-service # Name of the Kubernetes Service
+  labels:
+    app: campaign-service # Labels for the Service
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: campaign-service # Selects pods with the label 'app: campaign-service' to route traffic to
+  ports:
+    - protocol: TCP # Protocol used by the service
+      port: 80 # The port on which this Service will be exposed within the cluster
+      targetPort: 8080 # The port on the target pods (containers) to which the service will forward traffic
+  type: ClusterIP # Service type: ClusterIP exposes the service on a cluster-internal IP. Only reachable from within the cluster.
+                  # Use NodePort or LoadBalancer if external access is required (often managed by an Ingress controller).

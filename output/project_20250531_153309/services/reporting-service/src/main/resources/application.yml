@@ -1,0 +1,97 @@
+# application.yml for the Reporting Service
+# This file configures the Spring Boot application properties for the Reporting Service.
+# It includes server settings, database connection details, JPA/Hibernate configurations,
+# logging levels, and event-driven (Kafka) properties.
+
+# --- Application Core Properties ---
+spring:
+  application:
+    name: reporting-service # Defines the name of this Spring Boot application.
+
+# --- Server Configuration ---
+server:
+  port: 8083 # The port on which the Reporting Service will listen for incoming requests.
+             # Choose a unique port to avoid conflicts with other microservices.
+
+# --- Database Configuration (PostgreSQL) ---
+# This section configures the connection to the PostgreSQL database.
+# The Reporting Service will likely read from the main CDP database or a dedicated reporting schema.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_db # JDBC URL for the PostgreSQL database.
+                                                 # 'cdp_db' is assumed to be the central Customer Data Platform database.
+    username: cdp_user                           # Database username.
+    password: cdp_password                       # Database password.
+    driver-class-name: org.postgresql.Driver     # Specifies the JDBC driver for PostgreSQL.
+    hikari:
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+      maximum-pool-size: 10     # Maximum number of connections in the pool.
+      minimum-idle: 2           # Minimum number of idle connections in the pool.
+      idle-timeout: 600000      # Maximum amount of time a connection can sit idle in the pool.
+      pool-name: ReportingServiceHikariCP # Name of the HikariCP connection pool.
+
+# --- JPA and Hibernate Configuration ---
+# These properties configure the Java Persistence API (JPA) and Hibernate,
+# which are used for object-relational mapping with the database.
+  jpa:
+    hibernate:
+      ddl-auto: none # Controls schema generation. 'none' is recommended for production environments,
+                     # meaning schema changes are managed externally (e.g., via Flyway/Liquibase).
+                     # Other options: 'update', 'create', 'create-drop', 'validate'.
+    show-sql: false  # Set to 'true' to log SQL statements to the console (useful for debugging, but disable in production).
+    properties:
+      hibernate:
+        format_sql: false # Set to 'true' to pretty-print SQL in logs (only effective if show-sql is true).
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL.
+    open-in-view: false # Disables the Open Session In View pattern to prevent lazy loading issues outside of transactions.
+
+# --- Logging Configuration ---
+# Defines the logging levels for different packages and the root logger.
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    com.ltfs.cdp.reporting: DEBUG # Set to DEBUG for more detailed logs from the Reporting Service's own packages.
+    org.springframework: INFO # Spring Framework logging.
+    org.hibernate: INFO       # Hibernate logging.
+    org.springframework.web: INFO # Spring Web logging.
+    org.springframework.kafka: INFO # Spring Kafka logging.
+
+# --- Kafka Configuration (for Event-Driven Components) ---
+# As the architecture includes Event-Driven Components, the Reporting Service might consume
+# events (e.g., customer profile updates, offer finalization events) from Kafka topics.
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses.
+    consumer:
+      group-id: reporting-service-group # A unique identifier for this consumer group.
+                                        # All consumers with the same group.id belong to the same group.
+      auto-offset-reset: earliest       # What to do when there is no initial offset in Kafka or if the current offset does not exist any more on the server.
+                                        # 'earliest': automatically reset the offset to the earliest offset.
+                                        # 'latest': automatically reset the offset to the latest offset.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payloads).
+      properties:
+        spring.json.trusted.packages: "*" # Allows deserialization of any package. Be cautious in production;
+                                          # consider specifying exact packages for security.
+        # spring.json.value.default.type: com.ltfs.cdp.reporting.event.CustomerProfileUpdatedEvent # Example: Default type for JSON deserialization if no type header is present.
+                                                                                                 # Adjust based on actual event types consumed by this service.
+    producer:
+      # The reporting service might also produce events, e.g., for reporting status or aggregated data.
+      # Configure if needed.
+      # key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # retries: 0
+      # batch-size: 16384
+      # linger.ms: 1
+      # buffer-memory: 33554432
+
+# --- Actuator Endpoints (for Monitoring and Management) ---
+# Spring Boot Actuator provides production-ready features to monitor and manage the application.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus # Exposes common endpoints like health, info, and Prometheus metrics.
+  endpoint:
+    health:
+      show-details: always # Shows full health details, including database and Kafka status.
+    prometheus:
+      enabled: true # Enables the Prometheus endpoint for metrics scraping.

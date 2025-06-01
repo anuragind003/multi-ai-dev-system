@@ -1,385 +1,444 @@
+"""
+Multi-AI Development System - Main Entry Point
+
+This module orchestrates the complete software development automation workflow
+using specialized AI agents and LangGraph for workflow management.
+ENHANCED: Uses AdvancedWorkflowConfig for comprehensive configuration management.
+"""
+
 import os
-import json
-import shutil
-import datetime
+import sys
+import argparse
+import time
+from pathlib import Path
+import atexit
 
-from shared_memory import SharedProjectMemory
-from config import get_gemini_model, PROJECT_BRDS_DIR, PROJECT_OUTPUT_DIR
-from agents.brd_analyst import BRDAnalystAgent
-from agents.tech_stack_advisor import TechStackAdvisorAgent
-from agents.system_designer import SystemDesignerAgent
-from agents.code_generation import CodeGenerationAgent
-from agents.test_case_generator import TestCaseGeneratorAgent
-from agents.code_quality_agent import CodeQualityAgent
-from agents.test_validation_agent import TestValidationAgent
-from tools.code_execution_tool import CodeExecutionTool
-from tools.document_parser import DocumentParser
-from tools.vector_store_manager import VectorStoreManager
+# Add project root to Python path
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    # FIXED: Import get_embedding_model instead of get_embeddings
+    from config import get_llm, get_embedding_model, TrackedChatModel, AdvancedWorkflowConfig
+    from shared_memory import SharedProjectMemory
+    from tools.code_execution_tool import CodeExecutionTool
+    from rag_manager import ProjectRAGManager  # Clean import without debugging
+    from tools.document_parser import DocumentParser
+    from graph import get_workflow
+    import monitoring
+    
+    # Import graph nodes
+    from graph_nodes import (
+        brd_analysis_node,
+        tech_stack_recommendation_node,
+        system_design_node,
+        planning_node,
+        code_generation_node,
+        test_case_generation_node,
+        code_quality_analysis_node,
+        test_validation_node,
+        finalize_workflow
+    )
+    
+except ImportError as e:
+    print(f"❌ Critical import error: {e}")
+    print("Please ensure all required dependencies are installed:")
+    print("  pip install -r requirements.txt")
+    sys.exit(1)
 
-def run_project_workflow():
-    print("--- Starting Multi-AI Agentic System Workflow ---")
+def parse_arguments():
+    """ENHANCED: Parse command line arguments for AdvancedWorkflowConfig integration."""
+    
+    parser = argparse.ArgumentParser(
+        description="Multi-AI Development System - Automated Software Development",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with default configuration
+  python main.py requirements.pdf
+  
+  # Production deployment with configuration file
+  python main.py requirements.pdf --config configs/production.yaml --environment production
+  
+  # Development with debugging and custom thresholds
+  python main.py requirements.pdf --environment development --debug --quality-threshold 7.0
+  
+Configuration Sources (in order of precedence):
+  1. Command line arguments (highest priority)
+  2. Environment variables (prefix: MAISD_)
+  3. Configuration file (YAML/JSON)
+  4. Default values (lowest priority)
+  
+Environment Variables:
+  RAG_SECURITY_MODE: Set to 'development', 'staging', or 'production'
+  MAISD_QUALITY_THRESHOLD: Minimum code quality score (0-10)
+  MAISD_MAX_CODE_GEN_RETRIES: Maximum code generation retries
+  FAISS_ENCRYPTION_PASSWORD: Custom encryption password for production
+        """
+    )
+    
+    # Required arguments
+    parser.add_argument("brd_file", help="Path to Business Requirements Document")
+    
+    # Configuration file
+    parser.add_argument("--config", help="Path to configuration file (YAML/JSON)")
+    parser.add_argument("--output-dir", help="Custom output directory")
+    
+    # Workflow settings
+    parser.add_argument("--workflow-type", default="iterative", 
+                       choices=["basic", "iterative", "modular", "resumable"],
+                       help="Type of workflow to run")
+    parser.add_argument("--environment", choices=["development", "staging", "production"],
+                       help="Deployment environment (affects security and behavior)")
+    
+    # Quality thresholds (will be merged with config file)
+    parser.add_argument("--quality-threshold", type=float,
+                       help="Minimum code quality score (0-10)")
+    parser.add_argument("--min-success-rate", type=float,
+                       help="Minimum test success rate (0.0-1.0)")
+    parser.add_argument("--min-coverage", type=float,
+                       help="Minimum code coverage percentage")
+    
+    # Retry settings
+    parser.add_argument("--max-retries", type=int,
+                       help="Maximum code generation retries")
+    parser.add_argument("--max-test-retries", type=int,
+                       help="Maximum test generation retries")
+    
+    # Performance settings
+    parser.add_argument("--agent-timeout", type=int,
+                       help="Agent execution timeout in seconds")
+    parser.add_argument("--parallel-execution", action="store_true",
+                       help="Enable parallel agent execution (experimental)")
+    
+    # System settings
+    parser.add_argument("--skip-rag", action="store_true",
+                       help="Skip RAG system initialization")
+    parser.add_argument("--fail-fast", action="store_true",
+                       help="Stop execution on first critical error")
+    parser.add_argument("--verbose", action="store_true",
+                       help="Enable verbose output")
+    parser.add_argument("--debug", action="store_true",
+                       help="Enable debug mode")
+    
+    return parser.parse_args()
 
-    # --- Resumption Logic Setup ---
-    # First, let's find the latest existing run directory if any
-    # This allows us to offer resuming a previous session.
-    latest_run_folder_name = None
-    output_base_dir = PROJECT_OUTPUT_DIR
-    run_dirs = [d for d in os.listdir(output_base_dir) if os.path.isdir(os.path.join(output_base_dir, d)) and d.startswith("project_run_")]
-    if run_dirs:
-        latest_run_folder_name = sorted(run_dirs, reverse=True)[0]
+def load_brd_content(brd_file_path: str) -> str:
+    """Load and parse Business Requirements Document."""
+    
+    if not os.path.exists(brd_file_path):
+        raise FileNotFoundError(f"BRD file not found: {brd_file_path}")
+    
+    try:
+        parser = DocumentParser()
+        content = parser.parse_document(brd_file_path)
         
-    project_run_dir = None
-    if latest_run_folder_name:
-        resume_choice = input(f"Found previous run: '{latest_run_folder_name}'. Do you want to resume from it? (yes/no, default: no): ").lower().strip()
-        if resume_choice == 'yes':
-            project_run_dir = os.path.join(output_base_dir, latest_run_folder_name)
-            print(f"Resuming workflow in: {project_run_dir}")
+        if not content or len(content.strip()) < 100:
+            raise ValueError("BRD content is too short or empty")
+        
+        print(f"✅ BRD loaded successfully: {len(content)} characters")
+        return content
+        
+    except Exception as e:
+        raise Exception(f"Failed to parse BRD file: {e}")
+
+def setup_output_directory(project_name: str, custom_output_dir: str = None) -> str:
+    """Setup output directory for generated code."""
+    
+    if custom_output_dir:
+        output_dir = Path(custom_output_dir)
+    else:
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        output_dir = Path("output") / f"{project_name}_{timestamp}"
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create subdirectories
+    (output_dir / "src").mkdir(exist_ok=True)
+    (output_dir / "tests").mkdir(exist_ok=True)
+    (output_dir / "docs").mkdir(exist_ok=True)
+    (output_dir / "logs").mkdir(exist_ok=True)
+    
+    return str(output_dir)
+
+def initialize_rag_system(project_root: str, skip_rag: bool = False, environment: str = "development") -> ProjectRAGManager:
+    """Initialize the RAG system with security considerations."""
+    
+    if skip_rag:
+        print("⏭️ Skipping RAG initialization as requested")
+        return None
+    
+    try:
+        print(f"🔍 Initializing RAG system (security mode: {environment})...")
+        
+        # ENHANCED: Use environment parameter for security mode
+        rag_manager = ProjectRAGManager(project_root, environment=environment)
+        
+        # Display security status
+        security_status = rag_manager.get_security_status()
+        print(f"🔒 Security mode: {security_status['security_mode']}")
+        
+        if security_status['recommendations']:
+            print("💡 Security recommendations:")
+            for rec in security_status['recommendations'][:3]:  # Show top 3
+                print(f"   • {rec}")
+        
+        # Try to load existing index first
+        if rag_manager.load_existing_index():
+            print("✅ Loaded existing RAG index with security verification")
+            
+            # Show active security features
+            active_features = security_status.get('features_enabled', {})
+            enabled_features = [feature for feature, enabled in active_features.items() if enabled]
+            if enabled_features:
+                print(f"🛡️  Active security features: {', '.join(enabled_features)}")
         else:
-            print("Starting a new workflow run.")
-    
-    if not project_run_dir: # If not resuming, create a new one
-        project_run_dir = os.path.join(PROJECT_OUTPUT_DIR, f"project_run_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}")
-        os.makedirs(project_run_dir, exist_ok=True)
-        print(f"All generated code and tests for this run will be placed in: {project_run_dir}")
-
-    # 1. Initialize Shared Project Memory (SQLite per run)
-    memory = SharedProjectMemory(run_dir=project_run_dir)
-    print(f"Shared Project Memory initialized from {memory.db_path}.")
-
-    # 2. Get LLM Model
-    llm = get_gemini_model()
-    print(f"Gemini model '{llm.model_name}' loaded.")
-
-    # 3. Initialize the DocumentParser tool
-    document_parser = DocumentParser()
-    print("DocumentParser initialized for multi-format BRD input.")
-
-    # 4. Initialize Vector Store Manager for RAG
-    # Pass clean_existing=False when loading to allow resuming and adding more chunks
-    vector_store_manager = VectorStoreManager(run_dir=project_run_dir)
-    # The vector store will attempt to load existing data if it's there
-    print("Vector Store Manager initialized for RAG.")
-
-
-    # --- Phase 1 Steps (Sequential Execution) ---
-    # Use memory.get() to check if a step was already completed and skip it.
-
-    # Step 1: Taking BRD as Input
-    print("\n--- Step 1: BRD Analysis ---")
-    if memory.get("brd_analysis"):
-        brd_analysis_output = memory.get("brd_analysis")
-        print("BRD Analysis already completed. Resuming.")
-        # Re-initialize RAG if needed, but it should load existing upon VectorStoreManager init
-        # No need to add again, as it's part of init if exists.
-    else:
-        brd_file_path = input(
-            f"Please enter the path to your BRD file "
-            f"(e.g., {os.path.join(PROJECT_BRDS_DIR, 'simple_crud_api.md')}, a local .pdf/.docx, or a GCS path like gs://{os.getenv('GCP_BUCKET_NAME', 'your-bucket')}/brds/my_brd.pdf): "
-        ).strip()
-        
-        if not brd_file_path:
-            print("No BRD file path provided. Exiting.")
-            return
-
-        local_brd_path = ""
-        try:
-            if brd_file_path.startswith("gs://"):
-                print(f"Downloading BRD from GCS: {brd_file_path}")
-                client = storage.Client()
-                bucket_name = brd_file_path.split("/")[2]
-                blob_name = "/".join(brd_file_path.split("/")[3:])
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(blob_name)
-                
-                temp_brd_dir = os.path.join(project_run_dir, "temp_brd_input") # Use run_dir for temp
-                os.makedirs(temp_brd_dir, exist_ok=True)
-                local_brd_path = os.path.join(temp_brd_dir, os.path.basename(brd_file_path))
-                blob.download_to_filename(local_brd_path)
-                print(f"Downloaded BRD to {local_brd_path}")
+            print("📚 Creating new RAG index from project code...")
+            if rag_manager.index_project_code():
+                print("✅ RAG index created successfully with security integration")
             else:
-                local_brd_path = brd_file_path
-            
-            raw_brd = document_parser.parse_document(local_brd_path)
-            memory.set("raw_brd", raw_brd) 
-            memory.set("brd_file_path_used", brd_file_path)
-            print(f"BRD loaded from {brd_file_path} (Parsed text length: {len(raw_brd)} chars).")
-
-            brd_analyst_agent = BRDAnalystAgent(llm=llm, memory=memory)
-            brd_analysis_output = brd_analyst_agent.run(raw_brd)
-            memory.set("brd_analysis", brd_analysis_output)
-            print("BRD Analysis Complete. Output stored in memory.")
-            print(f"Summary: {brd_analysis_output.get('summary', 'N/A')}")
-            
-            vector_store_manager.initialize_vector_store([json.dumps(brd_analysis_output, indent=2)], clean_existing=True) # Clean and initialize for BRD
-            print("BRD Analysis added to RAG store.")
-
-        except FileNotFoundError as e:
-            print(f"Error: {e}")
-            return 
-        except ValueError as e:
-            print(f"Error parsing BRD: {e}")
-            return
-        except Exception as e:
-            print(f"An unexpected error occurred during BRD Analysis: {e}")
-            return 
-        finally:
-            if brd_file_path.startswith("gs://") and os.path.exists(temp_brd_dir):
-                shutil.rmtree(temp_brd_dir)
-                print(f"Cleaned up temporary BRD directory: {temp_brd_dir}")
-
-    # Step 2: Deciding Tech Stack
-    print("\n--- Step 2: Deciding Tech Stack ---")
-    if memory.get("tech_stack_recommendation"):
-        tech_stack_output = memory.get("tech_stack_recommendation")
-        print("Tech Stack decision already completed. Resuming.")
-    else:
-        try:
-            tech_stack_advisor_agent = TechStackAdvisorAgent(llm=llm, memory=memory)
-            tech_stack_output = tech_stack_advisor_agent.run(memory.get("brd_analysis"))
-            memory.set("tech_stack_recommendation", tech_stack_output)
-            print("Tech Stack decision complete. Output stored in memory.")
-            print(f"Backend: {tech_stack_output.get('backend', {}).get('name', 'N/A')}")
-            print(f"Database: {tech_stack_output.get('database', {}).get('name', 'N/A')}")
-            print(f"Overall Rationale: {tech_stack_output.get('overall_rationale', 'N/A')[:100]}...")
-            
-            vector_store_manager.add_documents_to_store([json.dumps(tech_stack_output, indent=2)])
-            print("Tech Stack recommendation added to RAG store.")
-        except Exception as e:
-            print(f"Error during Tech Stack decision: {e}")
-            return
-
-    # Step 3: System Designing
-    print("\n--- Step 3: System Designing ---")
-    if memory.get("system_design"):
-        system_design_output = memory.get("system_design")
-        print("System Design already completed. Resuming.")
-    else:
-        try:
-            system_designer_agent = SystemDesignerAgent(llm=llm, memory=memory)
-            system_design_output = system_designer_agent.run(
-                memory.get("brd_analysis"), memory.get("tech_stack_recommendation")
-            )
-            memory.set("system_design", system_design_output)
-            print("System Design complete. Output stored in memory.")
-            print(f"Architecture: {system_design_output.get('architecture_overview', 'N/A')}")
-            print(f"Main Modules: {', '.join(system_design_output.get('main_modules', ['N/A']))}")
-            
-            vector_store_manager.add_documents_to_store([json.dumps(system_design_output, indent=2)])
-            print("System Design added to RAG store.")
-        except Exception as e:
-            print(f"Error during System Designing: {e}")
-            return
-
-    # --- Phase 2: Introduce Basic Testing & Quality (Iterative Loop) ---
-    
-    code_execution_tool = CodeExecutionTool(output_dir=project_run_dir) 
-
-    max_code_gen_retries = 3 # Re-set to 3 as requested
-    current_code_gen_retry = memory.get("current_code_gen_retry", 0) # Load last retry count
-    code_is_acceptable = memory.get("code_is_acceptable", False) # Load last status
-    
-    # If resuming, check if previous run was already successful.
-    if code_is_acceptable and current_code_gen_retry > 0:
-        print(f"\n--- Resuming from a previously successful iteration (Iteration {current_code_gen_retry}). ---")
-    else:
-        # If not resuming a success, make sure feedback is loaded for next retry
-        memory.set("code_quality_feedback", memory.get("code_quality_feedback", ""))
-        memory.set("test_results_feedback", memory.get("test_results_feedback", ""))
+                print("⚠️ RAG indexing failed, continuing without RAG")
+                return None
         
-        # If starting a new loop, or resuming a failed one, ensure current_code_gen_retry is incremented
-        # This prevents infinite loops if it loads a state where it failed but current_code_gen_retry wasn't incremented
-        if not code_is_acceptable: # Only increment if previous state wasn't successful
-             current_code_gen_retry += 1
-             print(f"\n--- Starting Code Generation & Validation Iteration {current_code_gen_retry}/{max_code_gen_retries} ---")
-        else: # If it was acceptable, we just print the success and skip loop
-             print("\n--- Phase 2 Complete: Code Generated & Validated Successfully! ---")
-             return # Exit if already successful
-
-    rag_retriever = vector_store_manager.get_retriever(k=7) # Get the RAG retriever
-
-
-    while not code_is_acceptable and current_code_gen_retry <= max_code_gen_retries: # Change to <= for correct count
-        print(f"\n--- Code Generation & Validation Iteration {current_code_gen_retry}/{max_code_gen_retries} ---")
+        return rag_manager
         
-        combined_feedback = (memory.get("code_quality_feedback", "") + "\n" + 
-                             memory.get("test_results_feedback", "")).strip()
-        if combined_feedback:
-            print(f"  Attempting to fix issues based on feedback:\n{combined_feedback}")
+    except Exception as e:
+        print(f"⚠️ RAG initialization failed: {e}")
+        print("Continuing without RAG support...")
+        return None
 
-        # Step 4: Writing Whole Code (CodeGenerationAgent)
-        # Only run if not already done in this iteration
-        if not memory.get(f"iteration_{current_code_gen_retry}_code_gen_complete"):
-            print("\n--- Step 4: Writing Whole Code ---")
-            try:
-                code_generation_agent = CodeGenerationAgent(
-                    llm=llm, 
-                    memory=memory, 
-                    output_dir=project_run_dir, 
-                    code_execution_tool=code_execution_tool,
-                    rag_retriever=rag_retriever
-                )
-                generated_code_files = code_generation_agent.run(
-                    brd_analysis=memory.get("brd_analysis"), 
-                    tech_stack_recommendation=memory.get("tech_stack_recommendation"),
-                    system_design=memory.get("system_design"),
-                    error_feedback=combined_feedback 
-                )
-                if not generated_code_files:
-                    print("Critical: Code generation failed to produce any files. Cannot proceed with validation.")
-                    break 
-                memory.set("generated_code_files", generated_code_files)
-                memory.set("generated_app_root_path", project_run_dir) 
-                memory.set(f"iteration_{current_code_gen_retry}_code_gen_complete", True) # Mark step as complete
-                print("Code Generation complete. Files written to output directory.")
-                
-                code_snippets_for_rag = [f"--- File: {path} ---\n```\n{content}\n```" for path, content in generated_code_files.items()]
-                vector_store_manager.add_documents_to_store(code_snippets_for_rag)
-                print(f"Added {len(code_snippets_for_rag)} generated code snippets to RAG store.")
+def create_initial_state(brd_content: str, workflow_config: AdvancedWorkflowConfig) -> dict:
+    """
+    SIMPLIFIED: Create initial state using the enhanced agent_state.py functionality.
+    This function now delegates to the proper state creation function.
+    """
+    from agent_state import create_initial_agent_state
+    
+    # Use the enhanced state creation function
+    return create_initial_agent_state(brd_content, workflow_config)
 
-                memory.set("code_quality_feedback", "") # Clear feedback for new iteration
-                memory.set("test_results_feedback", "")
+def display_results(final_state: dict, output_dir: str):
+    """ENHANCED: Display comprehensive results with improved state handling."""
+    
+    # Print workflow summary
+    print_workflow_summary(final_state)
+    
+    # Show state summary for debugging
+    if final_state.get("debug", False):
+        from agent_state import get_state_summary
+        state_summary = get_state_summary(final_state)
+        print("\n" + "="*60)
+        print("DEBUG: WORKFLOW STATE SUMMARY")
+        print("="*60)
+        print(f"Progress: {state_summary['workflow_progress']['progress_percentage']:.1f}% complete")
+        print(f"Elapsed Time: {state_summary['workflow_progress']['elapsed_time']:.2f}s")
+        print(f"Quality Score: {state_summary['current_metrics']['quality_score']:.1f}/10")
+        print(f"Test Success Rate: {state_summary['current_metrics']['test_success_rate']:.2%}")
+        print(f"Coverage: {state_summary['current_metrics']['coverage_percentage']:.1f}%")
+        print(f"Retries Used: Code({state_summary['retry_status']['code_gen_retries']}), Tests({state_summary['retry_status']['test_retries']})")
+        print(f"Errors: {state_summary['errors_count']}")
+    
+    # Show output directory contents
+    print(f"\n📁 Generated files in: {output_dir}")
+    try:
+        for root, dirs, files in os.walk(output_dir):
+            level = root.replace(output_dir, '').count(os.sep)
+            indent = ' ' * 2 * level
+            print(f"{indent}{os.path.basename(root)}/")
+            subindent = ' ' * 2 * (level + 1)
+            for file in files:
+                print(f"{subindent}{file}")
+    except Exception as e:
+        print(f"⚠️ Could not list output directory: {e}")
 
-            except Exception as e:
-                print(f"Error during Code Generation (Iteration {current_code_gen_retry}): {e}")
-                memory.set("code_quality_feedback", f"Code generation failed with error: {e}. Attempting regeneration in next iteration.")
-                memory.set(f"iteration_{current_code_gen_retry}_code_gen_complete", False) # Mark as failed
-                current_code_gen_retry += 1 # Increment for next retry
-                continue # Go to next iteration
+def print_workflow_summary(final_state: dict):
+    """ENHANCED: Print workflow summary with better state field access."""
+    
+    print("\n" + "="*80)
+    print("WORKFLOW EXECUTION SUMMARY")
+    print("="*80)
+    
+    # Import state field constants for consistency
+    from agent_state import StateFields
+    
+    # Basic information
+    workflow_summary = final_state.get(StateFields.WORKFLOW_SUMMARY, {})
+    total_time = workflow_summary.get("total_execution_time", 0)
+    status = workflow_summary.get("status", "unknown")
+    
+    print(f"Status: {status.upper()}")
+    print(f"Total Execution Time: {total_time:.2f} seconds")
+    
+    # Configuration summary
+    workflow_config = final_state.get(StateFields.WORKFLOW_CONFIG, {})
+    environment = workflow_config.get("environment", "unknown")
+    print(f"Environment: {environment}")
+    
+    # Agent execution times
+    execution_times = final_state.get(StateFields.AGENT_EXECUTION_TIMES, {})
+    if execution_times:
+        print(f"\n📊 Agent Performance:")
+        for agent, time_taken in execution_times.items():
+            print(f"   {agent}: {time_taken:.2f}s")
+    
+    # Quality metrics using standardized field names
+    quality_score = final_state.get(StateFields.OVERALL_QUALITY_SCORE, 0)
+    test_success_rate = final_state.get(StateFields.TEST_SUCCESS_RATE, 0)
+    coverage_percentage = final_state.get(StateFields.CODE_COVERAGE_PERCENTAGE, 0)
+    
+    print(f"\n📈 Quality Metrics:")
+    print(f"   Quality Score: {quality_score:.1f}/10")
+    print(f"   Test Success Rate: {test_success_rate:.2%}")
+    print(f"   Code Coverage: {coverage_percentage:.1f}%")
+    
+    # Errors
+    errors = final_state.get(StateFields.ERRORS, [])
+    if errors:
+        print(f"\n⚠️ Errors Encountered: {len(errors)}")
+        for i, error in enumerate(errors[:3], 1):  # Show first 3 errors
+            print(f"   {i}. {error.get('agent', 'Unknown')}: {error.get('error', 'Unknown error')}")
+        if len(errors) > 3:
+            print(f"   ... and {len(errors) - 3} more errors")
+    
+    # Configuration details
+    config_summary = {
+        "Quality Threshold": final_state.get(StateFields.QUALITY_THRESHOLD, 0),
+        "Min Success Rate": final_state.get(StateFields.MIN_SUCCESS_RATE, 0),
+        "Min Coverage": final_state.get(StateFields.MIN_COVERAGE_PERCENTAGE, 0),
+        "Max Retries": final_state.get(StateFields.MAX_CODE_GEN_RETRIES, 0)
+    }
+    
+    print(f"\n⚙️ Configuration Used:")
+    for key, value in config_summary.items():
+        if isinstance(value, float) and 0 < value < 1:
+            print(f"   {key}: {value:.2%}")
+        else:
+            print(f"   {key}: {value}")
+    
+    print("="*80)
 
-        # Get the actual generated app root path for tools
-        current_app_root = memory.get("generated_app_root_path", project_run_dir)
-
-        # Install dependencies
-        if not memory.get(f"iteration_{current_code_gen_retry}_deps_installed"):
-            print(f"\n--- Installing Dependencies for Generated Code at {current_app_root} ---")
-            success, install_output = code_execution_tool.install_dependencies(
-                current_app_root, memory.get("tech_stack_recommendation")
+def main():
+    """ENHANCED: Main entry point using AdvancedWorkflowConfig."""
+    
+    try:
+        # Parse command line arguments
+        args = parse_arguments()
+        
+        # ENHANCED: Create sophisticated workflow configuration
+        print("🔧 Loading workflow configuration...")
+        
+        try:
+            workflow_config = AdvancedWorkflowConfig.load_from_multiple_sources(
+                config_file=args.config,  # None if not provided
+                env_prefix="MAISD_",      # Environment variable prefix
+                args=args                 # Command line arguments
             )
-            if not success:
-                print(f"Dependency installation failed: {install_output}")
-                memory.set("code_quality_feedback", f"Dependency installation failed: {install_output}. Generated code cannot run.")
-                memory.set(f"iteration_{current_code_gen_retry}_deps_installed", False)
-                current_code_gen_retry += 1
-                continue 
+            
+            # Print configuration summary
+            if args.debug:
+                workflow_config.print_detailed_summary()
             else:
-                print("Dependencies installed successfully.")
-                memory.set(f"iteration_{current_code_gen_retry}_deps_installed", True)
-
-        # Step 6: Validating Code Sanity / Quality Check (CodeQualityAgent)
-        if not memory.get(f"iteration_{current_code_gen_retry}_code_quality_complete"):
-            print("\n--- Step 6: Validating Code Sanity / Quality Check ---")
-            try:
-                code_quality_agent = CodeQualityAgent(llm=llm, memory=memory, code_execution_tool=code_execution_tool)
-                quality_report = code_quality_agent.run(
-                    current_app_root,
-                    memory.get("tech_stack_recommendation")
-                )
-                memory.set("code_quality_report", quality_report)
-                memory.set(f"iteration_{current_code_gen_retry}_code_quality_complete", True) # Mark step as complete
-                print("Code Quality Check complete. Report stored in memory.")
-                
-                vector_store_manager.add_documents_to_store([f"--- Code Quality Report (Iteration {current_code_gen_retry}) ---\n{json.dumps(quality_report, indent=2)}"])
-                print("Code Quality Report added to RAG store.")
-
-                if quality_report.get("has_critical_issues", False):
-                    print("Critical code quality issues detected. Requesting code regeneration.")
-                    memory.set("code_quality_feedback", quality_report.get("summary", "Critical quality issues detected."))
-                    current_code_gen_retry += 1 # Increment for next retry
-                    continue
-                else:
-                    print("Code quality is acceptable for now.")
-
-            except Exception as e:
-                print(f"Error during Code Quality Check (Iteration {current_code_gen_retry}): {e}")
-                memory.set("code_quality_feedback", f"Code quality check failed with error: {e}. Please investigate and attempt regeneration.")
-                memory.set(f"iteration_{current_code_gen_retry}_code_quality_complete", False)
-                current_code_gen_retry += 1
-                continue
-
-        # Step 5: Writing Test Cases (TestCaseGeneratorAgent)
-        if not memory.get(f"iteration_{current_code_gen_retry}_test_gen_complete"):
-            print("\n--- Step 5: Writing Test Cases ---")
-            try:
-                test_case_generator_agent = TestCaseGeneratorAgent(
-                    llm=llm, 
-                    memory=memory, 
-                    output_dir=current_app_root,
-                    rag_retriever=rag_retriever
-                )
-                generated_test_files = test_case_generator_agent.run(
-                    brd_analysis=memory.get("brd_analysis"),
-                    system_design=memory.get("system_design"),
-                    generated_code_files=memory.get("generated_code_files"),
-                    tech_stack=memory.get("tech_stack_recommendation")
-                )
-                memory.set("generated_test_files", generated_test_files)
-                memory.set(f"iteration_{current_code_gen_retry}_test_gen_complete", True) # Mark step as complete
-                if not generated_test_files:
-                    print("Warning: Test case generation failed to produce any test files. Cannot validate.")
-                    memory.set("test_results_feedback", "Test case generation failed. Generated no test files.")
-                    current_code_gen_retry += 1 # Increment for next retry
-                    continue
-                print("Test Case Generation complete. Test files written to output directory.")
-                
-                test_snippets_for_rag = [f"--- Test File: {path} ---\n```\n{content}\n```" for path, content in generated_test_files.items()]
-                vector_store_manager.add_documents_to_store(test_snippets_for_rag)
-                print(f"Added {len(test_snippets_for_rag)} generated test snippets to RAG store.")
-
-            except Exception as e:
-                print(f"Error during Test Case Generation (Iteration {current_code_gen_retry}): {e}")
-                memory.set("test_results_feedback", f"Test case generation failed with error: {e}. Cannot validate code.")
-                memory.set(f"iteration_{current_code_gen_retry}_test_gen_complete", False)
-                current_code_gen_retry += 1
-                continue
-
-        # Step 7: Validating Test Cases (TestValidationAgent)
-        if not memory.get(f"iteration_{current_code_gen_retry}_test_validation_complete"):
-            print("\n--- Step 7: Validating Test Cases ---")
-            try:
-                test_validation_agent = TestValidationAgent(llm=llm, memory=memory, code_execution_tool=code_execution_tool)
-                test_results = test_validation_agent.run(current_app_root)
-                memory.set("test_results_report", test_results)
-                memory.set(f"iteration_{current_code_gen_retry}_test_validation_complete", True) # Mark step as complete
-                print("Test Validation complete. Report stored in memory.")
-                
-                vector_store_manager.add_documents_to_store([f"--- Test Results Report (Iteration {current_code_gen_retry}) ---\n{json.dumps(test_results, indent=2)}"])
-                print("Test Results Report added to RAG store.")
-
-                min_coverage_percent = 50 
-                actual_coverage = test_results.get("coverage_percentage", 0)
-                if isinstance(actual_coverage, str) and actual_coverage.startswith("N/A"):
-                    actual_coverage = 0
-
-                if test_results.get("all_tests_passed", False) and actual_coverage >= min_coverage_percent:
-                    print(f"All tests passed and {actual_coverage}% coverage (>= {min_coverage_percent}%). Code is considered acceptable.")
-                    code_is_acceptable = True 
-                else:
-                    print(f"Tests failed or coverage ({actual_coverage}%) too low. Requesting code regeneration.")
-                    feedback = test_results.get("summary", "Tests failed or coverage too low.")
-                    memory.set("test_results_feedback", feedback)
-                    current_code_gen_retry += 1 # Increment for next retry
-                    continue # Go to next iteration
-
-            except Exception as e:
-                print(f"Error during Test Validation (Iteration {current_code_gen_retry}): {e}")
-                memory.set("test_results_feedback", f"Test validation failed with error: {e}. Cannot confirm code correctness.")
-                memory.set(f"iteration_{current_code_gen_retry}_test_validation_complete", False)
-                current_code_gen_retry += 1
-                continue
-
-    # After the loop, save the final status of iteration and acceptability
-    memory.set("current_code_gen_retry", current_code_gen_retry -1) # Store last successfully attempted iteration
-    memory.set("code_is_acceptable", code_is_acceptable)
-
-    if code_is_acceptable:
-        print("\n--- Phase 2 Complete: Code Generated & Validated Successfully! ---")
-    else:
-        print(f"\n--- Phase 2 Ended: Failed to produce acceptable code after {max_code_gen_retries} iterations. ---")
-        print("Manual intervention may be required to resolve persistent issues.")
+                print(f"✅ Configuration loaded from: {workflow_config._config_source.name}")
+                print(f"   Environment: {workflow_config.environment}")
+                print(f"   Quality threshold: {workflow_config.min_quality_score}/10")
+                print(f"   Max retries: {workflow_config.max_code_gen_retries}")
+        
+        except Exception as e:
+            print(f"⚠️ Configuration loading failed: {e}")
+            print("Using default configuration...")
+            workflow_config = AdvancedWorkflowConfig()
+            workflow_config.environment = args.environment or "development"
+            workflow_config.debug_mode = args.debug or False
+            workflow_config.verbose_logging = args.verbose or False
+        
+        # Set up output directory
+        run_output_dir = setup_output_directory("project", args.output_dir)
+        print(f"📁 Output directory: {run_output_dir}")
+        
+        # Load BRD content
+        try:
+            brd_content = load_brd_content(args.brd_file)
+        except Exception as e:
+            print(f"❌ Error loading BRD: {e}")
+            return 1
+        
+        # Initialize components
+        try:
+            # Initialize LLM
+            llm = get_llm()
+            
+            # Initialize RAG system with environment-based security
+            rag_manager = initialize_rag_system(
+                project_root=PROJECT_ROOT,
+                skip_rag=args.skip_rag,
+                environment=workflow_config.environment
+            )
+            
+            # Initialize code execution tool
+            code_execution_tool = CodeExecutionTool(run_output_dir)
+            
+            print("✅ All components initialized successfully")
+            
+        except Exception as e:
+            print(f"❌ Error initializing components: {e}")
+            return 1
+        
+        # ENHANCED: Create initial state with sophisticated configuration
+        initial_state = create_initial_state(brd_content, workflow_config)
+        
+        # Get and run workflow
+        try:
+            workflow = get_workflow(args.workflow_type)
+            print(f"🚀 Starting {args.workflow_type} workflow with {workflow_config.environment} configuration...")
+            
+            # Initialize shared memory - MOVED THIS UP
+            shared_memory = SharedProjectMemory(run_output_dir)
+            
+            # Register cleanup for application exit
+            atexit.register(shared_memory.close)
+            
+            # Create workflow configuration - USING shared_memory
+            config = {
+                "configurable": {
+                    "llm": llm,
+                    "memory": shared_memory,  # FIXED: Use shared_memory variable
+                    "rag_manager": rag_manager,
+                    "code_execution_tool": code_execution_tool,
+                    "run_output_dir": run_output_dir,
+                    "environment": workflow_config.environment,
+                    "workflow_config": workflow_config
+                }
+            }
+            
+            # Run the workflow
+            final_state = workflow.invoke(initial_state, config=config)
+            
+            # Display results
+            display_results(final_state, run_output_dir)
+            
+            # Determine exit code based on workflow status
+            workflow_status = final_state.get("workflow_summary", {}).get("status", "unknown")
+            if workflow_status == "completed_successfully":
+                return 0
+            elif workflow_status in ["completed_with_issues", "completed_with_warnings"]:
+                return 1  # Warning exit code
+            else:
+                return 2  # Error exit code
+            
+        except Exception as e:
+            print(f"❌ Workflow execution failed: {e}")
+            if workflow_config.debug_mode:
+                import traceback
+                traceback.print_exc()
+            return 2
     
-    # Close memory DB connection
-    memory.close() # Explicitly close DB connection
+    except KeyboardInterrupt:
+        print("\n⏹️ Execution interrupted by user")
+        return 130  # Standard interrupt exit code
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return 1
 
 if __name__ == "__main__":
-    run_project_workflow()
+    exit_code = main()
+    sys.exit(exit_code)

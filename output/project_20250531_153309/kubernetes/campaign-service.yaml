@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campaign-service
+  labels:
+    app: campaign-service
+    tier: backend
+    service: campaign
+spec:
+  # Scalability: Define the number of desired replicas for high availability and load balancing.
+  replicas: 3
+  selector:
+    matchLabels:
+      app: campaign-service
+  template:
+    metadata:
+      labels:
+        app: campaign-service
+        tier: backend
+        service: campaign
+    spec:
+      containers:
+        - name: campaign-service
+          # Placeholder for the actual Docker image. Replace with your built image.
+          # Example: ltfs-cdp/campaign-service:1.0.0 or your registry path.
+          image: ltfs-cdp/campaign-service:1.0.0
+          ports:
+            - containerPort: 8080 # Default Spring Boot application port
+          env:
+            # Activate a specific Spring profile for Kubernetes environment.
+            # This allows environment-specific configurations (e.g., database, logging).
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL for PostgreSQL.
+            # Assumes a PostgreSQL service named 'postgresql-service' is running in the same namespace.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/campaign_db
+            # Database username retrieved from a Kubernetes Secret for security.
+            # The 'postgres-credentials' secret must exist and contain a 'username' key.
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            # Database password retrieved from a Kubernetes Secret for security.
+            # The 'postgres-credentials' secret must exist and contain a 'password' key.
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            # Example for Kafka connection if event-driven components are used.
+            # Uncomment and configure if Kafka is part of the deployment.
+            # - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+          resources:
+            # Performance & Scalability: Define resource requests and limits for the container.
+            # Requests ensure minimum resources are available, limits prevent resource exhaustion.
+            requests:
+              memory: "512Mi"
+              cpu: "500m" # 0.5 CPU core
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m" # 1 CPU core
+          # Liveness probe: Checks if the application is running and healthy.
+          # If the probe fails, Kubernetes will restart the container.
+          # Assumes Spring Boot Actuator is enabled with /actuator/health/liveness endpoint.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe: Checks if the application is ready to serve traffic.
+          # If the probe fails, Kubernetes will stop sending traffic to this pod.
+          # Assumes Spring Boot Actuator is enabled with /actuator/health/readiness endpoint.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 90 # Give the application more time to become fully ready (e.g., connect to DB)
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Security: Optional security context for running the container with restricted privileges.
+          # securityContext:
+          #   runAsNonRoot: true
+          #   readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: campaign-service # Name of the Kubernetes Service
+  labels:
+    app: campaign-service
+    tier: backend
+    service: campaign
+spec:
+  # Selects pods with the label 'app: campaign-service' to route traffic to.
+  selector:
+    app: campaign-service
+  ports:
+    - protocol: TCP
+      port: 8080 # The port on which the service will be exposed within the cluster.
+      targetPort: 8080 # The port on the container to which the service will forward traffic.
+  # Type: ClusterIP exposes the service on an internal IP in the cluster.
+  # This is suitable for backend microservices accessed by other services within the cluster.
+  # Use LoadBalancer for external access (e.g., via a cloud provider's load balancer) or NodePort.
+  type: ClusterIP

@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: business-rule-engine-service # Defines the application's name, used for service discovery and configuration retrieval.
+  cloud:
+    config:
+      uri: http://localhost:8888 # Specifies the URI of the Spring Cloud Config Server. In a production environment, this would be the actual Config Server URL.
+      name: business-rule-engine-service # The name of the application to fetch configuration for from the Config Server. Should match 'spring.application.name'.
+      profile: default # The profile to activate when fetching configuration from the Config Server (e.g., 'dev', 'prod', 'default').
+      label: main # The Git branch label to fetch configuration from, if the Config Server uses a Git backend.
+  profiles:
+    active: default # Sets the default active profile for the application itself. This can be overridden by environment variables or command-line arguments.
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # Specifies the URI of the Eureka Server. This is where the service will register itself and discover other services.
+    enabled: true # Enables the Eureka client, allowing the service to register with and discover from the Eureka server.
+  instance:
+    hostname: localhost # The hostname to register with Eureka. For local development, 'localhost' is common. In production, this might be dynamically resolved or set to the actual host.
+    prefer-ip-address: true # Instructs Eureka to register the service's IP address instead of its hostname. This can be useful in containerized environments or when DNS resolution is inconsistent.
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # A unique ID for this service instance in Eureka. Combines the application name with a random value to ensure uniqueness, especially when multiple instances of the same service are running.

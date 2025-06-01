@@ -1,0 +1,92 @@
+# Spring Boot Application Configuration for LTFS Offer CDP Reporting Service
+# This file defines service-specific settings, database connections,
+# and custom properties for report generation.
+
+server:
+  port: 8083 # The port on which the Reporting Service will listen.
+             # Each microservice in the CDP system should have a unique port.
+
+spring:
+  application:
+    name: reporting-service # The logical name of this microservice.
+                            # Used for service discovery, logging, and monitoring.
+
+  # --- Database Configuration (PostgreSQL) ---
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_reporting_db # JDBC URL for the PostgreSQL database.
+                                                          # 'cdp_reporting_db' is the dedicated database for reporting data.
+    username: cdp_user # Database username for connection.
+    password: cdp_password # Database password for connection.
+    driver-class-name: org.postgresql.Driver # Specifies the PostgreSQL JDBC driver.
+
+    hikari: # HikariCP connection pool configuration for optimal database performance.
+      minimum-idle: 5 # Minimum number of idle connections maintained in the pool.
+      maximum-pool-size: 20 # Maximum number of connections that the pool will allow.
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool. (30 seconds)
+      idle-timeout: 600000 # Maximum amount of time a connection can sit idle in the pool. (10 minutes)
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool. (30 minutes)
+      pool-name: ReportingServiceHikariCP # Custom name for the HikariCP connection pool.
+
+  # --- JPA/Hibernate Configuration ---
+  jpa:
+    hibernate:
+      ddl-auto: none # Defines how Hibernate interacts with the database schema.
+                     # 'none': No DDL operations performed (recommended for production).
+                     # 'update': Updates the schema based on entity changes (use with caution, typically for dev).
+                     # 'validate': Validates the schema against the entities.
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl # Standard naming strategy for database objects.
+    show-sql: false # Set to 'true' to log all SQL statements executed by Hibernate (useful for debugging, disable in production).
+    properties:
+      hibernate:
+        format_sql: false # Set to 'true' to format SQL statements in logs for readability.
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL.
+
+  # --- Kafka Configuration (for Event-Driven Components) ---
+  # This section configures the service to interact with Kafka,
+  # enabling it to consume events (e.g., report generation requests)
+  # or produce events (e.g., report generation completion notifications).
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses.
+    consumer:
+      group-id: reporting-service-group # Unique identifier for this consumer group.
+      auto-offset-reset: earliest # Determines where to start consuming if no committed offset is found (e.g., on first start).
+                                  # 'earliest': Start from the beginning of the topic.
+                                  # 'latest': Start from the latest available offset.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON format).
+      properties:
+        spring.json.trusted.packages: "*" # IMPORTANT: In production, specify exact packages (e.g., "com.ltfs.cdp.events.*")
+                                          # to prevent deserialization of untrusted types for security reasons.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON format).
+
+# --- Custom Application Properties for Reporting Service ---
+reporting:
+  output-directory: /app/reports/generated # Default file system path where generated reports will be stored.
+                                           # Ensure this directory exists and the service has write permissions.
+  # report-templates-path: classpath:/templates/reports/ # Example: Path to report template files (e.g., JasperReports templates).
+  # batch-size-for-data-fetch: 1000 # Example: Defines the batch size for fetching large datasets for reports to optimize memory usage.
+
+# --- Actuator Configuration for Monitoring ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus # Exposes specific Actuator endpoints over HTTP.
+                                         # 'health': Provides application health information.
+                                         # 'info': Provides general application information.
+                                         # 'prometheus': Exposes metrics in a Prometheus-compatible format for monitoring.
+  endpoint:
+    health:
+      show-details: always # Configures the health endpoint to always show full details, including database status, disk space, etc.
+
+# --- Logging Configuration ---
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    com.ltfs.cdp.reporting: DEBUG # Sets a more verbose logging level for the application's specific packages.
+                                  # Useful for detailed debugging of reporting logic.
+    org.springframework.web: INFO # Logging level for Spring Web components.
+    org.hibernate: INFO # Logging level for Hibernate framework.

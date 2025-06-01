@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ltfs-offer-cdp-config
+  labels:
+    app: ltfs-offer-cdp
+    environment: default # Can be overridden by specific environment deployments (e.g., dev, qa, prod)
+data:
+  application.yaml: |
+    # Spring Boot application properties for LTFS Offer CDP microservice.
+    # These configurations are non-sensitive and shared across instances.
+    spring:
+      application:
+        name: ltfs-offer-cdp-service # Name of the Spring Boot application
+      profiles:
+        active: kubernetes # Activates the 'kubernetes' Spring profile when deployed
+      datasource:
+        # PostgreSQL database connection URL. Host and database name are expected to be
+        # provided via environment variables or Kubernetes Downward API, with defaults for local.
+        url: jdbc:postgresql://${DB_HOST:localhost}:5432/${DB_NAME:ltfscdp}
+        driver-class-name: org.postgresql.Driver
+        hikari: # Connection pool configuration
+          connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+          maximum-pool-size: 10 # Maximum number of connections in the pool.
+          idle-timeout: 600000 # Maximum amount of time that a connection can sit idle in the pool.
+          max-lifetime: 1800000 # Maximum lifetime of a connection in the pool.
+      jpa:
+        hibernate:
+          # 'none' is recommended for production to prevent accidental schema changes.
+          # Schema management should be handled by Flyway/Liquibase or manual scripts.
+          ddl-auto: none
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+            format_sql: true # Formats the SQL statements logged by Hibernate for readability
+        show-sql: false # Set to true for debugging SQL queries in development, false for production.
+    
+    server:
+      port: 8080 # Default port for the microservice to listen on
+    
+    logging:
+      level:
+        root: INFO # Default logging level for all packages
+        com.ltfs.cdp: INFO # Specific logging level for the application's main package
+        org.springframework.web: INFO # Logging level for Spring Web components
+        org.hibernate: INFO # Logging level for Hibernate
+        org.apache.kafka: WARN # Reduce verbosity for Kafka client logs
+    
+    # Kafka/Event Bus configuration for event-driven components.
+    # This service interacts with Kafka for ingesting data and publishing events.
+    kafka:
+      bootstrap-servers: kafka-broker-1:9092,kafka-broker-2:9092 # Comma-separated list of Kafka broker addresses
+      consumer:
+        group-id: ltfs-offer-cdp-group # Consumer group ID for this service
+        auto-offset-reset: earliest # Start reading from the beginning if no offset is found for the group
+        key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Assumes JSON messages
+      producer:
+        retries: 0 # Number of times to retry sending a message
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Assumes JSON messages
+      topics:
+        offermart-ingestion: offermart.ingestion.events # Kafka topic for incoming Offermart data
+        deduplication-output: cdp.deduplication.events # Kafka topic for deduplicated customer data events
+        offer-finalization: cdp.offer.finalization.events # Kafka topic for finalized offer events
+    
+    # Application specific configurations for LTFS Offer CDP functionalities.
+    cdp:
+      deduplication:
+        strategy: fuzzy-matching # Strategy for deduplication: 'exact-match', 'fuzzy-matching', etc.
+        threshold: 0.85 # Similarity threshold for fuzzy matching (0.0 to 1.0)
+        enable-topup-loan-dedupe-isolation: true # Flag to enable specific dedupe logic for top-up loans
+      offer-processing:
+        batch-size: 500 # Number of records to process in a single batch for efficiency
+        max-concurrent-batches: 3 # Maximum number of concurrent batches to process
+        processing-timeout-minutes: 15 # Timeout for a single batch processing operation
+      customer-360:
+        api-url: http://customer-360-service:8080/api/v1/customer-profile # Endpoint for Customer 360 API
+        timeout-ms: 8000 # Timeout for API calls to Customer 360 service
+        retry-attempts: 3 # Number of retry attempts for Customer 360 API calls
+      validation:
+        offermart-schema-version: 1.1 # Expected schema version for incoming Offermart data
+        enable-strict-column-validation: true # Flag to enable strict column-level validation on Offermart data
+      feature-toggles:
+        enable-new-dedupe-engine: false # Example feature toggle for A/B testing or phased rollout of new engine
+        enable-realtime-offer-sync: true # Flag to enable real-time synchronization of offers

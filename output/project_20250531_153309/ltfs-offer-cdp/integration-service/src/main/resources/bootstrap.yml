@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: integration-service # Defines the application name for Spring Boot and Eureka registration
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server. This should be externalized for different environments.
+      name: integration-service # The name of the configuration file on the Config Server (e.g., integration-service.yml or integration-service-dev.yml)
+      profile: dev # The active profile to fetch configuration for (e.g., dev, qa, prod). This can be overridden by environment variables.
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the Config Server. Recommended for production.
+      retry:
+        initial-interval: 1000 # Initial retry interval in milliseconds
+        max-interval: 2000 # Maximum retry interval in milliseconds
+        max-attempts: 6 # Maximum number of attempts to connect to the Config Server
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Discovery Server. This should be externalized for different environments.
+    enabled: true # Enable Eureka client for service registration and discovery
+    healthcheck:
+      enabled: true # Enable Eureka health checks
+  instance:
+    preferIpAddress: true # Register service with IP address instead of hostname. Useful in containerized environments.
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique instance ID for Eureka registration

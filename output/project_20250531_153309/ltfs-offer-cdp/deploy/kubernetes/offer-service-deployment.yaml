@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: offer-service-deployment
+  labels:
+    app: offer-service
+spec:
+  # Scalability: Define the number of desired replicas for high availability and load balancing.
+  # This helps in handling increasing volumes of requests as per non-functional requirements.
+  replicas: 3
+  selector:
+    matchLabels:
+      app: offer-service
+  template:
+    metadata:
+      labels:
+        app: offer-service
+    spec:
+      # imagePullSecrets: # Uncomment and configure if your Docker image is in a private registry
+      #   - name: regcred
+      containers:
+        - name: offer-service
+          # Replace 'ltfs-offer-cdp/offer-service:1.0.0' with the actual Docker image name and tag
+          # for your Offer Service application.
+          image: ltfs-offer-cdp/offer-service:1.0.0
+          ports:
+            - containerPort: 8080 # Default port for Spring Boot applications
+          env:
+            # Activate a Spring profile specifically for Kubernetes environment.
+            # This allows environment-specific configurations (e.g., logging, external services).
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL for PostgreSQL.
+            # 'postgresql-service' should be the Kubernetes Service name for your PostgreSQL database.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/offer_db
+            # Security: Fetch database username from a Kubernetes Secret.
+            # 'offer-db-credentials' is the name of the secret, and 'username' is the key within it.
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: offer-db-credentials
+                  key: username
+            # Security: Fetch database password from a Kubernetes Secret.
+            # 'offer-db-credentials' is the name of the secret, and 'password' is the key within it.
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: offer-db-credentials
+                  key: password
+            # Configure Hibernate DDL auto mode. 'validate' is recommended for production
+            # to ensure schema consistency without automatic modifications.
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: validate
+            # Kafka bootstrap servers for event-driven components.
+            # 'kafka-broker-service' should be the Kubernetes Service name for your Kafka cluster.
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka-broker-service:9092
+            # Add any other application-specific environment variables here
+            # - name: SOME_APP_CONFIG
+            #   value: "some_value"
+          resources: # Performance: Define resource requests and limits for the container.
+            # Requests ensure the container gets a minimum amount of resources, aiding scheduling.
+            requests:
+              cpu: "200m" # Request 20% of a CPU core
+              memory: "512Mi" # Request 512 MiB of memory
+            # Limits prevent the container from consuming more than a specified amount,
+            # ensuring stability and preventing resource starvation for other pods.
+            limits:
+              cpu: "500m" # Limit to 50% of a CPU core
+              memory: "1024Mi" # Limit to 1024 MiB (1 GiB) of memory
+          livenessProbe: # Health check: Kubernetes uses this to know when to restart a container.
+            # If the probe fails, Kubernetes will restart the pod.
+            httpGet:
+              path: /actuator/health # Spring Boot Actuator health endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Time to wait before the first probe is initiated.
+            periodSeconds: 10 # How often (in seconds) to perform the probe.
+            timeoutSeconds: 5 # Number of seconds after which the probe times out.
+            failureThreshold: 3 # Number of consecutive failures before Kubernetes restarts the container.
+          readinessProbe: # Health check: Kubernetes uses this to know when a container is ready to serve traffic.
+            # Traffic will only be sent to the pod if this probe passes.
+            httpGet:
+              path: /actuator/health # Spring Boot Actuator health endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Time to wait before the first probe is initiated.
+            periodSeconds: 5 # How often (in seconds) to perform the probe.
+            timeoutSeconds: 3 # Number of seconds after which the probe times out.
+            failureThreshold: 2 # Number of consecutive failures before Kubernetes stops sending traffic.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: offer-service # The name of the Kubernetes Service.
+  labels:
+    app: offer-service
+spec:
+  # Selector matches the labels of the pods that this service should route traffic to.
+  selector:
+    app: offer-service
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which the service is exposed within the cluster.
+      targetPort: 8080 # The port on the container that the service will forward traffic to.
+  # ClusterIP exposes the service on a cluster-internal IP.
+  # This service is only reachable from within the cluster.
+  # For external access, an Ingress resource would typically be used.
+  type: ClusterIP

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logback configuration for the API Gateway service.
+    This configuration leverages Spring profiles to provide different logging behaviors
+    for development and production environments.
+-->
+<configuration>
+
+    <!--
+        Include Spring Boot's default logback configurations.
+        This provides sensible defaults for log patterns and the CONSOLE appender.
+    -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!--
+        Define variables for log file path and name.
+        These can be overridden by Spring properties (e.g., in application.properties)
+        if defined as springProperty. For simplicity, we define them directly here.
+    -->
+    <property name="LOG_PATH" value="./logs"/>
+    <property name="LOG_FILE_NAME" value="api-gateway-service"/>
+
+    <!--
+        Define default log levels. These can be overridden per profile or specific logger.
+    -->
+    <property name="LOG_LEVEL_SPRING" value="INFO"/>
+    <property name="LOG_LEVEL_APP" value="INFO"/>
+
+    <!--
+        Appender for file logging.
+        This appender writes logs to a file and handles rolling based on time and size.
+    -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- The current log file name -->
+        <file>${LOG_PATH}/${LOG_FILE_NAME}.log</file>
+
+        <!-- Rolling policy based on time and size -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--
+                Pattern for archived log files.
+                %d{yyyy-MM-dd} for daily rollover.
+                %i for index when multiple files are created on the same day due to size.
+                .gz for gzip compression.
+            -->
+            <fileNamePattern>${LOG_PATH}/${LOG_FILE_NAME}-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <!-- Keep 30 days of log history -->
+            <maxHistory>30</maxHistory>
+            <!--
+                Triggering policy that rolls over based on both time and file size.
+                This ensures that logs are rolled daily OR when they reach a certain size, whichever comes first.
+            -->
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <!-- Roll over when the file size reaches 10MB -->
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+
+        <!-- Encoder to format log messages for the file -->
+        <encoder>
+            <!-- Use the default file log pattern provided by Spring Boot -->
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        Asynchronous appender for performance.
+        This appender wraps the FILE appender to process log events in a separate thread,
+        reducing the impact of logging on the application's main thread.
+    -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- Reference to the synchronous FILE appender -->
+        <appender-ref ref="FILE"/>
+        <!-- Size of the internal queue. Larger queue means more buffered events. -->
+        <queueSize>512</queueSize>
+        <!--
+            Threshold below which messages are discarded if the queue is full.
+            0 means no messages are discarded, ensuring all messages are logged.
+        -->
+        <discardingThreshold>0</discardingThreshold>
+        <!--
+            If true, the calling thread will never block, even if the queue is full.
+            Messages might be discarded if discardingThreshold is > 0.
+        -->
+        <neverBlock>true</neverBlock>
+    </appender>
+
+    <!--
+        Spring Profile for Development Environment.
+        Logs are primarily directed to the console for immediate feedback during development.
+    -->
+    <springProfile name="dev">
+        <!-- Root logger configuration for 'dev' profile -->
+        <root level="${LOG_LEVEL_APP}">
+            <!-- Log to console -->
+            <appender-ref ref="CONSOLE"/>
+        </root>
+
+        <!-- Specific logger levels for Spring framework and Hibernate -->
+        <logger name="org.springframework" level="${LOG_LEVEL_SPRING}"/>
+        <logger name="org.hibernate" level="${LOG_LEVEL_SPRING}"/>
+
+        <!--
+            Application-specific logger for the API Gateway service.
+            Set to DEBUG in development for more verbose logging,
+            useful for troubleshooting and understanding flow.
+        -->
+        <logger name="com.ltfs.cdp.apigateway" level="DEBUG"/>
+    </springProfile>
+
+    <!--
+        Spring Profile for Production/Staging Environment (any profile NOT 'dev').
+        Logs are primarily directed to files for persistence and analysis,
+        with console logging optionally kept for container environments.
+    -->
+    <springProfile name="!dev">
+        <!-- Root logger configuration for non-'dev' profiles -->
+        <root level="${LOG_LEVEL_APP}">
+            <!-- Log asynchronously to file for performance -->
+            <appender-ref ref="ASYNC_FILE"/>
+            <!--
+                Optionally keep console logging for initial startup messages or
+                if logs are collected from stdout/stderr in containerized environments.
+            -->
+            <appender-ref ref="CONSOLE"/>
+        </root>
+
+        <!-- Specific logger levels for Spring framework and Hibernate -->
+        <logger name="org.springframework" level="${LOG_LEVEL_SPRING}"/>
+        <logger name="org.hibernate" level="${LOG_LEVEL_SPRING}"/>
+
+        <!--
+            Application-specific logger for the API Gateway service.
+            Set to INFO in production to reduce log volume and focus on important events.
+            DEBUG level should be avoided in production unless specifically needed for a short period.
+        -->
+        <logger name="com.ltfs.cdp.apigateway" level="INFO"/>
+    </springProfile>
+
+</configuration>

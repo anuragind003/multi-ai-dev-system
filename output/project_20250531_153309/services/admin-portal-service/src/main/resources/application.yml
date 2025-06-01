@@ -1,0 +1,50 @@
+server:
+  port: 8081 # Default port for the Admin Portal Service.
+
+spring:
+  application:
+    name: admin-portal-service # Unique name for this microservice, used for logging and monitoring.
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_admin_db # PostgreSQL database URL. Replace 'localhost' and 'cdp_admin_db' with actual values.
+    username: cdp_admin_user # Database username for connection.
+    password: cdp_admin_password # Database password for connection.
+    driver-class-name: org.postgresql.Driver # Specifies the JDBC driver for PostgreSQL.
+    hikari: # HikariCP connection pool configuration for optimal performance.
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 2 # Minimum number of idle connections to maintain.
+      connection-timeout: 30000 # Maximum wait time for a connection from the pool (in milliseconds).
+      idle-timeout: 600000 # Maximum time a connection can be idle in the pool (in milliseconds).
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool (in milliseconds).
+
+  jpa:
+    hibernate:
+      ddl-auto: none # Controls schema generation. 'none' is recommended for production to prevent accidental schema modifications. Use 'update' or 'create-drop' for development/testing.
+    show-sql: false # Set to 'true' to log SQL statements. Keep 'false' in production for performance and security.
+    properties:
+      hibernate:
+        format_sql: false # Set to 'true' to format SQL statements in logs for readability.
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the Hibernate dialect for PostgreSQL.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus # Exposes Actuator endpoints for monitoring. 'health' for service status, 'info' for application details, 'prometheus' for metrics scraping.
+  endpoint:
+    health:
+      show-details: always # Configures the health endpoint to show full details. Consider 'when_authorized' for production environments.
+    metrics:
+      tags:
+        application: ${spring.application.name} # Adds the application name as a tag to all exposed metrics, useful for Prometheus/Grafana.
+
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    org.springframework.web: INFO # Logging level for Spring web components.
+    org.hibernate: INFO # Logging level for Hibernate.
+    com.ltfs.cdp.adminportal: INFO # Specific logging level for the application's package. Set to DEBUG for more verbose logging during development.
+  file:
+    name: logs/${spring.application.name}.log # Path and name for the log file. Logs will be written to 'logs/admin-portal-service.log'.
+    max-size: 10MB # Maximum size of a log file before it's rolled over.
+    max-history: 7 # Number of archived log files to keep.

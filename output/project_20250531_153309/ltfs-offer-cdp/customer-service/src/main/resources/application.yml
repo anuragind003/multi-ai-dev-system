@@ -1,0 +1,114 @@
+# Spring Boot Application Configuration for Customer Service
+spring:
+  application:
+    name: customer-service # Name of the microservice, used for logging and tracing
+
+  # Server Port Configuration
+  server:
+    port: 8081 # The port on which the customer-service will run
+
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customer_cdp_db # JDBC URL for the PostgreSQL database
+    username: cdp_user # Database username for connection
+    password: cdp_password # Database password for connection
+    driver-class-name: org.postgresql.Driver # Fully qualified name of the JDBC driver
+
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate # Validate the schema on startup, do not create/update tables automatically. Recommended for production.
+    show-sql: false # Disable logging of SQL queries to the console for production performance
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specify the Hibernate dialect for PostgreSQL
+
+  # Kafka Configuration for Event-Driven Architecture
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses
+    consumer:
+      group-id: customer-service-group # Unique identifier for this consumer group
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist anymore on the server (e.g. because that data has been deleted). 'earliest' means start from the beginning.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer class for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer class for message values (assuming JSON payload)
+      properties:
+        # Trust all packages for JSON deserialization. In a production environment, it's recommended to specify
+        # a list of trusted packages (e.g., 'com.ltfs.cdp.customer.model.*') for security reasons.
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer class for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer class for message values (assuming JSON payload)
+      acks: all # The number of acknowledgments the producer requires the leader to have received before considering a request complete. 'all' means all in-sync replicas must acknowledge.
+      retries: 3 # Number of times the producer will retry sending a record if it fails
+      properties:
+        # Do not add type headers to JSON messages. This makes the JSON payload cleaner if the consumer knows the type.
+        spring.json.add.type.headers: false
+
+# Custom Application Properties for LTFS Offer CDP Customer Service
+app:
+  kafka:
+    topics:
+      # Topic for raw customer data ingested from Offermart system
+      customer-ingestion-topic: customer.offermart.ingestion
+      # Topic for customer data after basic column-level validation
+      validated-customer-topic: customer.validated
+      # Topic for customer data that needs to undergo deduplication processing
+      deduplication-input-topic: customer.deduplication.input
+      # Topic for deduplicated and consolidated customer profiles (single profile view)
+      deduplicated-customer-output-topic: customer.deduplicated.output
+      # Topic for sending updated customer profiles to the Customer 360 (live book) system
+      customer-360-update-topic: customer.customer360.update
+      # Specific topic for top-up loan offers that require internal deduplication
+      topup-offer-dedupe-topic: offer.topup.dedupe
+
+  deduplication:
+    # Flag to enable or disable the customer deduplication process
+    enabled: true
+    # The minimum similarity score (0.0 to 1.0) required for two customer records to be considered a match.
+    # A higher value means stricter matching.
+    match-threshold: 0.85
+    # The strategy used for deduplication (e.g., 'fuzzy-matching', 'exact-matching', 'rule-based').
+    # 'fuzzy-matching' implies using algorithms like Levenshtein distance, Jaccard index, etc.
+    strategy: fuzzy-matching
+    # List of customer fields to be used for matching during the deduplication process.
+    # These fields are critical for identifying potential duplicate records.
+    matching-fields:
+      - firstName
+      - lastName
+      - dateOfBirth
+      - mobileNumber
+      - emailId
+      - panNumber # PAN is a unique identifier in India, crucial for strong matches
+
+    topup-loan:
+      # Flag to enable or disable specific deduplication logic for top-up loan offers.
+      # As per requirements, top-up loans are deduped only within other top-up offers.
+      enabled: true
+      # Fields specific to top-up loan offers used for matching within the top-up offer set.
+      matching-fields:
+        - loanAccountNumber
+        - customerId # Customer ID associated with the top-up loan
+      # Action to be taken when a match is found for top-up loan offers.
+      # 'remove' implies matched offers are discarded, 'flag' implies they are marked.
+      action-on-match: remove
+
+  validation:
+    # Flag to enable or disable basic column-level validation on incoming data.
+    enabled: true
+    # Path to a configuration file (e.g., JSON, YAML) that defines the column-level validation rules.
+    # This file would specify rules like data type, length, regex patterns, mandatory fields, etc.
+    rules-config-path: classpath:validation-rules.json # Example: points to a JSON file in the classpath
+
+# Management Endpoints (Spring Boot Actuator)
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose Actuator endpoints over HTTP for monitoring and management.
+        # 'health': Provides application health information.
+        # 'info': Provides general application information.
+        # 'prometheus': Exposes metrics in a Prometheus-compatible format.
+        include: health, info, prometheus
+  endpoint:
+    health:
+      show-details: always # Always show full health details, including database and Kafka status.

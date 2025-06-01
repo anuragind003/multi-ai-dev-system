@@ -1,440 +1,925 @@
 import json
 import os
 import shutil
-from google.generativeai.types import HarmBlockThreshold, HarmCategory
-from tools.code_execution_tool import CodeExecutionTool # Updated import
-from langchain_core.retrievers import BaseRetriever # NEW IMPORT
+import time
+from typing import Dict, Any, List, Optional, Tuple
+import google.api_core.exceptions
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import PromptTemplate
+from tools.code_execution_tool import CodeExecutionTool
+from langchain_core.retrievers import BaseRetriever
 
-class CodeGenerationAgent:
-    def __init__(self, llm, memory, output_dir: str, code_execution_tool: CodeExecutionTool, rag_retriever: BaseRetriever = None):
-        """
-        Initializes the CodeGenerationAgent.
+# Add monitoring import
+import monitoring
+from .base_agent import BaseAgent
 
-        Args:
-            llm: An initialized Gemini GenerativeModel instance.
-            memory: An instance of SharedProjectMemory.
-            output_dir (str): The root directory where generated code will be saved.
-            code_execution_tool (CodeExecutionTool): Instance of the code execution tool.
-        """
-        self.llm = llm
-        self.memory = memory
+class CodeGenerationAgent(BaseAgent):
+    
+    def __init__(self, llm: BaseLanguageModel, memory, output_dir: str, code_execution_tool: CodeExecutionTool, rag_retriever: BaseRetriever = None):
+        super().__init__(
+            llm=llm,
+            memory=memory,
+            agent_name="Code Generation Agent",
+            temperature=0.1,  # Very low for deterministic code
+            rag_retriever=rag_retriever
+        )
         self.output_dir = output_dir
-        self.code_execution_tool = code_execution_tool # Store the tool
-        # Ensure the output directory for this specific run is created.
-        # This is handled by main.py, but good to ensure here too if this agent is run standalone.
-        self.rag_retriever = rag_retriever # Store the retriever
-        os.makedirs(self.output_dir, exist_ok=True)
-    
-    def _get_relevant_context_from_rag(self, query: str) -> str:
-        """Retrieves relevant documents from the RAG store based on a query."""
-        if self.rag_retriever:
-            try:
-                # Query the retriever and get content from retrieved documents
-                docs = self.rag_retriever.invoke(query)
-                # Concatenate the content of the retrieved documents
-                return "\n\n".join([doc.page_content for doc in docs])
-            except Exception as e:
-                print(f"Warning: RAG retrieval failed: {e}. Proceeding without RAG context.")
-                return ""
-        return ""
-    
-
-    def _generate_file_structure(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict) -> dict:
-        """
-        Asks LLM to generate a proposed file structure for the project.
-        """
-        print("Code Generation Agent: Generating project file structure...")
+        self.code_execution_tool = code_execution_tool
         
-        # Prepare context for the prompt
-        backend_name = tech_stack_recommendation.get('backend', {}).get('name', 'selected backend')
-        architecture_overview = system_design.get('architecture_overview', 'application')
+        # Track dependencies between files
+        self.file_dependencies = {}
+        # Track successful compilations
+        self.successful_compilations = set()
         
-        # Use full details from memory for this initial broad step
-        # This will be added to RAG too, so individual file generation can retrieve it.
-        context_for_llm_string = json.dumps({
-            "brd_analysis": brd_analysis,
-            "tech_stack_recommendation": tech_stack_recommendation,
-            "system_design": system_design
-        }, indent=2)
-        
-        prompt = f"""
-        You are an expert Software Engineer AI.
-        Based on the following project context (BRD analysis, tech stack, and system design),
-        propose a suitable file and directory structure for the entire application.
+        # Initialize prompt templates
+        self.file_structure_template = PromptTemplate(
+            template="""
+            You are an expert Software Engineer AI specializing in creating optimal file structures.
+            Based on the project analysis, propose a comprehensive file and directory structure.
 
-        Focus on a typical, clean, and organized structure for a {backend_name}-based {architecture_overview}.
-        Include common and necessary files for the chosen tech stack, such as:
-        - `README.md`
-        - The primary dependency file (e.g., `requirements.txt` for Python, `package.json` for Node.js) MUST be placed at the ROOT of the project.
-        - Main application entry point (e.g., `app.py`, `main.py`, `run.py`, `index.js`)
-        - Configuration files (e.g., `config.py`)
-        - Database models/schema definitions
-        - API endpoint definitions/routes
-        - A dedicated `tests/` directory for test files.
-
-        The output should be a JSON object where keys are relative file paths (e.g., "src/main.py", "README.md", "tests/test_api.py")
-        and values are placeholder content indicating the file's purpose (e.g., "# Main application entry point", "## Project Readme").
-        Do NOT include actual code here, just placeholders.
-
-        Ensure the output is ONLY a valid JSON object.
-
-        --- Project Context ---
-        {context_for_llm_string}
-        --- END Project Context ---
-
-        Example Output for a Flask app (ensure test files are explicitly part of the structure):
-        ```json
-        {{
-            "README.md": "# Project Title",
-            "requirements.txt": "Flask\\nSQLAlchemy\\npytest\\nflake8\\ncoverage",
-            "run.py": "# Entry point for the Flask application",
-            "app/__init__.py": "# App package initialization",
-            "app/config.py": "# Configuration settings",
-            "app/models.py": "# Database models",
-            "app/routes.py": "# API endpoints",
-            "tests/test_api.py": "# Unit and integration tests for the API"
-        }}
-        ```
-        """
-        
-        try:
-            response = self.llm.generate_content(
-                prompt,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0.1
-                },
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                }
-            )
-            raw_json_output = response.text.strip()
-            # Clean up markdown code block fences if LLM sometimes includes them despite response_mime_type
-            if raw_json_output.startswith("```json"):
-                raw_json_output = raw_json_output.split("```json", 1)[1]
-            if raw_json_output.endswith("```"):
-                raw_json_output = raw_json_output.rsplit("```", 1)[0]
-            raw_json_output = raw_json_output.strip()
-
-            return json.loads(raw_json_output)
-        except json.JSONDecodeError as e:
-            print(f"JSON Decode Error in file structure generation: {e}")
-            print(f"Problematic raw output: {raw_json_output}")
-            return {} # Return empty structure if parsing fails (will lead to early exit)
-        except Exception as e:
-            print(f"Error generating file structure: {e}")
-            return {}
-
-    def _generate_file_structure(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict) -> dict: # Updated parameters
-        """
-        Asks LLM to generate a proposed file structure for the project.
-        """
-        print("Code Generation Agent: Generating project file structure...")
-        
-        # REMOVE this line if it's still there:
-        # context_data = json.loads(context_for_llm) 
-
-        # Directly use the tech_stack_recommendation parameter
-        backend_name = tech_stack_recommendation.get('backend', {}).get('name', 'selected backend')
-        architecture_overview = system_design.get('architecture_overview', 'application')
-        
-        # Prepare context for the prompt
-        # This string is what gets passed to the LLM for its understanding.
-        context_for_llm_string = json.dumps({
-            "brd_analysis": brd_analysis,
-            "tech_stack_recommendation": tech_stack_recommendation,
-            "system_design": system_design
-            # Do NOT include "previous_errors_feedback" here, it's specific to file content generation
-        }, indent=2)
-
-        prompt = f"""
-        You are an expert Software Engineer AI.
-        Based on the following project context (BRD analysis, tech stack, and system design),
-        propose a suitable file and directory structure for the entire application.
-
-        Focus on a typical, clean, and organized structure for a {backend_name}-based {architecture_overview}.
-        Include common and necessary files for the chosen tech stack, such as:
-        - `README.md`
-        - The primary dependency file (e.g., `requirements.txt` for Python, `package.json` for Node.js) MUST be placed at the ROOT of the project.
-        - Main application entry point (e.g., `app.py`, `main.py`, `run.py`, `index.js`)
-        - Configuration files (e.g., `config.py`)
-        - Database models/schema definitions
-        - API endpoint definitions/routes
-        - A dedicated `tests/` directory for test files.
-
-        The output should be a JSON object where keys are relative file paths (e.g., "src/main.py", "README.md", "tests/test_api.py")
-        and values are placeholder content indicating the file's purpose (e.g., "# Main application entry point", "## Project Readme").
-        Do NOT include actual code here, just placeholders.
-
-        Ensure the output is ONLY a valid JSON object.
-
-        --- Project Context ---
-        {context_for_llm_string}
-        --- END Project Context ---
-
-        Example Output for a Flask app (ensure test files are explicitly part of the structure):
-        ```json
-        {{
-            "README.md": "# Project Title",
-            "requirements.txt": "Flask\\nSQLAlchemy\\npytest\\nflake8\\ncoverage",
-            "run.py": "# Entry point for the Flask application",
-            "app/__init__.py": "# App package initialization",
-            "app/config.py": "# Configuration settings",
-            "app/models.py": "# Database models",
-            "app/routes.py": "# API endpoints",
-            "tests/test_api.py": "# Unit and integration tests for the API"
-        }}
-        ```
-        """
-        
-        try:
-            response = self.llm.generate_content(
-                prompt,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0.1
-                },
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                }
-            )
-            raw_json_output = response.text.strip()
-            if raw_json_output.startswith("```json"):
-                raw_json_output = raw_json_output.split("```json", 1)[1]
-            if raw_json_output.endswith("```"):
-                raw_json_output = raw_json_output.rsplit("```", 1)[0]
-            raw_json_output = raw_json_output.strip()
-
-            return json.loads(raw_json_output)
-        except json.JSONDecodeError as e:
-            print(f"JSON Decode Error in file structure generation: {e}")
-            print(f"Problematic raw output: {raw_json_output}")
-            return {} # Return empty structure if parsing fails (will lead to early exit)
-        except Exception as e:
-            print(f"Error generating file structure: {e}")
-            return {}
-
-    def _generate_and_refine_code(self, file_path: str, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict, error_feedback: str = "", max_retries: int = 3) -> str:
-        """
-        Generates code for a single file and attempts to self-correct using the interpreter.
-        """
-        print(f"  Generating code for: {file_path}")
-        
-        # --- CRITICAL FIX: Assign tech_stack_recommendation to a local 'tech_stack' variable for convenience ---
-        tech_stack = tech_stack_recommendation 
-
-        backend_name_raw = tech_stack.get("backend", {}).get("name", "N/A")
-        backend_lang = backend_name_raw.split('/')[0].lower()
-        
-        # Determine specific instructions for the file based on its path
-        file_role_instruction = f"Write the code for this file `{file_path}` based on its implied role in a {backend_name_raw} project. Focus on implementing relevant logic from the system design."
-        if "readme.md" in file_path.lower():
-            file_role_instruction = "Write a comprehensive README.md file for the project, including setup, how to run, and API endpoints documentation."
-        elif "requirements.txt" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = f"List all necessary Python packages for a {backend_name_raw} project based on the requirements and system design. Include common packages for web APIs, database interaction, testing, and linting (e.g., Flask, SQLAlchemy, pytest, flake8, coverage). Output ONLY the package names, one per line. Ensure the list is comprehensive and accurate."
-        elif "package.json" in file_path.lower() and (backend_lang == "node.js" or tech_stack.get("frontend",{}).get("name", "").lower() in ["react", "vue.js"]):
-            file_role_instruction = f"Generate a complete package.json for a {backend_name_raw} project, including dependencies for API, database, and testing (e.g., express, pg, jest). Include scripts for start, test, and lint if applicable. Output ONLY the JSON. Ensure all necessary dependencies are listed."
-        elif "__init__.py" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = "Write the `__init__.py` file to initialize the Python package. If it's the main app package, define the `create_app()` function here which sets up the Flask/Django app, connects to DB, and registers blueprints/routes."
-        elif "config.py" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = "Write the `config.py` for Python, defining configuration classes (e.g., `Config`, `DevelopmentConfig`, `TestingConfig`) for database URI, secret keys, etc."
-        elif "models.py" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = "Write the `models.py` file for Python using SQLAlchemy, defining database models (`Product` etc.) based on the `database_schema` in the system design. Include UUID for primary keys if specified."
-        elif "routes.py" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = "Write the `routes.py` file for Python using Flask Blueprints, implementing all API endpoints defined in the system design (GET, POST, PUT, DELETE for products). Ensure proper JSON responses and basic error handling."
-        elif "run.py" in file_path.lower() and backend_lang == "python":
-            file_role_instruction = "Write the `run.py` entry point for the Flask application. It should import and run the app from `app/__init__.py`. Include commands to initialize the database if it's SQLite (create tables)."
-        elif "tests/" in file_path.lower():
-            file_role_instruction = f"This is a test file. Provide a basic placeholder structure for tests compatible with `{tech_stack.get('backend', {}).get('name', 'selected tech')}`'s testing framework (e.g., Pytest/Jest). You will fill this later."
-        elif file_path.lower().endswith(".db"):
-            file_role_instruction = "This is a database file (e.g., SQLite). Provide just a comment indicating its purpose, no code content needed."
-
-
-        # --- RAG Integration for Context ---
-        query = f"BRD requirements, system design, and existing code for file: {file_path}, to write code for a {backend_name_raw} application."
-        retrieved_context = self._get_relevant_context_from_rag(query)
-        
-        # Combine all relevant structured information for the prompt
-        full_prompt_context_data = {
-            "brd_analysis": brd_analysis,
-            "tech_stack_recommendation": tech_stack, # <--- Use the assigned tech_stack here
-            "system_design": system_design,
-            "relevant_retrieved_context_from_rag": retrieved_context if retrieved_context else "No additional relevant context retrieved from RAG.",
-            "previous_errors_feedback": error_feedback if error_feedback else "No previous errors."
-        }
-        full_prompt_context_string = json.dumps(full_prompt_context_data, indent=2)
-
-        initial_prompt = f"""
-        You are an expert Software Engineer AI.
-        Your task is to write the complete code for the file `{file_path}`
-        based on the provided project context.
-
-        The chosen tech stack includes:
-        - Backend: {backend_name_raw}
-        - Database: {tech_stack.get("database", {}).get("name", "N/A")}
-        - Frontend: {tech_stack.get("frontend", {}).get("name", "N/A")}
-
-        --- Project Context ---
-        {full_prompt_context_string}
-        --- END Project Context ---
-
-        **Specific Instruction for this file ({file_path}):**
-        {file_role_instruction}
-
-        Write ONLY the code for `{file_path}`. Do NOT include any markdown code block fences (```) or explanatory text outside the code.
-        Ensure the code is directly runnable and follows good practices for the chosen tech stack.
-        For database interactions, use appropriate ORM/library based on the chosen tech stack.
-        For API endpoints, implement the logic as specified in the system design.
-        Include necessary imports and basic setup.
-        """
-        
-        current_prompt = initial_prompt
-        generated_code = ""
-
-        for retry in range(max_retries):
-            try:
-                response = self.llm.generate_content(
-                    current_prompt,
-                    generation_config={
-                        "temperature": 0.1
-                    },
-                    safety_settings={
-                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                    }
-                )
-                generated_code = response.text.strip()
-                
-                if generated_code.startswith("```"):
-                    parts = generated_code.split('\n', 1) 
-                    if len(parts) > 1:
-                        generated_code = parts[1] 
-                    if generated_code.endswith("```"):
-                        generated_code = generated_code[:-3].strip() 
-
-                if "requirements.txt" in file_path.lower() or "package.json" in file_path.lower():
-                    if not generated_code.strip():
-                        print(f"  Warning: {file_path} is empty, but expected content. Forcing retry.")
-                        raise ValueError(f"{file_path} generated empty content.")
-                    print(f"  Dependency file {file_path} generated content.")
-                    return generated_code 
-
-                if not (file_path.lower().endswith((".py", ".js", ".java", ".ts", ".go", ".c", ".cpp"))):
-                    print(f"  Skipping interpreter check for non-code file: {file_path}")
-                    return generated_code
-
-                full_file_path_in_output = os.path.join(self.output_dir, file_path)
-                success, output = self.code_execution_tool.run_syntax_check(generated_code, file_path=full_file_path_in_output, lang=backend_lang)
-                
-                if success:
-                    print(f"  Code for {file_path} looks good (basic check).")
-                    return generated_code
-                else:
-                    print(f"  Code check failed for {file_path} (Retry {retry+1}/{max_retries}):\n{output.strip()}")
-                    
-                    error_detail_prompt = ""
-                    if "F541" in output:
-                        error_detail_prompt += "\n**CRITICAL F541 ERROR:** The f-string is malformed or missing placeholders. Ensure all variables within f-strings are correctly defined and braced (e.g., `f\"Hello, {name}\"`)."
-                    if "F821" in output:
-                        error_detail_prompt += "\n**CRITICAL F821 ERROR:** An 'undefined name' was found. This means a variable, function, or class was used without being imported or defined. Ensure all necessary imports are at the top of the file, and all variables/functions are declared before use."
-                    if "C901" in output:
-                        error_detail_prompt += "\n**C901 COMPLEXITY WARNING:** While not blocking, consider simplifying highly complex functions by breaking them into smaller, more focused units. This improves readability and maintainability."
-                    
-                    current_prompt = (
-                        initial_prompt +
-                        f"\n\nThe previous attempt to generate code for `{file_path}` resulted in errors:\n"
-                        f"```\n{output}\n```\n"
-                        f"Please review the errors carefully and generate corrected, complete code for this file. "
-                        f"{error_detail_prompt.strip()}\n\n"
-                        "Remember to output ONLY the code, no markdown fences or extra text. "
-                        "Ensure all necessary imports are present and paths are correct relative to the project root. "
-                        "Pay close attention to Python package imports if this file is part of a larger package structure. "
-                        "If the error is 'ModuleNotFoundError', ensure the necessary modules are installed/defined or that the import path is correct."
-                        "Ensure the file contains substantial, functional code relevant to its role."
-                    )
-            except Exception as e:
-                print(f"  Error during code generation/refinement for {file_path}: {e}")
-                current_prompt = (
-                    initial_prompt +
-                    f"\n\nAn unexpected error occurred during code generation/check for `{file_path}`: {e}. "
-                    "Please ensure the code is syntactically correct and includes all necessary imports for a standalone runnable file. "
-                    "Remember to output ONLY the code, no markdown fences or extra text. "
-                    "Ensure the file contains substantial, functional code relevant to its role."
-                )
-
-        print(f"  Failed to generate valid code for {file_path} after {max_retries} retries.")
-        return generated_code # Return last generated code, even if flawed
-
-    def run(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict, error_feedback: str = "") -> dict:
-        """
-        Generates the entire codebase for the project.
-        """
-        print("Code Generation Agent: Starting code generation process...")
-        if error_feedback:
-            print(f"Code Generation Agent: Received feedback for correction:\n{error_feedback}")
-
-        # The full_context string for initial prompt is now just the core structured data
-        # This will be added to RAG, so individual file generation can retrieve relevant parts.
-        full_context_core_for_initial_prompt = json.dumps({
-            "brd_analysis": brd_analysis,
-            "tech_stack_recommendation": tech_stack_recommendation,
-            "system_design": system_design,
-            "previous_errors_feedback": error_feedback
-        }, indent=2)
-
-        # 1. Generate the initial file structure
-        # This initial step still needs the full high-level context
-        file_structure = self._generate_file_structure(brd_analysis, tech_stack_recommendation, system_design) # Updated call parameters
-        if not file_structure:
-            print("Code Generation Agent: Failed to generate a valid file structure. Aborting.")
-            return {}
-
-        generated_files = {}
-
-        # 2. Iterate through the proposed file structure and generate content for each file
-        for file_path, placeholder_content in file_structure.items():
-            full_path_in_output_dir = os.path.join(self.output_dir, file_path)
-            os.makedirs(os.path.dirname(full_path_in_output_dir), exist_ok=True)
-
-            is_test_file_path = "tests/" in file_path.lower() or file_path.lower().startswith("test_")
-
-            # For static files like README, requirements.txt, or .db (placeholder content only)
-            # The LLM gives us placeholder content for these.
-            if any(ext in file_path.lower() for ext in ["readme.md", "requirements.txt", "package.json", ".gitignore", ".env.example"]) or \
-               (file_path.lower().endswith(".db") and not is_test_file_path):
-                content_to_write = placeholder_content
-                with open(full_path_in_output_dir, "w", encoding="utf-8") as f:
-                    f.write(content_to_write)
-                generated_files[file_path] = content_to_write
-                print(f"  Created static/placeholder file: {file_path}")
-                continue
+            **Project Summary:**
+            Backend: {backend_name} with {backend_framework}
+            Database: {database_type}
+            Architecture: {architecture_pattern}
             
-            # For actual code files, generate content with self-correction
-            # Pass individual structured contexts to the generator, RAG will pick up relevant parts
-            generated_code = self._generate_and_refine_code(
-                file_path,
-                brd_analysis,             # Pass full structured BRD
-                tech_stack_recommendation, # Pass full structured tech stack
-                system_design,             # Pass full structured system design
-                error_feedback             # Pass error feedback
-            )
-            if generated_code:
-                with open(full_path_in_output_dir, "w", encoding="utf-8") as f:
-                    f.write(generated_code)
-                generated_files[file_path] = generated_code
-                print(f"  Successfully generated and saved: {file_path}")
-            else:
-                print(f"  Skipping {file_path} due to persistent generation errors.")
+            **Key Requirements:**
+            {requirements_summary}
+
+            **System Design Modules:**
+            {modules_summary}
+
+            **Guidelines:**
+            1. Follow standard practices for the selected technology stack
+            2. Include configurations, documentation, and tests
+            3. Organize modules according to the architecture pattern
+            4. Include necessary boilerplate files (gitignore, README, etc.)
+            5. Structure the project for maintainability and clear separation of concerns
+
+            {format_instructions} 
+
+            Output a JSON object where:
+            - Keys are file paths (use "/" for directories)
+            - Values describe the purpose of each file
+            - End directory paths with "/"
+            - Include detailed descriptions for key files
+            """,
+            input_variables=["backend_name", "backend_framework", "database_type", "architecture_pattern", 
+                            "requirements_summary", "modules_summary"],
+            partial_variables={"format_instructions": self.json_parser.get_format_instructions()}
+        )
         
-        print("Code Generation Agent: Code generation process complete.")
-        self.memory.set("generated_codebase_files", generated_files)
-        self.memory.set("generated_app_root_path", self.output_dir) # This should point to the specific run directory
-        return generated_files
+        self.code_generation_template = PromptTemplate(
+            template="""
+            You are an expert Software Engineer AI specialized in writing high-quality, production-grade code.
+            
+            **Your task:** Generate complete code for: `{file_path}`
+
+            **Project Context:**
+            {context_summary}
+
+            **Technology Stack:**
+            - Backend: {backend_stack}
+            - Database: {database_type}
+            - Architecture: {architecture_pattern}
+
+            **File Purpose:**
+            {file_purpose}
+
+            **Related Files:**
+            {related_files}
+
+            **Dependencies:**
+            {dependencies}
+
+            **Additional Context:**
+            {rag_context}
+
+            **Previous Errors/Feedback:**
+            {error_feedback}
+
+            **Instructions:**
+            1. Generate ONLY the complete code for `{file_path}` with no explanations outside the code
+            2. Include proper imports, error handling, and documentation
+            3. Follow established patterns for the technology stack
+            4. Ensure the code is directly runnable without modifications
+            5. Include thorough comments explaining complex sections
+            
+            Write ONLY THE CODE with no markdown formatting. Do not include ```python or ``` tags.
+            """,
+            input_variables=["file_path", "context_summary", "backend_stack", "database_type", 
+                           "architecture_pattern", "file_purpose", "related_files", 
+                           "dependencies", "rag_context", "error_feedback"]
+        )
+        
+        self.dependency_analysis_template = PromptTemplate(
+            template="""
+            You are an expert Software Architect AI.
+            Analyze the given file structure and identify dependencies between files.
+
+            **File Structure:**
+            {file_structure}
+
+            **Technology Stack:**
+            Backend: {backend_stack}
+            Database: {database_type}
+            Architecture: {architecture_pattern}
+
+            {format_instructions}
+
+            Identify dependencies between files and output a JSON where:
+            - Keys are file paths
+            - Values are arrays of file paths that the key depends on
+            - Only include actual code files (ignore documentation, config files that don't affect code execution)
+            - Focus on import/include dependencies and execution order
+            """,
+            input_variables=["file_structure", "backend_stack", "database_type", "architecture_pattern"],
+            partial_variables={"format_instructions": self.json_parser.get_format_instructions()}
+        )
+        
+        self.code_refinement_template = PromptTemplate(
+            template="""
+            You are an expert Code Refinement AI.
+            Review and improve the following code for `{file_path}`.
+
+            **Original Code:**
+            {original_code}
+
+            **Error/Issue:**
+            {error_message}
+
+            **Project Context:**
+            {context_summary}
+
+            **Related Files Content:**
+            {related_files_content}
+
+            **Instructions:**
+            1. Fix all errors and issues mentioned
+            2. Maintain the same functionality
+            3. Optimize and improve code quality
+            4. Ensure compatibility with related files
+            
+            Generate ONLY the improved code with no explanations. Do not include markdown formatting.
+            """,
+            input_variables=["file_path", "original_code", "error_message", 
+                           "context_summary", "related_files_content"]
+        )
+    
+    def _generate_file_structure(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict) -> dict:
+        """Generate comprehensive project file structure with detailed context."""
+        self.log_info("Generating project file structure")
+        
+        # Extract key information for file structure generation
+        backend_name = tech_stack_recommendation.get('backend', {}).get('language', 'Python')
+        backend_framework = tech_stack_recommendation.get('backend', {}).get('framework', 'Flask')
+        database_type = tech_stack_recommendation.get('database', {}).get('type', 'SQLite')
+        architecture_pattern = tech_stack_recommendation.get('architecture_pattern', 'MVC')
+        
+        # Create concise requirements summary
+        requirements_summary = self._create_requirements_summary(brd_analysis)
+        
+        # Create modules summary from system design
+        modules_summary = self._create_modules_summary(system_design)
+
+        try:
+            # Set the prompt template for this specific operation
+            self.prompt_template = self.file_structure_template
+            
+            # Use BaseAgent's execute_llm_chain with improved context
+            response = self.execute_llm_chain({
+                "backend_name": backend_name,
+                "backend_framework": backend_framework,
+                "database_type": database_type,
+                "architecture_pattern": architecture_pattern,
+                "requirements_summary": requirements_summary,
+                "modules_summary": modules_summary
+            })
+            
+            # Validate file structure response
+            if not response or not isinstance(response, dict):
+                self.log_warning("Invalid file structure format returned, using default")
+                return self._get_default_file_structure(backend_name, backend_framework)
+                
+            # Clean up file paths (normalize slashes, handle directories)
+            cleaned_structure = self._normalize_file_paths(response)
+            
+            # Analyze dependencies between files
+            self.file_dependencies = self._analyze_file_dependencies(cleaned_structure, 
+                                                                   backend_name, 
+                                                                   backend_framework,
+                                                                   database_type,
+                                                                   architecture_pattern)
+            
+            self.log_info(f"Generated file structure with {len(cleaned_structure)} files/directories")
+            return cleaned_structure
+        except Exception as e:
+            self.log_error(f"File structure generation failed: {e}")
+            return self._get_default_file_structure(backend_name, backend_framework)
+    
+    def _normalize_file_paths(self, file_structure: dict) -> dict:
+        """Normalize file paths and ensure directories are properly marked."""
+        normalized = {}
+        for path, description in file_structure.items():
+            # Normalize slashes
+            norm_path = path.replace('\\', '/')
+            
+            # Handle directories
+            if norm_path.endswith('/') or (isinstance(description, str) and 
+                                         any(term in description.lower() for term in ["directory", "folder", "module"])):
+                if not norm_path.endswith('/'):
+                    norm_path = f"{norm_path}/"
+                
+            normalized[norm_path] = description
+        
+        return normalized
+    
+    def _analyze_file_dependencies(self, file_structure: dict, backend_name: str, 
+                                 backend_framework: str, database_type: str,
+                                 architecture_pattern: str) -> dict:
+        """Analyze and determine dependencies between files."""
+        try:
+            self.prompt_template = self.dependency_analysis_template
+            
+            # Convert file structure to readable format for the LLM
+            file_structure_text = json.dumps(file_structure, indent=2)
+            
+            # Execute dependency analysis
+            dependencies = self.execute_llm_chain({
+                "file_structure": file_structure_text,
+                "backend_stack": f"{backend_name} + {backend_framework}",
+                "database_type": database_type,
+                "architecture_pattern": architecture_pattern
+            })
+            
+            if not dependencies or not isinstance(dependencies, dict):
+                self.log_warning("Invalid dependency analysis result, using empty dependencies")
+                return {}
+                
+            self.log_info(f"Identified dependencies between {len(dependencies)} files")
+            return dependencies
+        except Exception as e:
+            self.log_warning(f"Dependency analysis failed: {e}")
+            return {}
+    
+    def _create_requirements_summary(self, brd_analysis: dict) -> str:
+        """Create structured requirements summary from BRD analysis."""
+        summary_parts = []
+        
+        # Project name and description
+        project_name = brd_analysis.get('project_overview', {}).get('project_name', 'Unknown Project')
+        project_desc = brd_analysis.get('project_overview', {}).get('description', '')
+        summary_parts.append(f"Project: {project_name} - {project_desc[:150]}...")
+        
+        # Key functional requirements (limit to 5)
+        func_reqs = brd_analysis.get('functional_requirements', [])[:5]
+        if func_reqs:
+            summary_parts.append("Functional Requirements:")
+            for req in func_reqs:
+                summary_parts.append(f"- {req.get('description', '')[:100]}")
+        
+        # Non-functional requirements (main categories)
+        nfr = brd_analysis.get('non_functional_requirements', {})
+        nfr_summary = []
+        for category, reqs in nfr.items():
+            if reqs and isinstance(reqs, list) and len(reqs) > 0:
+                nfr_summary.append(f"{category.capitalize()}: {reqs[0][:50]}...")
+        
+        if nfr_summary:
+            summary_parts.append("Non-Functional Requirements:")
+            summary_parts.extend([f"- {item}" for item in nfr_summary[:3]])
+        
+        # Data requirements (key entities)
+        data_reqs = brd_analysis.get('data_requirements', [])[:3]
+        if data_reqs:
+            entities = [entity.get('entity', '') for entity in data_reqs]
+            summary_parts.append(f"Key Data Entities: {', '.join(entities)}")
+        
+        return '\n'.join(summary_parts)
+    
+    def _create_modules_summary(self, system_design: dict) -> str:
+        """Create summary of system design modules."""
+        modules = system_design.get('main_modules', [])
+        if not modules:
+            return "No specific modules defined in system design."
+            
+        summary_parts = ["Modules:"]
+        for module in modules:
+            name = module.get('name', '')
+            purpose = module.get('purpose', '')[:100]
+            components = ', '.join(module.get('components', [])[:3])
+            
+            if name:
+                summary_parts.append(f"- {name}: {purpose}")
+                if components:
+                    summary_parts.append(f"  Components: {components}")
+        
+        return '\n'.join(summary_parts)
+    
+    def _get_file_purpose(self, file_path: str, file_structure: dict) -> str:
+        """Get the purpose of a file from the file structure."""
+        # Try exact path match
+        if file_path in file_structure:
+            return str(file_structure[file_path])
+            
+        # Try normalized path
+        normalized = file_path.replace('\\', '/')
+        if normalized in file_structure:
+            return str(file_structure[normalized])
+            
+        return "No specific purpose defined"
+    
+    def _get_related_files(self, file_path: str) -> list:
+        """Get files related to the specified file based on dependencies."""
+        related = []
+        
+        # Files that this file depends on
+        if file_path in self.file_dependencies:
+            related.extend(self.file_dependencies[file_path])
+            
+        # Files that depend on this file
+        for dep_file, dependencies in self.file_dependencies.items():
+            if file_path in dependencies:
+                related.append(dep_file)
+                
+        return related
+    
+    def _generate_code_with_context(self, file_path: str, context_summary: str, tech_stack: dict, 
+                                  system_design: dict, file_structure: dict, error_feedback: str = "") -> str:
+        """Generate code for a file with comprehensive context."""
+        
+        # Get related files
+        related_files = self._get_related_files(file_path)
+        related_files_text = "\n".join(related_files)
+        
+        # Get file purpose 
+        file_purpose = self._get_file_purpose(file_path, file_structure)
+        
+        # Extract tech stack details
+        backend = f"{tech_stack.get('backend', {}).get('language', 'Python')} + {tech_stack.get('backend', {}).get('framework', 'Flask')}"
+        database = tech_stack.get('database', {}).get('type', 'SQLite')
+        architecture = tech_stack.get('architecture_pattern', 'MVC')
+        
+        # Get specific dependencies for this file
+        dependencies = ", ".join(self.file_dependencies.get(file_path, []))
+        
+        # Get relevant RAG context
+        file_extension = os.path.splitext(file_path)[1]
+        tech_string = f"{backend} {database} {architecture}"
+        rag_query = f"code {file_path} {file_extension} {tech_string} {file_purpose[:50]}"
+        rag_context = self.get_rag_context(rag_query)
+        
+        try:
+            # Use temperature binding for code generation
+            llm_with_temp = self.llm.bind(temperature=self.temperature)
+            
+            # Format prompt with context
+            prompt = self.code_generation_template.format(
+                file_path=file_path,
+                context_summary=context_summary,
+                backend_stack=backend,
+                database_type=database,
+                architecture_pattern=architecture,
+                file_purpose=file_purpose,
+                related_files=related_files_text,
+                dependencies=dependencies,
+                rag_context=rag_context,
+                error_feedback=error_feedback
+            )
+            
+            # Invoke the model
+            start_time = time.time()
+            response = llm_with_temp.invoke(prompt)
+            generation_time = time.time() - start_time
+            
+            # Extract content from response
+            if hasattr(response, 'content'):
+                code_content = response.content
+            else:
+                code_content = str(response)
+            
+            # Clean the code content
+            cleaned_code = self._clean_code_response(code_content)
+            
+            self.log_info(f"Generated {len(cleaned_code)} bytes for {file_path} in {generation_time:.2f}s")
+            return cleaned_code
+            
+        except Exception as e:
+            self.log_error(f"Code generation failed for {file_path}: {e}")
+            return ""
+    
+    def _refine_code(self, file_path: str, original_code: str, error_message: str, 
+                   context_summary: str, related_files_content: dict) -> str:
+        """Refine code based on error feedback and related files."""
+        try:
+            # Format related files content for context
+            related_content = "\n".join([
+                f"### {path}:\n{content[:500]}..." 
+                for path, content in related_files_content.items()
+            ])
+            
+            # Use temperature binding for refinement
+            llm_with_temp = self.llm.bind(temperature=0.1)
+            
+            # Format prompt
+            prompt = self.code_refinement_template.format(
+                file_path=file_path,
+                original_code=original_code,
+                error_message=error_message,
+                context_summary=context_summary,
+                related_files_content=related_content
+            )
+            
+            # Invoke the model
+            response = llm_with_temp.invoke(prompt)
+            
+            # Extract content
+            if hasattr(response, 'content'):
+                refined_code = response.content
+            else:
+                refined_code = str(response)
+            
+            # Clean the code
+            cleaned_code = self._clean_code_response(refined_code)
+            
+            self.log_info(f"Successfully refined code for {file_path}")
+            return cleaned_code
+            
+        except Exception as e:
+            self.log_warning(f"Code refinement failed for {file_path}: {e}")
+            return original_code
+    
+    def _test_and_refine_code(self, file_path: str, code_content: str, context_summary: str, 
+                           file_structure: dict) -> Tuple[str, bool]:
+        """Test code and refine if there are errors."""
+        full_file_path = os.path.join(self.output_dir, file_path)
+        
+        # Skip testing for certain file types
+        if not self._should_test_file(file_path):
+            return code_content, True
+        
+        try:
+            # Write code to file for testing
+            os.makedirs(os.path.dirname(full_file_path), exist_ok=True)
+            with open(full_file_path, 'w', encoding='utf-8') as f:
+                f.write(code_content)
+            
+            # Test the code
+            test_result = self.code_execution_tool.test_file(full_file_path)
+            
+            if test_result.get("success", False):
+                self.log_info(f"Code validation successful for {file_path}")
+                self.successful_compilations.add(file_path)
+                return code_content, True
+            else:
+                # Get error message
+                error_message = test_result.get("error", "Unknown error")
+                self.log_warning(f"Code validation failed for {file_path}: {error_message}")
+                
+                # Get content of related files for context
+                related_files = self._get_related_files(file_path)
+                related_files_content = {}
+                
+                for related_file in related_files:
+                    if related_file in self.successful_compilations:
+                        try:
+                            related_path = os.path.join(self.output_dir, related_file)
+                            if os.path.exists(related_path):
+                                with open(related_path, 'r', encoding='utf-8') as f:
+                                    related_files_content[related_file] = f.read()
+                        except Exception:
+                            pass
+                
+                # Refine code
+                refined_code = self._refine_code(
+                    file_path, 
+                    code_content, 
+                    error_message, 
+                    context_summary, 
+                    related_files_content
+                )
+                
+                # Test again with refined code
+                with open(full_file_path, 'w', encoding='utf-8') as f:
+                    f.write(refined_code)
+                
+                refined_result = self.code_execution_tool.test_file(full_file_path)
+                
+                if refined_result.get("success", False):
+                    self.log_success(f"Code refinement fixed issues in {file_path}")
+                    self.successful_compilations.add(file_path)
+                    return refined_code, True
+                else:
+                    self.log_warning(f"Code refinement still has issues in {file_path}")
+                    return refined_code, False
+        except Exception as e:
+            self.log_error(f"Error during code testing for {file_path}: {e}")
+            return code_content, False
+            
+    def _should_test_file(self, file_path: str) -> bool:
+        """Determine if a file should be tested based on its extension and type."""
+        # Skip binary files, assets, etc.
+        skip_extensions = ['.md', '.txt', '.json', '.yaml', '.yml', '.css', '.svg', 
+                          '.png', '.jpg', '.jpeg', '.gif', '.ico', '.env']
+        
+        # Skip configuration files
+        skip_patterns = ['config', 'readme', 'license', 'gitignore', '.env']
+        
+        file_extension = os.path.splitext(file_path)[1].lower()
+        file_name = os.path.basename(file_path).lower()
+        
+        # Skip based on extension
+        if file_extension in skip_extensions:
+            return False
+            
+        # Skip based on filename patterns
+        for pattern in skip_patterns:
+            if pattern in file_name:
+                return False
+                
+        return True
+    
+    def _generate_and_refine_code(self, file_path: str, context_summary: str, 
+                               tech_stack: dict, system_design: dict, 
+                               file_structure: dict, max_retries: int = 3) -> Tuple[str, bool]:
+        """Generate code for a single file with built-in testing and refinement."""
+        
+        code_content = ""
+        is_success = False
+        error_feedback = ""
+        
+        for attempt in range(max_retries):
+            try:
+                # Generate code with context
+                code_content = self._generate_code_with_context(
+                    file_path, 
+                    context_summary, 
+                    tech_stack, 
+                    system_design,
+                    file_structure,
+                    error_feedback
+                )
+                
+                if not code_content.strip():
+                    error_feedback = f"Empty code generated on attempt {attempt + 1}"
+                    continue
+                
+                # Test and refine the code
+                code_content, is_success = self._test_and_refine_code(
+                    file_path, 
+                    code_content, 
+                    context_summary, 
+                    file_structure
+                )
+                
+                if is_success:
+                    break
+                    
+                # Update error feedback for next attempt
+                error_feedback = f"Code validation failed on attempt {attempt + 1}"
+                
+            except Exception as e:
+                error_feedback = f"Generation error on attempt {attempt + 1}: {str(e)}"
+                self.log_warning(f"Code generation attempt {attempt + 1} failed for {file_path}: {e}")
+        
+        return code_content, is_success
+    
+    def _clean_code_response(self, code_content: str) -> str:
+        """Clean code response by removing markdown fences and extra formatting."""
+        cleaned = code_content.strip()
+        
+        # Remove markdown code blocks
+        if cleaned.startswith("```"):
+            lines = cleaned.split('\n')
+            
+            # Find start and end of code block
+            start_idx = 0
+            end_idx = len(lines)
+            
+            for i, line in enumerate(lines):
+                if line.startswith("```"):
+                    start_idx = i
+                    break
+            
+            for i in range(start_idx + 1, len(lines)):
+                if lines[i].strip() == "```":
+                    end_idx = i
+                    break
+            
+            # Extract code between fences
+            cleaned = '\n'.join(lines[start_idx + 1:end_idx])
+        
+        return cleaned.strip()
+    
+    def _process_dependencies_order(self, file_structure: dict) -> List[str]:
+        """Process files in dependency order for better compilation success."""
+        # Start with files that have no dependencies
+        processed = []
+        remaining = set(k for k in file_structure.keys() if not k.endswith('/'))
+        
+        # Process files with no dependencies first
+        no_deps = []
+        for file in remaining:
+            if file not in self.file_dependencies or not self.file_dependencies[file]:
+                no_deps.append(file)
+                
+        processed.extend(no_deps)
+        remaining -= set(no_deps)
+        
+        # Process remaining files based on dependency count
+        while remaining:
+            # Find file with fewest unprocessed dependencies
+            best_file = None
+            min_deps = float('inf')
+            
+            for file in remaining:
+                deps = self.file_dependencies.get(file, [])
+                unprocessed_deps = len([d for d in deps if d in remaining])
+                
+                if unprocessed_deps < min_deps:
+                    min_deps = unprocessed_deps
+                    best_file = file
+            
+            if best_file:
+                processed.append(best_file)
+                remaining.remove(best_file)
+            else:
+                # If we can't find a file, add all remaining files
+                processed.extend(list(remaining))
+                break
+                
+        # Add directories at the beginning
+        directories = [k for k in file_structure.keys() if k.endswith('/')]
+        
+        return directories + processed
+    
+    def run(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict, implementation_plan: dict) -> Dict[str, Any]:
+        """Generate complete codebase with enhanced directory and file handling."""
+        self.log_start("Starting code generation")
+        
+        try:
+            # Generate file structure with comprehensive context
+            file_structure = self._generate_file_structure(
+                brd_analysis, 
+                tech_stack_recommendation, 
+                system_design
+            )
+            
+            # Create consolidated context summary once
+            context_summary = self._create_requirements_summary(brd_analysis)
+            
+            # Process files in dependency order
+            item_order = self._process_dependencies_order(file_structure)
+            total_items = len(item_order)
+            
+            # Track generated files and created directories
+            generated_files = {}
+            created_dirs = set()
+            successful_files = 0
+            
+            self.log_info(f"Processing {total_items} items in dependency order")
+            
+            for i, item_path in enumerate(item_order, 1):
+                full_item_path = os.path.join(self.output_dir, item_path)
+                
+                # Normalize path
+                normalized_item_path = os.path.normpath(item_path)
+                
+                # Handle directories
+                if item_path.endswith('/'):
+                    try:
+                        os.makedirs(full_item_path, exist_ok=True)
+                        created_dirs.add(full_item_path)
+                        self.log_info(f"[{i}/{total_items}] Created directory: {normalized_item_path}")
+                    except Exception as e:
+                        self.log_error(f"Failed to create directory {full_item_path}: {e}")
+                    continue
+                
+                self.log_info(f"[{i}/{total_items}] Generating: {normalized_item_path}")
+                
+                # Ensure parent directory exists
+                parent_dir = os.path.dirname(full_item_path)
+                if parent_dir and parent_dir not in created_dirs:
+                    try:
+                        os.makedirs(parent_dir, exist_ok=True)
+                        created_dirs.add(parent_dir)
+                    except Exception as e:
+                        self.log_error(f"Failed to create parent directory {parent_dir}: {e}")
+                        continue
+                
+                try:
+                    # Generate and refine code
+                    code_content, is_success = self._generate_and_refine_code(
+                        normalized_item_path,
+                        context_summary,
+                        tech_stack_recommendation,
+                        system_design,
+                        file_structure
+                    )
+                    
+                    # Write to file regardless of success
+                    file_content_to_write = code_content if code_content.strip() else f"# Placeholder for {normalized_item_path}"
+                    
+                    with open(full_item_path, 'w', encoding='utf-8') as f:
+                        f.write(file_content_to_write)
+                    
+                    # Update tracking
+                    generated_files[normalized_item_path] = {
+                        "content": file_content_to_write,
+                        "success": is_success,
+                        "path": full_item_path
+                    }
+                    
+                    if is_success:
+                        successful_files += 1
+                        self.log_success(f"Successfully generated: {normalized_item_path}")
+                    else:
+                        self.log_warning(f"Generated with issues: {normalized_item_path}")
+                    
+                except Exception as e:
+                    self.log_error(f"Failed to generate {normalized_item_path}: {e}")
+                    
+                    # Try to write placeholder on error
+                    try:
+                        placeholder = f"# Error generating {normalized_item_path}: {str(e)}"
+                        with open(full_item_path, 'w', encoding='utf-8') as f:
+                            f.write(placeholder)
+                        generated_files[normalized_item_path] = {
+                            "content": placeholder,
+                            "success": False,
+                            "path": full_item_path
+                        }
+                    except Exception:
+                        pass
+            
+            # Generate summary
+            success_rate = (successful_files / max(1, len(generated_files))) * 100
+            status = "success" if success_rate >= 70 else "partial" if success_rate > 0 else "failure"
+            
+            self.log_success(f"Code generation complete: {successful_files}/{len(generated_files)} files successful ({success_rate:.1f}%)")
+            
+            return {
+                "status": status,
+                "generated_files": {k: v["content"] for k, v in generated_files.items()},
+                "file_details": {k: {"success": v["success"], "path": v["path"]} for k, v in generated_files.items()},
+                "file_count": len(generated_files),
+                "success_count": successful_files,
+                "success_rate": success_rate,
+                "output_directory": self.output_dir,
+                "summary": f"Generated {len(generated_files)} files with {successful_files} successful ({success_rate:.1f}%)"
+            }
+            
+        except Exception as e:
+            self.log_error(f"Code generation failed: {e}")
+            import traceback
+            self.log_error(traceback.format_exc())
+            return self.get_default_response()
+    
+    def _get_default_file_structure(self, backend_name: str, backend_framework: str) -> dict:
+        """Get enhanced default file structure based on backend technology."""
+        
+        # Python/Flask structure
+        if 'python' in backend_name.lower() and 'flask' in backend_framework.lower():
+            return {
+                "app.py": "Main Flask application entry point",
+                "config.py": "Configuration settings for different environments",
+                "requirements.txt": "Python dependencies",
+                "README.md": "Project documentation and setup instructions",
+                ".env.example": "Example environment variables template",
+                ".gitignore": "Git ignore patterns",
+                "app/": "Application package directory",
+                "app/__init__.py": "Application factory and initialization",
+                "app/models/": "Data models directory",
+                "app/models/__init__.py": "Models package initialization",
+                "app/models/user.py": "User model definition",
+                "app/routes/": "API routes directory",
+                "app/routes/__init__.py": "Routes package initialization",
+                "app/routes/auth.py": "Authentication routes",
+                "app/routes/api.py": "Main API endpoints",
+                "app/services/": "Business logic services",
+                "app/services/__init__.py": "Services package initialization",
+                "app/utils/": "Utility functions directory",
+                "app/utils/__init__.py": "Utils package initialization",
+                "migrations/": "Database migrations directory",
+                "tests/": "Test suite directory",
+                "tests/__init__.py": "Test package initialization",
+                "tests/test_routes.py": "Route tests",
+                "tests/test_models.py": "Model tests",
+                "tests/conftest.py": "Pytest configuration and fixtures",
+                "static/": "Static assets directory",
+                "templates/": "Jinja2 templates directory",
+                "docs/": "Documentation directory",
+                "scripts/": "Utility scripts directory"
+            }
+        
+        # Python/Django structure
+        elif 'python' in backend_name.lower() and 'django' in backend_framework.lower():
+            project_name = "project"
+            app_name = "core"
+            
+            return {
+                "manage.py": "Django management script",
+                "requirements.txt": "Python dependencies",
+                "README.md": "Project documentation",
+                ".env.example": "Example environment variables",
+                ".gitignore": "Git ignore patterns",
+                f"{project_name}/": "Django project directory",
+                f"{project_name}/__init__.py": "Project package initialization",
+                f"{project_name}/settings.py": "Django settings",
+                f"{project_name}/urls.py": "Project URL configuration",
+                f"{project_name}/wsgi.py": "WSGI configuration",
+                f"{project_name}/asgi.py": "ASGI configuration",
+                f"{app_name}/": "Main Django app directory",
+                f"{app_name}/__init__.py": "App package initialization",
+                f"{app_name}/admin.py": "Admin interface configuration",
+                f"{app_name}/models.py": "Data models",
+                f"{app_name}/views.py": "View functions/classes",
+                f"{app_name}/urls.py": "App URL patterns",
+                f"{app_name}/serializers.py": "DRF serializers",
+                f"{app_name}/tests/": "Tests directory",
+                f"{app_name}/tests/__init__.py": "Tests initialization",
+                f"{app_name}/tests/test_models.py": "Model tests",
+                f"{app_name}/tests/test_views.py": "View tests",
+                f"{app_name}/migrations/": "Database migrations",
+                "static/": "Static files directory",
+                "templates/": "Django templates directory",
+                "media/": "User-uploaded files directory",
+                "docs/": "Documentation directory"
+            }
+            
+        # Node.js/Express structure
+        elif ('javascript' in backend_name.lower() or 'node' in backend_name.lower()) and 'express' in backend_framework.lower():
+            return {
+                "package.json": "Node.js package configuration",
+                "package-lock.json": "Node.js dependency lock file",
+                ".env.example": "Example environment variables",
+                ".gitignore": "Git ignore patterns",
+                "app.js": "Express application entry point",
+                "server.js": "Server initialization",
+                "config/": "Configuration directory",
+                "config/database.js": "Database configuration",
+                "config/env.js": "Environment configuration",
+                "src/": "Source code directory",
+                "src/controllers/": "Route controllers directory",
+                "src/models/": "Data models directory",
+                "src/middlewares/": "Express middlewares",
+                "src/routes/": "API routes directory",
+                "src/services/": "Business logic services",
+                "src/utils/": "Utility functions",
+                "public/": "Static assets directory",
+                "tests/": "Test suite directory",
+                "views/": "View templates directory",
+                "docs/": "Documentation directory",
+                "README.md": "Project documentation"
+            }
+            
+        # Java/Spring Boot structure
+        elif 'java' in backend_name.lower() and 'spring' in backend_framework.lower():
+            return {
+                "pom.xml": "Maven project configuration",
+                ".gitignore": "Git ignore patterns",
+                "src/": "Source root directory",
+                "src/main/": "Main source directory",
+                "src/main/java/": "Java source files directory",
+                "src/main/java/com/example/app/": "Application package",
+                "src/main/java/com/example/app/Application.java": "Spring Boot entry point",
+                "src/main/java/com/example/app/controllers/": "REST controllers",
+                "src/main/java/com/example/app/models/": "Data models",
+                "src/main/java/com/example/app/repositories/": "Data repositories",
+                "src/main/java/com/example/app/services/": "Business services",
+                "src/main/java/com/example/app/config/": "Configuration classes",
+                "src/main/resources/": "Resource files directory",
+                "src/main/resources/application.properties": "Application properties",
+                "src/main/resources/static/": "Static resources",
+                "src/main/resources/templates/": "View templates",
+                "src/test/": "Test suite directory",
+                "src/test/java/": "Java test files",
+                "README.md": "Project documentation"
+            }
+            
+        # Generic structure for other cases
+        else:
+            return {
+                "src/": "Source code directory",
+                "config/": "Configuration files directory",
+                "docs/": "Documentation directory",
+                "tests/": "Test suite directory",
+                "scripts/": "Utility scripts",
+                "README.md": "Project documentation",
+                ".gitignore": "Git ignore patterns",
+            }
+    
+    def get_default_response(self) -> Dict[str, Any]:
+        """Get structured default response when code generation fails completely."""
+        return {
+            "status": "error",
+            "generated_files": {},
+            "file_details": {},
+            "file_count": 0,
+            "success_count": 0,
+            "success_rate": 0.0,
+            "output_directory": self.output_dir,
+            "summary": "Code generation failed due to critical errors",
+            "error": "The code generation process encountered unrecoverable errors"
+        }

@@ -1,0 +1,214 @@
+# Kubernetes Service for Zookeeper
+# This headless service is used by the Zookeeper StatefulSet to provide stable network identities.
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    app: zookeeper
+spec:
+  ports:
+    - port: 2181 # Client port for Zookeeper
+      name: client
+    - port: 2888 # Follower port for Zookeeper ensemble communication
+      name: follower
+    - port: 3888 # Election port for Zookeeper ensemble communication
+      name: election
+  clusterIP: None # Headless service is required for StatefulSets to manage individual pod network identities
+  selector:
+    app: zookeeper
+---
+# Kubernetes StatefulSet for Zookeeper
+# Deploys a single Zookeeper instance for development/testing purposes.
+# For production environments, a Zookeeper ensemble (typically 3 or 5 replicas)
+# is highly recommended for high availability and fault tolerance.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  labels:
+    app: zookeeper
+spec:
+  serviceName: zookeeper # Must match the headless service name
+  replicas: 1 # Set to 3 or 5 for a production Zookeeper ensemble
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0 # Using a stable Confluent Zookeeper image
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 2888
+              name: follower
+            - containerPort: 3888
+              name: election
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000" # The length of a single tick, in milliseconds
+            - name: ZOOKEEPER_INIT_LIMIT
+              value: "5" # Amount of ticks to allow followers to connect and sync
+            - name: ZOOKEEPER_SYNC_LIMIT
+              value: "2" # Amount of ticks to allow a follower to sync with Zookeeper
+            # For a single replica, the server ID is typically 1.
+            # In a multi-replica setup, this would need to be dynamically assigned (e.g., via an init container).
+            - name: ZOOKEEPER_SERVER_ID
+              value: "1"
+            # For a single replica, ZOOKEEPER_SERVERS points to itself via the headless service.
+            # For multiple replicas, this would list all Zookeeper instances (e.g., "zookeeper-0.zookeeper:2888:3888;zookeeper-1.zookeeper:2888:3888;...")
+            - name: ZOOKEEPER_SERVERS
+              value: "zookeeper:2888:3888"
+          volumeMounts:
+            - name: zookeeper-data
+              mountPath: /var/lib/zookeeper/data # Mount path for Zookeeper data
+            - name: zookeeper-log
+              mountPath: /var/lib/zookeeper/log # Mount path for Zookeeper transaction logs
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              # Checks if Zookeeper is alive by sending 'ruok' command and expecting 'imok'
+              command: ["sh", "-c", "echo ruok | nc localhost 2181"]
+            initialDelaySeconds: 10 # Initial delay before liveness probes are started
+            periodSeconds: 5 # How often (in seconds) to perform the probe
+            timeoutSeconds: 5 # When the probe times out
+          readinessProbe:
+            exec:
+              # Checks if Zookeeper is ready to accept client connections
+              command: ["sh", "-c", "echo ruok | nc localhost 2181"]
+            initialDelaySeconds: 10 # Initial delay before readiness probes are started
+            periodSeconds: 5 # How often (in seconds) to perform the probe
+            timeoutSeconds: 5 # When the probe times out
+  volumeClaimTemplates:
+    - metadata:
+        name: zookeeper-data
+      spec:
+        accessModes: ["ReadWriteOnce"] # Volume can be mounted as read-write by a single node
+        resources:
+          requests:
+            storage: 1Gi # Persistent storage for Zookeeper data
+    - metadata:
+        name: zookeeper-log
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi # Persistent storage for Zookeeper transaction logs
+---
+# Kubernetes Service for Kafka
+# This service provides a stable internal endpoint for applications to connect to Kafka.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  ports:
+    - port: 9092 # Kafka broker port for client connections
+      name: broker
+  selector:
+    app: kafka
+  type: ClusterIP # Internal service, accessible only within the Kubernetes cluster
+---
+# Kubernetes StatefulSet for Kafka
+# Deploys a single Kafka broker instance for development/testing purposes.
+# For production environments, a Kafka cluster with multiple brokers (e.g., 3 or more)
+# is highly recommended for high availability, fault tolerance, and throughput.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  serviceName: kafka # Must match the Kafka service name
+  replicas: 1 # Set to 3 or more for a production Kafka cluster
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0 # Using a stable Confluent Kafka image
+          ports:
+            - containerPort: 9092
+              name: broker
+          env:
+            # For a single replica, the broker ID is typically 0.
+            # In a multi-replica setup, this would need to be dynamically assigned (e.g., via an init container).
+            - name: KAFKA_BROKER_ID
+              value: "0"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper:2181" # Connects to the Zookeeper service
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092" # Kafka listens on all interfaces on port 9092
+            # Advertised listener for internal cluster communication and client connections.
+            # Uses the Kafka service name for internal discovery within the Kubernetes cluster.
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:9092"
+            # Replication factor for internal Kafka topics (e.g., __consumer_offsets, __transaction_state).
+            # Should be set to the number of Kafka brokers for production (e.g., 3).
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_LOG_RETENTION_HOURS
+              value: "168" # Retain logs for 7 days (168 hours)
+            - name: KAFKA_LOG_SEGMENT_BYTES
+              value: "1073741824" # Max size of a single log file (1GB)
+            - name: KAFKA_NUM_PARTITIONS
+              value: "1" # Default number of partitions for new topics
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true" # Allows Kafka to auto-create topics when a producer sends data to a non-existent topic
+            - name: KAFKA_LOG_DIRS
+              value: "/var/lib/kafka/data" # Directory for Kafka log segments
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data # Mount path for Kafka data logs
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            tcpSocket:
+              port: 9092 # Checks if the Kafka broker port is open
+            initialDelaySeconds: 30 # Initial delay before liveness probes are started
+            periodSeconds: 10 # How often (in seconds) to perform the probe
+            timeoutSeconds: 5 # When the probe times out
+          readinessProbe:
+            tcpSocket:
+              port: 9092 # Checks if the Kafka broker port is open and ready
+            initialDelaySeconds: 30 # Initial delay before readiness probes are started
+            periodSeconds: 10 # How often (in seconds) to perform the probe
+            timeoutSeconds: 5 # When the probe times out
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: ["ReadWriteOnce"] # Volume can be mounted as read-write by a single node
+        resources:
+          requests:
+            storage: 5Gi # Persistent storage for Kafka logs. Size based on expected data volume and retention.

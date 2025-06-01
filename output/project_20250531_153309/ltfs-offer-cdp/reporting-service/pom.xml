@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Inherit defaults from Spring Boot Starter Parent for consistent dependency management and build configuration -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version> <!-- Using a recent stable Spring Boot 3.x version -->
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <!-- Project coordinates -->
+    <groupId>com.ltfs.cdp</groupId>
+    <artifactId>reporting-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>reporting-service</name>
+    <description>Reporting Service for LTFS Offer CDP - Generates various customer and offer reports.</description>
+
+    <!-- Global properties for dependency versions and Java compatibility -->
+    <properties>
+        <java.version>17</java.version> <!-- Java 17 is the baseline for Spring Boot 3.x -->
+        <jasperreports.version>6.20.6</jasperreports.version> <!-- Latest stable JasperReports version -->
+        <apache.poi.version>5.2.5</apache.poi.version> <!-- Latest stable Apache POI version for Excel -->
+        <lombok.version>1.18.32</lombok.version>
+        <spring-kafka.version>3.1.5</spring-kafka.version> <!-- Aligned with Spring Boot 3.2.x for Kafka integration -->
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Starters for core functionalities -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <!-- Provides RESTful capabilities for exposing report generation endpoints -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <!-- Enables JPA for database interaction, allowing data retrieval for reports -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+            <!-- Provides JSR 380 (Bean Validation) implementation for request payload validation -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <!-- Adds production-ready features like monitoring and management endpoints -->
+        </dependency>
+
+        <!-- Database Driver for PostgreSQL -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope> <!-- Driver is only needed at runtime -->
+        </dependency>
+
+        <!-- Spring Kafka for event-driven architecture integration -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <version>${spring-kafka.version}</version>
+            <!-- Enables consuming messages from Kafka topics (e.g., for report triggers or data updates) -->
+        </dependency>
+
+        <!-- Reporting Libraries -->
+        <!-- JasperReports: Core library for generating complex reports in various formats (PDF, HTML, XML, etc.) -->
+        <dependency>
+            <groupId>net.sf.jasperreports</groupId>
+            <artifactId>jasperreports</artifactId>
+            <version>${jasperreports.version}</version>
+            <exclusions>
+                <!-- Exclude slf4j-log4j12 to prevent conflicts with Spring Boot's default Logback logging -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- JasperReports Fonts: Provides necessary fonts for proper rendering in generated reports -->
+        <dependency>
+            <groupId>net.sf.jasperreports</groupId>
+            <artifactId>jasperreports-fonts</artifactId>
+            <version>${jasperreports.version}</version>
+        </dependency>
+
+        <!-- Apache POI: Libraries for reading and writing Microsoft Office formats, specifically Excel (XLS, XLSX) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>${apache.poi.version}</version>
+            <!-- Core POI components for handling OLE2 files (e.g., .xls) -->
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${apache.poi.version}</version>
+            <!-- Components for handling Office Open XML (OOXML) files (e.g., .xlsx) -->
+        </dependency>
+
+        <!-- Lombok: Annotation processor to reduce boilerplate code (e.g., getters, setters, constructors) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope> <!-- Only needed during compilation -->
+        </dependency>
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope> <!-- Standard Spring Boot testing utilities -->
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope> <!-- Provides utilities for testing Kafka consumers/producers -->
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin: Packages the application into an executable JAR -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- Exclude Lombok from the final JAR as it's a compile-time dependency -->
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

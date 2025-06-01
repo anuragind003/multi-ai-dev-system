@@ -1,0 +1,81 @@
+server:
+  port: 8081 # Unique port for the Offer Service.
+
+spring:
+  application:
+    name: offer-service # Name of the Spring Boot application.
+
+  # --- Database Configuration (PostgreSQL) ---
+  datasource:
+    url: jdbc:postgresql://localhost:5432/offer_cdp_db # Database URL. Replace 'localhost' and 'offer_cdp_db' as per environment.
+    username: cdp_user # Database username.
+    password: cdp_password # Database password.
+    driver-class-name: org.postgresql.Driver # JDBC driver for PostgreSQL.
+    hikari: # Connection pool configuration (HikariCP is default for Spring Boot)
+      maximum-pool-size: 10 # Max number of connections in the pool.
+      minimum-idle: 5 # Min number of idle connections.
+      connection-timeout: 30000 # Max wait for a connection (ms).
+      idle-timeout: 600000 # Max idle time for a connection (ms).
+      max-lifetime: 1800000 # Max lifetime of a connection (ms).
+
+  # --- JPA / Hibernate Configuration ---
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'validate' checks schema against entities. Use 'none' for production, 'update' for development if schema changes are managed by Hibernate.
+    show-sql: true # Log SQL statements to console. Set to 'false' in production.
+    properties:
+      hibernate:
+        format_sql: true # Format SQL statements for readability. Set to 'false' in production.
+    database-platform: org.hibernate.dialect.PostgreSQLDialect # Specifies the database dialect.
+
+  # --- Kafka Configuration (for Event-Driven Architecture) ---
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker addresses. Replace 'localhost' as per environment.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (JSON).
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers for simpler JSON serialization.
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (JSON).
+      group-id: offer-service-group # Consumer group ID for the offer service.
+      auto-offset-reset: earliest # Start reading from the beginning if no offset is committed.
+      properties:
+        # Default type for JSON deserialization. Adjust package as needed based on your event classes.
+        spring.json.value.default.type: com.ltfs.cdp.offerservice.event.OfferEvent
+        # Trust packages for JSON deserialization to prevent deserialization errors.
+        spring.json.trusted.packages: "com.ltfs.cdp.offerservice.*, com.ltfs.cdp.common.*"
+
+# --- Actuator Configuration (for Monitoring and Management) ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics # Expose common actuator endpoints for monitoring.
+  endpoint:
+    health:
+      show-details: always # Show full health details for better diagnostics.
+
+# --- Logging Configuration ---
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    org.springframework: INFO # Spring framework logging level.
+    org.hibernate: WARN # Hibernate logging level (reduce verbosity for ORM internals).
+    com.ltfs.cdp.offerservice: DEBUG # Specific logging level for the application package. Set to INFO or WARN in production.
+  file:
+    name: logs/offer-service.log # Log file path.
+
+# --- Custom Application Properties ---
+app:
+  # Configuration for external services or specific business logic parameters.
+  customer-360-service:
+    base-url: http://localhost:8080/api/v1/customer-360 # Base URL for the Customer 360 service, used for deduplication against the 'live book'.
+    timeout-ms: 5000 # Timeout in milliseconds for calls to the Customer 360 service.
+  kafka:
+    topics:
+      offer-created: offer.events.created # Kafka topic for new offer creation events.
+      offer-updated: offer.events.updated # Kafka topic for offer updates.
+      offer-deduplicated: offer.events.deduplicated # Kafka topic for offers that have successfully undergone deduplication.
+      offer-rejected: offer.events.rejected # Kafka topic for offers rejected due to deduplication or validation failures.

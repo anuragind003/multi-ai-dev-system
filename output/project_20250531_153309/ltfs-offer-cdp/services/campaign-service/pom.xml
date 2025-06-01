@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+	Parent POM for Spring Boot applications.
+	This provides dependency management and plugin configuration for Spring Boot projects.
+	It ensures consistent versions for Spring Boot dependencies and simplifies build configuration.
+	-->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.5</version> <!-- Using a recent stable Spring Boot 3 version -->
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<!-- Project Coordinates -->
+	<groupId>com.ltfs.cdp.services</groupId>
+	<artifactId>campaign-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>campaign-service</name>
+	<description>Campaign Service for LTFS Offer CDP - Manages campaign lifecycle and offer generation.</description>
+
+	<!-- Project Properties -->
+	<properties>
+		<java.version>17</java.version> <!-- Standard Java version for Spring Boot 3 -->
+		<spring-cloud.version>2023.0.1</spring-cloud.version> <!-- Version for Spring Cloud dependencies (e.g., Eureka) -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
+
+	<!-- Project Dependencies -->
+	<dependencies>
+		<!-- Spring Boot Web Starter: Provides embedded Tomcat and Spring MVC for building RESTful APIs. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Data JPA Starter: Provides Spring Data JPA and Hibernate for database interaction. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Validation Starter: Provides Bean Validation API (JSR 380) for request body validation. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Actuator: Provides production-ready features like monitoring, health checks, and metrics. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Security Starter: Provides authentication and authorization support for securing endpoints. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+		<!-- Spring Kafka: Enables building event-driven microservices using Apache Kafka for messaging. -->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+		<!-- Spring Cloud Netflix Eureka Client: Enables service registration and discovery with Eureka Server. -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+		</dependency>
+
+		<!-- PostgreSQL JDBC Driver: Required to connect to PostgreSQL database. -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope> <!-- Runtime scope as it's only needed at runtime -->
+		</dependency>
+
+		<!-- Lombok: A utility library that reduces boilerplate code (e.g., getters, setters, constructors). -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional> <!-- Optional dependency, not transitive -->
+		</dependency>
+
+		<!-- SpringDoc OpenAPI UI: Generates OpenAPI 3 specifications and provides a Swagger UI for API documentation. -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.5.0</version> <!-- Ensure compatibility with Spring Boot 3.x -->
+		</dependency>
+
+		<!-- Test Dependencies -->
+		<!-- Spring Boot Test Starter: Provides utilities for testing Spring Boot applications. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Spring Kafka Test: Provides utilities for testing Kafka-related components. -->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Spring Security Test: Provides utilities for testing Spring Security configurations. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<!-- Dependency Management for Spring Cloud: Ensures consistent versions for all Spring Cloud components. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<!-- Build Configuration -->
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: Creates an executable JAR/WAR file and manages application lifecycle. -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- Exclude Lombok from the final JAR as it's only needed during compilation. -->
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+			<!-- Maven Compiler Plugin: Ensures compilation with the specified Java version. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+					<encoding>${project.build.sourceEncoding}</encoding>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

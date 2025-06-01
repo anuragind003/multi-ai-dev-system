@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-service-deployment
+  labels:
+    app: customer-service
+spec:
+  # Define the number of desired replicas for the customer service.
+  # This addresses the scalability and high availability non-functional requirements.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: customer-service
+  template:
+    metadata:
+      labels:
+        app: customer-service
+    spec:
+      containers:
+        - name: customer-service
+          # Specify the Docker image for the customer service.
+          # Replace 'ltfs-offer-cdp/customer-service:1.0.0' with your actual image name and tag.
+          image: ltfs-offer-cdp/customer-service:1.0.0
+          ports:
+            # Expose the default Spring Boot application port.
+            - containerPort: 8080
+          env:
+            # Set the Spring Boot profile to 'kubernetes' for environment-specific configurations.
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL for PostgreSQL.
+            # 'postgresql-service' should be the Kubernetes Service name for your PostgreSQL instance.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_customer_db
+            # Database username.
+            # For production, consider using a Kubernetes Secret for this as well.
+            - name: SPRING_DATASOURCE_USERNAME
+              value: cdp_user
+            # Database password, securely retrieved from a Kubernetes Secret.
+            # Ensure a Secret named 'cdp-db-credentials' exists with a key 'password'.
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret holding DB credentials
+                  key: password           # Key within the secret that holds the password
+            # Example for other environment variables, e.g., Kafka broker details
+            # - name: KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+          resources:
+            # Define resource requests and limits for the container.
+            # This is crucial for performance, stability, and efficient resource utilization.
+            requests:
+              memory: "512Mi" # Request 512 Megabytes of memory
+              cpu: "500m"    # Request 0.5 CPU core (500 milliCPU)
+            limits:
+              memory: "1024Mi" # Limit to 1 Gigabyte of memory
+              cpu: "1000m"   # Limit to 1 CPU core (1000 milliCPU)
+          livenessProbe:
+            # Liveness probe checks if the application is running. If it fails, Kubernetes restarts the pod.
+            # Uses Spring Boot Actuator's liveness endpoint.
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30 # Time to wait before the first probe
+            periodSeconds: 10       # How often to perform the probe
+            timeoutSeconds: 5       # How long to wait for a response
+            failureThreshold: 3     # Number of consecutive failures before restart
+          readinessProbe:
+            # Readiness probe checks if the application is ready to serve traffic.
+            # If it fails, Kubernetes stops sending traffic to the pod.
+            # Uses Spring Boot Actuator's readiness endpoint.
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20 # Time to wait before the first probe
+            periodSeconds: 10       # How often to perform the probe
+            timeoutSeconds: 5       # How long to wait for a response
+            failureThreshold: 3     # Number of consecutive failures before marking as unready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-service # Name of the Kubernetes Service
+  labels:
+    app: customer-service
+spec:
+  # Selects pods with the label 'app: customer-service' to route traffic to.
+  selector:
+    app: customer-service
+  ports:
+    # Define the port mapping for the service.
+    - protocol: TCP
+      port: 8080       # The port on which the service will be exposed within the cluster
+      targetPort: 8080 # The port on the container to which the service will forward traffic
+  # 'ClusterIP' makes the service only reachable from within the cluster.
+  # This is suitable for microservices that communicate internally or are exposed via an Ingress.
+  type: ClusterIP

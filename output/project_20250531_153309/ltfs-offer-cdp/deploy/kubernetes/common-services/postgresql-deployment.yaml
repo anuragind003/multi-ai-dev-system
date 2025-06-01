@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgresql-credentials
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ltfs-offer-cdp
+type: Opaque
+stringData:
+  # It is highly recommended to use a Secret management system (e.g., Vault, External Secrets Operator)
+  # or generate these values securely during deployment.
+  # For demonstration purposes, hardcoded values are used here.
+  # In a production environment, these should be dynamically generated or retrieved.
+  POSTGRES_USER: "ltfscdpuser"
+  POSTGRES_PASSWORD: "ltfscdppassword" # Replace with a strong, unique password
+  POSTGRES_DB: "ltfscdpdb"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data-pvc
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ltfs-offer-cdp
+spec:
+  accessModes:
+    - ReadWriteOnce # This mode means the volume can be mounted as read-write by a single node.
+  resources:
+    requests:
+      storage: 10Gi # Request 10 GB of storage for the database. Adjust as per expected data volume.
+  # storageClassName: standard # Uncomment and specify if you have a specific storage class (e.g., gp2, azure-disk, standard)
+                              # If omitted, the default storage class for the cluster will be used.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-deployment
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ltfs-offer-cdp
+spec:
+  replicas: 1 # For stateful databases like PostgreSQL, typically run as a single replica unless using a HA solution (e.g., Patroni).
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:14.5 # Use a specific, stable version of PostgreSQL for production.
+          imagePullPolicy: IfNotPresent # Pull the image if it's not already present on the node.
+          ports:
+            - containerPort: 5432 # Default PostgreSQL port.
+              name: pgsql
+          envFrom:
+            - secretRef:
+                name: postgresql-credentials # Reference the Secret created above for database credentials.
+          volumeMounts:
+            - name: postgresql-data # Mount the persistent volume for database data.
+              mountPath: /var/lib/postgresql/data # Default data directory for PostgreSQL.
+          resources:
+            requests:
+              cpu: 250m # Request 0.25 CPU core.
+              memory: 512Mi # Request 512 MB of memory.
+            limits:
+              cpu: 500m # Limit to 0.5 CPU core.
+              memory: 1Gi # Limit to 1 GB of memory.
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -h
+                - localhost
+                - -U
+                - $(POSTGRES_USER) # Use the POSTGRES_USER environment variable from the secret.
+            initialDelaySeconds: 30 # Give the database time to start up.
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -h
+                - localhost
+                - -U
+                - $(POSTGRES_USER) # Use the POSTGRES_USER environment variable from the secret.
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: postgresql-data
+          persistentVolumeClaim:
+            claimName: postgresql-data-pvc # Reference the PersistentVolumeClaim created above.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-service # This name will be used by other services to connect to PostgreSQL (e.g., jdbc:postgresql://postgresql-service:5432/ltfscdpdb)
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: ltfs-offer-cdp
+spec:
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: ltfs-offer-cdp-postgresql
+  ports:
+    - protocol: TCP
+      port: 5432 # Service port
+      targetPort: 5432 # Container port
+      name: pgsql
+  type: ClusterIP # Expose the service only within the cluster, not externally.

@@ -1,0 +1,271 @@
+{
+  "schemas": [
+    {
+      "schemaName": "customer_profile",
+      "description": "Validation rules for incoming customer profile data from Offermart to CDP System.",
+      "fields": [
+        {
+          "fieldName": "customerId",
+          "rules": [
+            {"type": "required", "message": "Customer ID is required."},
+            {"type": "dataType", "value": "string", "message": "Customer ID must be a string."},
+            {"type": "pattern", "value": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$", "message": "Customer ID must be a valid UUID format."}
+          ]
+        },
+        {
+          "fieldName": "firstName",
+          "rules": [
+            {"type": "required", "message": "First name is required."},
+            {"type": "dataType", "value": "string", "message": "First name must be a string."},
+            {"type": "minLength", "value": 2, "message": "First name must be at least 2 characters long."},
+            {"type": "maxLength", "value": 50, "message": "First name cannot exceed 50 characters."}
+          ]
+        },
+        {
+          "fieldName": "lastName",
+          "rules": [
+            {"type": "required", "message": "Last name is required."},
+            {"type": "dataType", "value": "string", "message": "Last name must be a string."},
+            {"type": "minLength", "value": 2, "message": "Last name must be at least 2 characters long."},
+            {"type": "maxLength", "value": 50, "message": "Last name cannot exceed 50 characters."}
+          ]
+        },
+        {
+          "fieldName": "dateOfBirth",
+          "rules": [
+            {"type": "required", "message": "Date of Birth is required."},
+            {"type": "dataType", "value": "string", "message": "Date of Birth must be a string."},
+            {"type": "format", "value": "date-iso8601", "message": "Date of Birth must be in ISO 8601 date format (YYYY-MM-DD)."}
+          ]
+        },
+        {
+          "fieldName": "email",
+          "rules": [
+            {"type": "dataType", "value": "string", "message": "Email must be a string."},
+            {"type": "format", "value": "email", "message": "Email must be a valid email address."}
+          ]
+        },
+        {
+          "fieldName": "phoneNumber",
+          "rules": [
+            {"type": "dataType", "value": "string", "message": "Phone number must be a string."},
+            {"type": "pattern", "value": "^[6-9][0-9]{9}$", "message": "Phone number must be a 10-digit Indian mobile number."}
+          ]
+        },
+        {
+          "fieldName": "panNumber",
+          "rules": [
+            {"type": "dataType", "value": "string", "message": "PAN number must be a string."},
+            {"type": "pattern", "value": "^[A-Z]{5}[0-9]{4}[A-Z]{1}$", "message": "PAN number must be a valid 10-character PAN format."}
+          ]
+        },
+        {
+          "fieldName": "aadhaarNumber",
+          "rules": [
+            {"type": "dataType", "value": "string", "message": "Aadhaar number must be a string."},
+            {"type": "pattern", "value": "^[2-9]{1}[0-9]{3}[0-9]{4}[0-9]{4}$", "message": "Aadhaar number must be a valid 12-digit Aadhaar format."}
+          ]
+        },
+        {
+          "fieldName": "customerType",
+          "rules": [
+            {"type": "required", "message": "Customer type is required."},
+            {"type": "dataType", "value": "string", "message": "Customer type must be a string."},
+            {"type": "enum", "value": ["INDIVIDUAL", "CORPORATE"], "message": "Customer type must be either 'INDIVIDUAL' or 'CORPORATE'."}
+          ]
+        },
+        {
+          "fieldName": "addressLine1",
+          "rules": [
+            {"type": "required", "message": "Address Line 1 is required."},
+            {"type": "dataType", "value": "string", "message": "Address Line 1 must be a string."},
+            {"type": "minLength", "value": 5, "message": "Address Line 1 must be at least 5 characters long."},
+            {"type": "maxLength", "value": 100, "message": "Address Line 1 cannot exceed 100 characters."}
+          ]
+        },
+        {
+          "fieldName": "city",
+          "rules": [
+            {"type": "required", "message": "City is required."},
+            {"type": "dataType", "value": "string", "message": "City must be a string."},
+            {"type": "minLength", "value": 2, "message": "City must be at least 2 characters long."},
+            {"type": "maxLength", "value": 50, "message": "City cannot exceed 50 characters."}
+          ]
+        },
+        {
+          "fieldName": "state",
+          "rules": [
+            {"type": "required", "message": "State is required."},
+            {"type": "dataType", "value": "string", "message": "State must be a string."},
+            {"type": "minLength", "value": 2, "message": "State must be at least 2 characters long."},
+            {"type": "maxLength", "value": 50, "message": "State cannot exceed 50 characters."}
+          ]
+        },
+        {
+          "fieldName": "pincode",
+          "rules": [
+            {"type": "required", "message": "Pincode is required."},
+            {"type": "dataType", "value": "string", "message": "Pincode must be a string."},
+            {"type": "pattern", "value": "^[1-9][0-9]{5}$", "message": "Pincode must be a valid 6-digit Indian pincode."}
+          ]
+        }
+      ]
+    },
+    {
+      "schemaName": "offer_details",
+      "description": "Validation rules for incoming offer details data from Offermart to CDP System.",
+      "fields": [
+        {
+          "fieldName": "offerId",
+          "rules": [
+            {"type": "required", "message": "Offer ID is required."},
+            {"type": "dataType", "value": "string", "message": "Offer ID must be a string."},
+            {"type": "pattern", "value": "^OFFER-[0-9]{6}$", "message": "Offer ID must follow the format OFFER-XXXXXX."}
+          ]
+        },
+        {
+          "fieldName": "campaignId",
+          "rules": [
+            {"type": "required", "message": "Campaign ID is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign ID must be a string."},
+            {"type": "pattern", "value": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$", "message": "Campaign ID must be a valid UUID format."}
+          ]
+        },
+        {
+          "fieldName": "customerId",
+          "rules": [
+            {"type": "required", "message": "Customer ID is required for the offer."},
+            {"type": "dataType", "value": "string", "message": "Customer ID must be a string."},
+            {"type": "pattern", "value": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$", "message": "Customer ID must be a valid UUID format."}
+          ]
+        },
+        {
+          "fieldName": "offerType",
+          "rules": [
+            {"type": "required", "message": "Offer type is required."},
+            {"type": "dataType", "value": "string", "message": "Offer type must be a string."},
+            {"type": "enum", "value": ["TOP_UP_LOAN", "PRE_APPROVED_LOAN", "LOYALTY_LOAN", "E_AGGREGATOR_LOAN"], "message": "Invalid offer type. Must be one of: TOP_UP_LOAN, PRE_APPROVED_LOAN, LOYALTY_LOAN, E_AGGREGATOR_LOAN."}
+          ]
+        },
+        {
+          "fieldName": "loanAmount",
+          "rules": [
+            {"type": "required", "message": "Loan amount is required."},
+            {"type": "dataType", "value": "number", "message": "Loan amount must be a number."},
+            {"type": "min", "value": 10000, "message": "Loan amount must be at least 10,000."},
+            {"type": "max", "value": 5000000, "message": "Loan amount cannot exceed 5,000,000."}
+          ]
+        },
+        {
+          "fieldName": "interestRate",
+          "rules": [
+            {"type": "required", "message": "Interest rate is required."},
+            {"type": "dataType", "value": "number", "message": "Interest rate must be a number."},
+            {"type": "min", "value": 0.01, "message": "Interest rate must be greater than 0."},
+            {"type": "max", "value": 30.00, "message": "Interest rate cannot exceed 30.00."}
+          ]
+        },
+        {
+          "fieldName": "tenureMonths",
+          "rules": [
+            {"type": "required", "message": "Tenure in months is required."},
+            {"type": "dataType", "value": "integer", "message": "Tenure in months must be an integer."},
+            {"type": "min", "value": 6, "message": "Tenure must be at least 6 months."},
+            {"type": "max", "value": 60, "message": "Tenure cannot exceed 60 months."}
+          ]
+        },
+        {
+          "fieldName": "offerStartDate",
+          "rules": [
+            {"type": "required", "message": "Offer start date is required."},
+            {"type": "dataType", "value": "string", "message": "Offer start date must be a string."},
+            {"type": "format", "value": "date-iso8601", "message": "Offer start date must be in ISO 8601 date format (YYYY-MM-DD)."}
+          ]
+        },
+        {
+          "fieldName": "offerEndDate",
+          "rules": [
+            {"type": "required", "message": "Offer end date is required."},
+            {"type": "dataType", "value": "string", "message": "Offer end date must be a string."},
+            {"type": "format", "value": "date-iso8601", "message": "Offer end date must be in ISO 8601 date format (YYYY-MM-DD)."}
+            /* Note: Date comparison (e.g., offerEndDate must be after offerStartDate)
+               is typically handled by business logic within the service layer,
+               as it involves cross-field validation which is complex for static JSON rules. */
+          ]
+        },
+        {
+          "fieldName": "status",
+          "rules": [
+            {"type": "required", "message": "Offer status is required."},
+            {"type": "dataType", "value": "string", "message": "Offer status must be a string."},
+            {"type": "enum", "value": ["ACTIVE", "EXPIRED", "ACCEPTED", "REJECTED", "PENDING"], "message": "Invalid offer status. Must be one of: ACTIVE, EXPIRED, ACCEPTED, REJECTED, PENDING."}
+          ]
+        }
+      ]
+    },
+    {
+      "schemaName": "campaign_details",
+      "description": "Validation rules for incoming campaign details data from Offermart to CDP System.",
+      "fields": [
+        {
+          "fieldName": "campaignId",
+          "rules": [
+            {"type": "required", "message": "Campaign ID is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign ID must be a string."},
+            {"type": "pattern", "value": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$", "message": "Campaign ID must be a valid UUID format."}
+          ]
+        },
+        {
+          "fieldName": "campaignName",
+          "rules": [
+            {"type": "required", "message": "Campaign name is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign name must be a string."},
+            {"type": "minLength", "value": 5, "message": "Campaign name must be at least 5 characters long."},
+            {"type": "maxLength", "value": 100, "message": "Campaign name cannot exceed 100 characters."}
+          ]
+        },
+        {
+          "fieldName": "campaignType",
+          "rules": [
+            {"type": "required", "message": "Campaign type is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign type must be a string."},
+            {"type": "enum", "value": ["LOAN_PROMOTION", "CROSS_SELL", "UP_SELL", "SEASONAL", "PRODUCT_LAUNCH"], "message": "Invalid campaign type. Must be one of: LOAN_PROMOTION, CROSS_SELL, UP_SELL, SEASONAL, PRODUCT_LAUNCH."}
+          ]
+        },
+        {
+          "fieldName": "campaignStartDate",
+          "rules": [
+            {"type": "required", "message": "Campaign start date is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign start date must be a string."},
+            {"type": "format", "value": "date-iso8601", "message": "Campaign start date must be in ISO 8601 date format (YYYY-MM-DD)."}
+          ]
+        },
+        {
+          "fieldName": "campaignEndDate",
+          "rules": [
+            {"type": "required", "message": "Campaign end date is required."},
+            {"type": "dataType", "value": "string", "message": "Campaign end date must be a string."},
+            {"type": "format", "value": "date-iso8601", "message": "Campaign end date must be in ISO 8601 date format (YYYY-MM-DD)."}
+            /* Note: Date comparison (e.g., campaignEndDate must be after campaignStartDate)
+               is typically handled by business logic within the service layer,
+               as it involves cross-field validation which is complex for static JSON rules. */
+          ]
+        },
+        {
+          "fieldName": "budget",
+          "rules": [
+            {"type": "dataType", "value": "number", "message": "Budget must be a number."},
+            {"type": "min", "value": 0, "message": "Budget cannot be negative."}
+          ]
+        },
+        {
+          "fieldName": "targetAudienceDescription",
+          "rules": [
+            {"type": "dataType", "value": "string", "message": "Target audience description must be a string."},
+            {"type": "maxLength", "value": 250, "message": "Target audience description cannot exceed 250 characters."}
+          ]
+        }
+      ]
+    }
+  ]
+}

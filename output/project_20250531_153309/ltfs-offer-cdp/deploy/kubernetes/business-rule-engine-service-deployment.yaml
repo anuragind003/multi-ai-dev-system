@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: business-rule-engine-service
+  labels:
+    app: business-rule-engine-service
+    project: ltfs-offer-cdp
+spec:
+  # Scalability NFR: Start with 2 replicas for high availability and basic scaling.
+  # This can be adjusted based on load and HPA (Horizontal Pod Autoscaler) can be added later.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: business-rule-engine-service
+  template:
+    metadata:
+      labels:
+        app: business-rule-engine-service
+        project: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: business-rule-engine-service
+          # Use a specific version tag for production deployments for reproducibility and stability.
+          image: ltfs-offer-cdp/business-rule-engine-service:1.0.0
+          ports:
+            - containerPort: 8080 # Default port for Spring Boot applications
+          env:
+            # Activate 'kubernetes' profile for Spring Boot application when deployed in Kubernetes.
+            # This profile can contain Kubernetes-specific configurations (e.g., logging, health endpoints).
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL, fetched from a ConfigMap.
+            # Assumes a ConfigMap named 'ltfs-offer-cdp-config' exists with key 'postgres.url'.
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ltfs-offer-cdp-config
+                  key: postgres.url
+            # Database username, fetched from a Secret for security.
+            # Assumes a Secret named 'ltfs-offer-cdp-secrets' exists with key 'postgres.username'.
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ltfs-offer-cdp-secrets
+                  key: postgres.username
+            # Database password, fetched from a Secret for security (confidentiality NFR).
+            # Assumes a Secret named 'ltfs-offer-cdp-secrets' exists with key 'postgres.password'.
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ltfs-offer-cdp-secrets
+                  key: postgres.password
+            # Kafka bootstrap servers, essential for event-driven components.
+            # Assumes a ConfigMap named 'ltfs-offer-cdp-config' exists with key 'kafka.bootstrap-servers'.
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: ltfs-offer-cdp-config
+                  key: kafka.bootstrap-servers
+            # Add any other service-specific environment variables here.
+            # For example, specific rule engine configuration paths or feature toggles.
+            # - name: BUSINESS_RULE_ENGINE_RULES_CONFIG
+            #   value: "/app/config/rules.json"
+          resources:
+            # Define resource requests and limits to ensure performance and stability (Performance NFR).
+            # Requests are guaranteed, limits are caps.
+            requests:
+              memory: "512Mi"
+              cpu: "250m" # 0.25 CPU core
+            limits:
+              memory: "1Gi"
+              cpu: "500m" # 0.5 CPU core
+          livenessProbe:
+            # Liveness probe checks if the application is running and healthy.
+            # If it fails, Kubernetes will restart the pod.
+            httpGet:
+              path: /actuator/health/liveness # Standard Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application ample time to start up
+            periodSeconds: 10 # Check every 10 seconds
+            timeoutSeconds: 5 # Timeout after 5 seconds
+            failureThreshold: 3 # After 3 consecutive failures, restart the pod
+          readinessProbe:
+            # Readiness probe checks if the application is ready to serve traffic.
+            # If it fails, Kubernetes will stop sending traffic to this pod.
+            httpGet:
+              path: /actuator/health/readiness # Standard Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Can be shorter than liveness, as it checks readiness for traffic
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # Optional: If using a private Docker registry, uncomment and configure imagePullSecrets.
+      # imagePullSecrets:
+      #   - name: regcred
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: business-rule-engine-service
+  labels:
+    app: business-rule-engine-service
+    project: ltfs-offer-cdp
+spec:
+  # Selects pods with the label 'app: business-rule-engine-service' to route traffic to.
+  selector:
+    app: business-rule-engine-service
+  ports:
+    - protocol: TCP
+      port: 8080 # The port on which the service itself will listen
+      targetPort: 8080 # The port on the container to which the service will forward traffic
+  # ClusterIP type makes the service only reachable from within the Kubernetes cluster.
+  # This is suitable for microservices communicating internally.
+  type: ClusterIP

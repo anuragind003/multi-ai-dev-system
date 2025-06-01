@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-portal-service
+  labels:
+    app: admin-portal-service
+    project: ltfs-offer-cdp
+spec:
+  replicas: 1 # Start with 1 replica for the admin portal, scale as needed.
+  selector:
+    matchLabels:
+      app: admin-portal-service
+  template:
+    metadata:
+      labels:
+        app: admin-portal-service
+        project: ltfs-offer-cdp
+    spec:
+      # If using a private Docker registry, uncomment and configure imagePullSecrets
+      # imagePullSecrets:
+      #   - name: regcred
+      containers:
+        - name: admin-portal-service
+          image: ltfs-offer-cdp/admin-portal-service:1.0.0 # Replace with your actual image and tag
+          ports:
+            - containerPort: 8080 # Default Spring Boot port
+          env:
+            # Spring Boot profile for Kubernetes environment
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection details for PostgreSQL
+            # Assuming a PostgreSQL service named 'cdp-postgresql' in the same namespace
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://cdp-postgresql:5432/cdp_admin_portal
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: username # Key within the secret for the username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: password # Key within the secret for the password
+            # Eureka Server configuration for service discovery
+            # Assuming a Eureka server service named 'eureka-server'
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://eureka-server:8761/eureka
+            # Application-specific environment variables can be added here
+            # - name: SOME_APP_PROPERTY
+            #   value: "some_value"
+          resources:
+            requests:
+              memory: "512Mi" # Request 512 MB of memory
+              cpu: "500m"    # Request 0.5 CPU core
+            limits:
+              memory: "1024Mi" # Limit to 1 GB of memory
+              cpu: "1000m"   # Limit to 1 CPU core
+          livenessProbe: # Checks if the application is running
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe: # Checks if the application is ready to serve traffic
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 45 # Give the application time to initialize
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # Optional: Define a service account if specific RBAC permissions are needed for the pod
+      # serviceAccountName: admin-portal-service-sa
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-portal-service
+  labels:
+    app: admin-portal-service
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: admin-portal-service # Selects pods with this label
+  ports:
+    - protocol: TCP
+      port: 80 # The port the service exposes
+      targetPort: 8080 # The port the container listens on
+  type: ClusterIP # Exposes the service on a cluster-internal IP.
+                  # Use NodePort or LoadBalancer for external access if an Ingress is not used.
+                  # For an admin portal, ClusterIP is typical, with Ingress for external access.

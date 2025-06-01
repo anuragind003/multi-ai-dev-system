@@ -1,0 +1,239 @@
+package rules
+
+// Import necessary Java classes. These classes are expected to be available on the classpath
+// of the Drools KIE session where these rules are executed.
+import com.ltfs.cdp.offer.model.CustomerOffer;
+import java.time.LocalDateTime; // Included for completeness, though not directly used in these specific rules
+
+// --- Attribution Rules (BR009 - BR016) ---
+// These rules define the logic for attributing offers based on various criteria,
+// including defaults, campaign/channel/product specifics, customer segments,
+// offer status, and the impact of deduplication.
+// Salience is used to define the priority of rule execution, with higher values
+// indicating higher priority.
+
+/**
+ * BR009: Default Attribution for New Offers
+ * This rule serves as a fallback, assigning default values to attribution fields
+ * if they are not already set by more specific rules. It has the lowest salience
+ * to ensure other specific rules can override it.
+ */
+rule "BR009_DefaultAttribution"
+    salience 10 // Low salience to allow specific rules to override
+    when
+        $offer : CustomerOffer(
+            // Check if any of the core attribution fields are null or empty
+            (attributedCampaignId == null || attributedCampaignId.isEmpty()),
+            (attributedChannel == null || attributedChannel.isEmpty()),
+            (attributedProductType == null || attributedProductType.isEmpty())
+        )
+    then
+        System.out.println("Applying BR009: Default attribution for offer " + $offer.getOfferId());
+
+        // Set default campaign if not already set
+        if ($offer.getAttributedCampaignId() == null || $offer.getAttributedCampaignId().isEmpty()) {
+            $offer.setAttributedCampaignId("DEFAULT_CAMPAIGN");
+        }
+        // Set default channel if not already set
+        if ($offer.getAttributedChannel() == null || $offer.getAttributedChannel().isEmpty()) {
+            $offer.setAttributedChannel("DEFAULT_CHANNEL");
+        }
+        // Set default product type if not already set
+        if ($offer.getAttributedProductType() == null || $offer.getAttributedProductType().isEmpty()) {
+            $offer.setAttributedProductType("DEFAULT_PRODUCT");
+        }
+        // Update attribution reason
+        $offer.setAttributionReason("Default attribution applied.");
+        update($offer); // Inform Drools that the fact has been modified
+end
+
+/**
+ * BR010: Campaign-Based Attribution
+ * Attributes an offer to its original campaign ID if available.
+ * This rule has a higher salience than the default rule.
+ */
+rule "BR010_CampaignBasedAttribution"
+    salience 50 // Higher salience than default, but lower than specific overrides
+    when
+        $offer : CustomerOffer(
+            // Check if an original campaign ID exists and is not already attributed
+            campaignId != null && !campaignId.isEmpty(),
+            attributedCampaignId != campaignId
+        )
+    then
+        System.out.println("Applying BR010: Campaign-based attribution for offer " + $offer.getOfferId() + " to campaign " + $offer.getCampaignId());
+        $offer.setAttributedCampaignId($offer.getCampaignId());
+        $offer.setAttributionReason("Attributed by original campaign ID: " + $offer.getCampaignId());
+        update($offer);
+end
+
+/**
+ * BR011: Channel-Based Attribution
+ * Attributes an offer to its original channel if available.
+ * Priority is slightly lower than campaign-based but higher than default.
+ */
+rule "BR011_ChannelBasedAttribution"
+    salience 45 // Slightly lower than campaign, but higher than default
+    when
+        $offer : CustomerOffer(
+            // Check if an original channel exists and is not already attributed
+            channel != null && !channel.isEmpty(),
+            attributedChannel != channel
+        )
+    then
+        System.out.println("Applying BR011: Channel-based attribution for offer " + $offer.getOfferId() + " to channel " + $offer.getChannel());
+        $offer.setAttributedChannel($offer.getChannel());
+        $offer.setAttributionReason("Attributed by original channel: " + $offer.getChannel());
+        update($offer);
+end
+
+/**
+ * BR012: Product-Type Attribution
+ * Attributes an offer based on its product type.
+ * Priority is slightly lower than channel-based but higher than default.
+ */
+rule "BR012_ProductTypeAttribution"
+    salience 40 // Slightly lower than channel, but higher than default
+    when
+        $offer : CustomerOffer(
+            // Check if an original product type exists and is not already attributed
+            productType != null && !productType.isEmpty(),
+            attributedProductType != productType
+        )
+    then
+        System.out.println("Applying BR012: Product type attribution for offer " + $offer.getOfferId() + " to product type " + $offer.getProductType());
+        $offer.setAttributedProductType($offer.getProductType());
+        $offer.setAttributionReason("Attributed by original product type: " + $offer.getProductType());
+        update($offer);
+end
+
+/**
+ * BR013: Customer Segment Specific Attribution (Example: High-Value Preapproved)
+ * This rule demonstrates a more specific attribution based on customer segment
+ * and product type, potentially overriding general campaign/product attributions.
+ * It has a higher salience due to its specificity.
+ */
+rule "BR013_CustomerSegmentSpecificAttribution"
+    salience 60 // Higher salience, as it's a more specific business rule
+    when
+        $offer : CustomerOffer(
+            customerSegment == "HIGH_VALUE", // Assumes CustomerOffer has a customerSegment field
+            productType == "PREAPPROVED",
+            attributedCampaignId != "HIGH_VALUE_PREAPPROVED_CAMPAIGN" // Avoid re-attribution
+        )
+    then
+        System.out.println("Applying BR013: Customer segment specific attribution for offer " + $offer.getOfferId());
+        $offer.setAttributedCampaignId("HIGH_VALUE_PREAPPROVED_CAMPAIGN");
+        $offer.setAttributionReason("Attributed to High-Value Preapproved Campaign based on customer segment and product type.");
+        update($offer);
+end
+
+/**
+ * BR014: Offer Status-Based Attribution Adjustment
+ * These rules adjust the attribution reason based on the offer's current status.
+ * They have a lower salience as they are typically adjustments to existing attribution.
+ */
+rule "BR014_OfferStatusAttributionAdjustment_Accepted"
+    salience 30 // Lower salience, as it's an adjustment
+    when
+        $offer : CustomerOffer(
+            status == "ACCEPTED",
+            attributionReason != null && !attributionReason.contains("Offer Accepted") // Prevent duplicate reason
+        )
+    then
+        System.out.println("Applying BR014: Status-based attribution adjustment for offer " + $offer.getOfferId() + " (Accepted)");
+        $offer.setAttributionReason($offer.getAttributionReason() + " | Offer Accepted.");
+        update($offer);
+end
+
+rule "BR014_OfferStatusAttributionAdjustment_Rejected"
+    salience 30
+    when
+        $offer : CustomerOffer(
+            status == "REJECTED",
+            attributionReason != null && !attributionReason.contains("Offer Rejected")
+        )
+    then
+        System.out.println("Applying BR014: Status-based attribution adjustment for offer " + $offer.getOfferId() + " (Rejected)");
+        $offer.setAttributionReason($offer.getAttributionReason() + " | Offer Rejected.");
+        update($offer);
+end
+
+rule "BR014_OfferStatusAttributionAdjustment_Expired"
+    salience 30
+    when
+        $offer : CustomerOffer(
+            status == "EXPIRED",
+            attributionReason != null && !attributionReason.contains("Offer Expired")
+        )
+    then
+        System.out.println("Applying BR014: Status-based attribution adjustment for offer " + $offer.getOfferId() + " (Expired)");
+        $offer.setAttributionReason($offer.getAttributionReason() + " | Offer Expired.");
+        update($offer);
+end
+
+/**
+ * BR015: Deduplication Impact on Attribution
+ * If an offer has been marked as deduped (by a prior deduplication process),
+ * this rule updates its attribution reason to reflect this critical status.
+ * This rule has a high salience as deduplication is a significant event.
+ */
+rule "BR015_DeduplicationImpactAttribution"
+    salience 70 // High salience, as deduplication is a critical process
+    when
+        $offer : CustomerOffer(
+            isDeduped == true, // Assumes a boolean 'isDeduped' field
+            attributionReason != null && !attributionReason.contains("Deduplicated")
+        )
+    then
+        System.out.println("Applying BR015: Deduplication impact on attribution for offer " + $offer.getOfferId());
+        $offer.setAttributionReason($offer.getAttributionReason() + " | Deduplicated.");
+        // Optionally, if a deduped offer should be moved to a specific campaign or channel,
+        // that logic can be added here. For example:
+        // $offer.setAttributedCampaignId("DEDUPED_OFFER_CAMPAIGN");
+        update($offer);
+end
+
+/**
+ * BR016: Priority-Based Attribution - Top-up Loan Specific Logic
+ * This rule addresses the specific requirement for Top-up loan offers,
+ * which often have unique processing and deduplication rules.
+ * It has a very high salience to ensure its logic takes precedence.
+ */
+rule "BR016_TopUpLoanSpecificAttribution"
+    salience 80 // Very high salience for specific Top-up logic
+    when
+        $offer : CustomerOffer(
+            productType == "TOP_UP_LOAN", // Assumes "TOP_UP_LOAN" as a specific product type
+            attributedProductType != "TOP_UP_LOAN_SPECIAL" // Avoid re-attribution
+        )
+    then
+        System.out.println("Applying BR016: Top-up loan specific attribution for offer " + $offer.getOfferId());
+        $offer.setAttributedProductType("TOP_UP_LOAN_SPECIAL");
+        $offer.setAttributionReason("Attributed as a special Top-up Loan offer.");
+        update($offer);
+end
+
+/**
+ * BR016 (Continued): Top-up Loan Deduplication Specific Attribution
+ * This rule handles the specific case where a Top-up loan offer has been deduped.
+ * It has the highest salience to ensure this critical state is reflected in attribution.
+ * This aligns with the requirement: "Top-up loan offers must be deduped only within other Top-up offers,
+ * and matches found should be remo". While the 'remo' part implies removal, this rule focuses on attribution
+ * if the offer is still processed.
+ */
+rule "BR016_TopUpLoanDeduplicationAttribution"
+    salience 85 // Even higher salience for deduped Top-up offers
+    when
+        $offer : CustomerOffer(
+            productType == "TOP_UP_LOAN",
+            isDeduped == true,
+            attributionReason != null && !attributionReason.contains("Top-up Deduplicated")
+        )
+    then
+        System.out.println("Applying BR016: Top-up loan deduplication impact on attribution for offer " + $offer.getOfferId());
+        // Example: If a deduped Top-up offer needs to be attributed to a specific campaign
+        $offer.setAttributedCampaignId("TOP_UP_DEDUPED_CAMPAIGN");
+        $offer.setAttributionReason($offer.getAttributionReason() + " | Top-up Deduplicated.");
+        update($offer);
+end

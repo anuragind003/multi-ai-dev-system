@@ -1,0 +1,79 @@
+server:
+  port: 8082 # Default port for the Business Rule Engine service
+
+spring:
+  application:
+    name: business-rule-engine-service # Name of the Spring Boot application
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ltfs_offer_cdp_bre} # PostgreSQL database URL, using environment variables with defaults
+    username: ${DB_USERNAME:ltfs_user} # Database username, using environment variable with default
+    password: ${DB_PASSWORD:ltfs_password} # Database password, using environment variable with default
+    driver-class-name: org.postgresql.Driver # JDBC driver for PostgreSQL
+    hikari: # HikariCP connection pool configuration
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 2 # Minimum number of idle connections in the pool.
+      idle-timeout: 600000 # Maximum amount of time a connection can sit idle in the pool (10 minutes).
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool (30 minutes).
+      pool-name: BusinessRuleEngineServiceHikariPool # Name of the connection pool
+  jpa: # JPA (Java Persistence API) configuration, typically used with Hibernate
+    hibernate:
+      ddl-auto: none # 'none' is recommended for production to prevent schema changes. Use 'update' or 'create-drop' for development.
+    show-sql: false # Set to true to log SQL statements to the console (useful for debugging, but disable in production)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+        format_sql: false # Set to true to format SQL statements nicely in logs
+  kafka: # Kafka configuration for event-driven communication
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} # Kafka broker addresses, using environment variable with default
+    consumer:
+      group-id: business-rule-engine-group # Consumer group ID for this service
+      auto-offset-reset: earliest # Start consuming from the earliest available offset if no committed offset is found
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (JSON)
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.bre.model.*, com.ltfs.cdp.bre.event.*" # Specify trusted packages for JSON deserialization to prevent security issues
+        spring.json.value.default.type: com.ltfs.cdp.bre.event.CustomerOfferEvent # Default target type for JSON deserialization if no type information is present in headers
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (JSON)
+      acks: all # Producer will wait for all in-sync replicas to acknowledge the write
+      retries: 3 # Number of times the producer will retry sending a message
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers to outgoing JSON messages (can be enabled if consumer needs it)
+
+# Custom properties specific to the Business Rule Engine service
+bre:
+  rules:
+    # Location where business rules are defined or loaded from.
+    # This could be a file path (e.g., for Drools DRL files), a URL to a rule management service, or a configuration for a database-backed rule store.
+    location: classpath:/rules/deduplication-rules.drl # Example: Path to a Drools DRL file for deduplication rules
+    deduplication-threshold: 0.8 # Example: A similarity score threshold for applying deduplication logic (e.g., 0.8 means 80% similarity)
+    validation-schema-path: classpath:/schemas/offer-validation-schema.json # Example: Path to a JSON schema for column-level validation
+  topics: # Kafka topics used by this service
+    input-customer-offer-raw-topic: ltfs.cdp.customer.offer.raw # Topic for consuming raw customer offer data
+    output-offer-deduped-topic: ltfs.cdp.offer.deduped # Topic for publishing deduped offer data
+    output-offer-validated-topic: ltfs.cdp.offer.validated # Topic for publishing validated offer data
+    output-offer-rejected-topic: ltfs.cdp.offer.rejected # Topic for publishing rejected offer data (e.g., due to validation failures)
+    output-customer-profile-update-topic: ltfs.cdp.customer.profile.update # Topic for publishing customer profile updates after deduplication
+
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    com.ltfs.cdp.bre: DEBUG # Specific logging level for the application's package (e.g., for more detailed logs during development)
+    org.springframework.web: INFO # Logging level for Spring Web components
+    org.hibernate: INFO # Logging level for Hibernate
+    org.apache.kafka: INFO # Logging level for Kafka client libraries
+
+management: # Spring Boot Actuator configuration for monitoring and management
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics # Expose common Actuator endpoints over HTTP
+  endpoint:
+    health:
+      show-details: always # Always show full health details (useful for monitoring systems)
+    prometheus:
+      enabled: true # Enable the Prometheus endpoint for scraping metrics
+    metrics:
+      enabled: true # Enable the metrics endpoint

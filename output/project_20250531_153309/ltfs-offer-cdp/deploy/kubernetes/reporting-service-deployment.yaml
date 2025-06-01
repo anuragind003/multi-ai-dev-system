@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reporting-service-deployment
+  labels:
+    app: reporting-service
+    tier: backend
+    project: ltfs-offer-cdp
+spec:
+  # Define the number of desired replicas for high availability and scalability.
+  # Adjust based on expected load and performance requirements.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: reporting-service
+  template:
+    metadata:
+      labels:
+        app: reporting-service
+        tier: backend
+        project: ltfs-offer-cdp
+    spec:
+      # Uncomment and configure if using a private Docker registry for image pulling.
+      # imagePullSecrets:
+      #   - name: regcred # Name of the Kubernetes Secret containing registry credentials
+      containers:
+        - name: reporting-service
+          # Specify the Docker image for the Reporting Service.
+          # It's highly recommended to use a specific version tag (e.g., 1.0.0) in production.
+          image: ltfs-offer-cdp/reporting-service:1.0.0
+          # Define the image pull policy.
+          # IfNotPresent: Pulls the image only if it's not already present on the node.
+          # Always: Always pulls the image, useful during development or for ensuring latest updates.
+          imagePullPolicy: IfNotPresent
+          ports:
+            # Expose the port on which the Spring Boot application listens.
+            - containerPort: 8080
+          env:
+            # Activate a specific Spring profile for the Kubernetes environment.
+            # This allows environment-specific configurations (e.g., logging, database).
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection URL for PostgreSQL.
+            # Assumes 'postgresql-service' is the Kubernetes Service name for the PostgreSQL database.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_reporting_db
+            # Retrieve database username from a Kubernetes Secret for security.
+            # 'cdp-db-credentials' should be a Secret containing 'username' and 'password' keys.
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials
+                  key: username
+            # Retrieve database password from a Kubernetes Secret for security.
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials
+                  key: password
+            # Kafka bootstrap servers for event-driven communication.
+            # Assumes 'kafka-broker-service' is the Kubernetes Service name for Kafka.
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka-broker-service:9092
+            # Add any other necessary environment variables for the application configuration.
+            # - name: SOME_OTHER_CONFIG_KEY
+            #   value: "some-value"
+          resources:
+            # Define resource requests and limits for the container.
+            # Requests ensure the scheduler allocates sufficient resources.
+            # Limits prevent the container from consuming excessive resources, ensuring stability.
+            requests:
+              memory: "512Mi" # Request 512 MiB of memory
+              cpu: "500m"    # Request 0.5 CPU core (500 milliCPU)
+            limits:
+              memory: "1024Mi" # Limit to 1 GiB of memory
+              cpu: "1000m"   # Limit to 1 CPU core (1000 milliCPU)
+          livenessProbe:
+            # Liveness probe checks if the application is running. If it fails, Kubernetes restarts the container.
+            # Uses Spring Boot Actuator's liveness endpoint.
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60 # Time to wait before the first probe check (allows app to start)
+            periodSeconds: 10     # How often to perform the probe (every 10 seconds)
+            timeoutSeconds: 5     # How long to wait for a response before the probe times out
+            failureThreshold: 3   # Number of consecutive failures before Kubernetes restarts the container
+          readinessProbe:
+            # Readiness probe checks if the application is ready to serve traffic.
+            # If it fails, Kubernetes stops sending traffic to this pod.
+            # Uses Spring Boot Actuator's readiness endpoint.
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 45 # Time to wait before the first probe check (allows app to initialize dependencies)
+            periodSeconds: 10     # How often to perform the probe
+            timeoutSeconds: 5     # How long to wait for a response
+            failureThreshold: 3   # Number of consecutive failures before Kubernetes marks the pod as unready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reporting-service # Name of the Kubernetes Service
+  labels:
+    app: reporting-service
+    tier: backend
+    project: ltfs-offer-cdp
+spec:
+  # Selects pods with the label 'app: reporting-service' to route traffic to.
+  selector:
+    app: reporting-service
+  ports:
+    - protocol: TCP
+      port: 8080       # The port on which this service will be exposed within the cluster.
+      targetPort: 8080 # The port on the container that the service will forward traffic to.
+  # ClusterIP exposes the service on an internal IP in the cluster.
+  # This type is suitable for internal microservice communication.
+  # Use LoadBalancer if external access is required (e.g., via a cloud provider's load balancer).
+  type: ClusterIP

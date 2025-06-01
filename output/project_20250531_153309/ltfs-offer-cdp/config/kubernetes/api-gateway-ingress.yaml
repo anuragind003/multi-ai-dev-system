@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ltfs-offer-cdp-api-gateway-ingress
+  namespace: ltfs-offer-cdp # Assuming a dedicated namespace for the LTFS Offer CDP project
+  annotations:
+    # Specify the Ingress controller to use (e.g., nginx)
+    kubernetes.io/ingress.class: nginx
+    # Rewrite target to root path, common for API Gateways that handle internal routing
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Enforce HTTPS redirection for all incoming HTTP requests
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Annotations for cert-manager to automatically provision TLS certificates
+    # Replace 'letsencrypt-prod' with your actual ClusterIssuer or Issuer name
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Optional: If you need to increase the body size limit for file uploads or large requests
+    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Optional: Set connection timeouts
+    # nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  # Define TLS settings for secure communication (HTTPS)
+  tls:
+    # List of hostnames that this TLS certificate will cover
+    # IMPORTANT: Replace 'api.ltfs-offer-cdp.example.com' with your actual domain name
+    - hosts:
+        - api.ltfs-offer-cdp.example.com
+      # The name of the Kubernetes Secret that will store the TLS certificate and key.
+      # cert-manager will create/update this secret.
+      secretName: ltfs-offer-cdp-api-gateway-tls
+  rules:
+    # Define the host for which these rules apply
+    # IMPORTANT: This must match one of the hosts defined in the 'tls' section
+    - host: api.ltfs-offer-cdp.example.com
+      http:
+        paths:
+          # Define the path rule for routing traffic
+          - path: / # Route all traffic from the root path
+            pathType: Prefix # Matches any URL path that begins with the specified path
+            backend:
+              service:
+                # Name of the Kubernetes Service that exposes the API Gateway application
+                name: ltfs-offer-cdp-api-gateway-service
+                # Port on the service to which traffic should be forwarded
+                # This should be the port your Spring Boot API Gateway application listens on (e.g., 8080)
+                port:
+                  number: 8080 # Default Spring Boot port, adjust if different

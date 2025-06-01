@@ -1,0 +1,111 @@
+# Kubernetes Deployment for the LTFS Offer CDP API Gateway
+# This manifest defines the deployment of the API Gateway microservice,
+# which acts as the entry point for all external requests to the LTFS Offer CDP system.
+# It ensures high availability and proper resource allocation for the gateway.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-deployment
+  labels:
+    app: api-gateway
+    project: ltfs-offer-cdp
+    tier: gateway
+spec:
+  replicas: 2 # Specifies the desired number of identical pods.
+              # Running multiple replicas ensures high availability and load distribution.
+  selector:
+    matchLabels:
+      app: api-gateway # This selector links the deployment to the pods it manages,
+                       # based on the 'app: api-gateway' label.
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        project: ltfs-offer-cdp
+        tier: gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: ltfs-offer-cdp/api-gateway:1.0.0 # The Docker image for the API Gateway application.
+                                                  # Replace '1.0.0' with the actual version tag of your built image.
+          imagePullPolicy: Always # Determines when to pull the image. 'Always' ensures the latest image
+                                  # is pulled on every pod creation, useful during development/updates.
+                                  # For stable production, 'IfNotPresent' with specific tags is often preferred.
+          ports:
+            - containerPort: 8080 # The port on which the Spring Boot API Gateway application listens inside the container.
+                                  # This must match the 'server.port' configuration in the Spring Boot application.
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes # Activates Spring profiles specific to the Kubernetes environment.
+                                # This can be used to load different configurations (e.g., logging, database, service discovery)
+                                # when running inside Kubernetes.
+            # Example of how to pass other environment variables, e.g., for a configuration server:
+            # - name: SPRING_CLOUD_CONFIG_URI
+            #   value: http://config-server-service:8888 # Assuming a config server service named 'config-server-service'
+            # For Kubernetes native service discovery, explicit service URLs are often not needed
+            # as Kubernetes DNS handles service name resolution.
+          resources:
+            requests:
+              memory: "512Mi" # Minimum memory requested by the container. Kubernetes will schedule pods
+                              # on nodes that can satisfy this request.
+              cpu: "500m"    # Minimum CPU requested (500m = 0.5 CPU core).
+            limits:
+              memory: "1024Mi" # Maximum memory the container is allowed to use. If it exceeds this,
+                               # the container will be OOMKilled (Out Of Memory Killed).
+              cpu: "1000m"   # Maximum CPU the container is allowed to use (1000m = 1 CPU core).
+                             # If it exceeds this, its CPU usage will be throttled.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness # Path to the Spring Boot Actuator liveness endpoint.
+                                              # Kubernetes uses this to determine if the application is running.
+              port: 8080
+            initialDelaySeconds: 30 # Number of seconds after the container has started before liveness probes are initiated.
+            periodSeconds: 10       # How often (in seconds) to perform the probe.
+            timeoutSeconds: 5       # Number of seconds after which the probe times out.
+            failureThreshold: 3     # Minimum consecutive failures for the probe to be considered failed.
+                                    # If failed, Kubernetes will restart the container.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness # Path to the Spring Boot Actuator readiness endpoint.
+                                               # Kubernetes uses this to determine if the application is ready to serve traffic.
+              port: 8080
+            initialDelaySeconds: 20 # Number of seconds after the container has started before readiness probes are initiated.
+            periodSeconds: 10       # How often (in seconds) to perform the probe.
+            timeoutSeconds: 5       # Number of seconds after which the probe times out.
+            failureThreshold: 3     # Minimum consecutive failures for the probe to be considered failed.
+                                    # If failed, Kubernetes will stop sending traffic to this pod.
+      # Optional: If your Docker image is in a private registry, uncomment and configure imagePullSecrets
+      # imagePullSecrets:
+      #   - name: regcred # Replace 'regcred' with the name of your image pull secret
+
+---
+
+# Kubernetes Service for the LTFS Offer CDP API Gateway
+# This manifest defines a Kubernetes Service that exposes the API Gateway Deployment.
+# A Service provides a stable IP address and DNS name for a set of pods,
+# enabling other microservices within the cluster to communicate with the API Gateway.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-service # The name of the Kubernetes Service.
+  labels:
+    app: api-gateway
+    project: ltfs-offer-cdp
+    tier: gateway
+spec:
+  selector:
+    app: api-gateway # This selector matches the 'app: api-gateway' label on the pods,
+                     # directing traffic to the pods managed by the 'api-gateway-deployment'.
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which this service will be exposed within the Kubernetes cluster.
+               # Other services will use this port to communicate with the API Gateway.
+      targetPort: 8080 # The port on the container (inside the pod) that the service will forward traffic to.
+                       # This must match the 'containerPort' defined in the Deployment.
+  type: ClusterIP # Specifies the type of service.
+                  # 'ClusterIP' makes the service only reachable from within the cluster.
+                  # This is suitable when an Ingress controller (like Nginx Ingress, Traefik)
+                  # is used to expose the API Gateway externally.
+                  # If you want a cloud provider to provision an external load balancer directly,
+                  # change this to 'LoadBalancer'.
+                  # type: LoadBalancer

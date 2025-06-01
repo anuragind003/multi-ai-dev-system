@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Parent POM for Spring Boot applications.
+        Provides dependency management and plugin configuration for Spring Boot projects.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version> <!-- Using a recent stable Spring Boot 3.x version -->
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <!-- Project Coordinates -->
+    <groupId>com.ltfs.cdp.offer</groupId>
+    <artifactId>business-rule-engine-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>business-rule-engine-service</name>
+    <description>Business Rule Engine Service for LTFS Offer CDP, handling validation and deduplication logic.</description>
+
+    <!-- Project Properties -->
+    <properties>
+        <java.version>17</java.version> <!-- Standard Java LTS version for Spring Boot 3.x -->
+        <spring-cloud.version>2023.0.1</spring-cloud.version> <!-- For Spring Cloud components if used (e.g., Eureka, Config Server) -->
+    </properties>
+
+    <!-- Project Dependencies -->
+    <dependencies>
+        <!-- Spring Boot Web Starter: Provides embedded Tomcat and Spring MVC for building RESTful APIs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Data JPA Starter: Provides Spring Data JPA and Hibernate for database interaction.
+             Essential for deduplication against 'live book' (Customer 360). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Validation Starter: Provides Bean Validation API and Hibernate Validator implementation.
+             Crucial for "basic column-level validation on data". -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Actuator: Provides production-ready features like monitoring, metrics, and health checks. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Spring Kafka: Provides abstractions for Apache Kafka, enabling event-driven communication.
+             Required for "Event-Driven Components" in the microservices architecture. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL JDBC Driver: Database connectivity for PostgreSQL. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope> <!-- Runtime scope as it's only needed at runtime -->
+        </dependency>
+
+        <!-- Lombok: A library that helps reduce boilerplate code (e.g., getters, setters, constructors). -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional> <!-- Optional dependency, not transitive -->
+        </dependency>
+
+        <!-- Spring Boot Test Starter: Provides utilities for testing Spring Boot applications. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope> <!-- Test scope, only available during testing -->
+        </dependency>
+
+        <!-- Spring Kafka Test: Provides utilities for testing Kafka-based applications. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope> <!-- Test scope -->
+        </dependency>
+    </dependencies>
+
+    <!--
+        Dependency Management for Spring Cloud.
+        This section imports the Spring Cloud BOM (Bill of Materials) to ensure consistent versions
+        of Spring Cloud components if they are used in the project (e.g., Service Discovery, Config Server).
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Build Configuration -->
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin: Used to package the application into an executable JAR. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Exclude Lombok from the final JAR to avoid potential issues if not needed at runtime. -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,98 @@
+# Kubernetes Deployment for the API Gateway service
+# This defines how the API Gateway application will be deployed and managed within the Kubernetes cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-deployment # Unique name for the deployment
+  labels:
+    app: api-gateway          # Standard label for identifying the application
+    project: ltfs-offer-cdp   # Project-specific label for organization
+spec:
+  replicas: 2 # Number of desired replicas (pods) for high availability and load balancing
+  selector:
+    matchLabels:
+      app: api-gateway # Selector to identify which pods belong to this deployment
+  template:
+    metadata:
+      labels:
+        app: api-gateway          # Labels applied to the pods created by this deployment
+        project: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: api-gateway # Name of the container within the pod
+          image: ltfs-offer-cdp/api-gateway:1.0.0 # Docker image for the API Gateway.
+                                                  # IMPORTANT: Replace with your actual image name and tag.
+          ports:
+            - containerPort: 8080 # The port on which the Spring Boot application inside the container listens
+          env:
+            # Environment variables passed to the Spring Boot application.
+            # These are crucial for configuring the application in the Kubernetes environment.
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              # Points to the Eureka server service. Assuming Eureka is deployed as a service named 'eureka-server-service'
+              # within the same Kubernetes cluster, listening on port 8761.
+              value: http://eureka-server-service:8761/eureka
+            - name: SPRING_PROFILES_ACTIVE
+              # Activates a specific Spring profile (e.g., 'prod', 'kubernetes', 'dev')
+              # to load environment-specific configurations.
+              value: prod
+            # Add other necessary environment variables here, e.g., for database connection (if any direct DB access),
+            # security configurations, external service URLs, etc.
+          resources:
+            # Resource requests and limits for the container.
+            # These help Kubernetes schedule pods efficiently and prevent resource starvation or hogging.
+            requests:
+              memory: "512Mi" # Request 512 Megabytes of memory
+              cpu: "500m"     # Request 0.5 CPU core (500 milliCPU)
+            limits:
+              memory: "1024Mi" # Limit to 1 Gigabyte of memory
+              cpu: "1000m"    # Limit to 1 CPU core
+          livenessProbe:
+            # Defines a liveness probe to check if the application is running.
+            # If the probe fails, Kubernetes will restart the container.
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator endpoint for liveness checks
+              port: 8080
+            initialDelaySeconds: 60 # Initial delay before the first probe is performed (gives app time to start)
+            periodSeconds: 10       # How often (in seconds) to perform the probe
+            timeoutSeconds: 5       # Number of seconds after which the probe times out
+            failureThreshold: 3     # Number of consecutive failures before Kubernetes restarts the container
+          readinessProbe:
+            # Defines a readiness probe to check if the application is ready to serve traffic.
+            # If the probe fails, Kubernetes will stop sending traffic to this pod.
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator endpoint for readiness checks
+              port: 8080
+            initialDelaySeconds: 30 # Initial delay before the first probe
+            periodSeconds: 10       # How often to perform the probe
+            timeoutSeconds: 5       # Probe timeout
+            failureThreshold: 3     # Number of consecutive failures before marking the pod as unready
+      # imagePullSecrets: # Uncomment and configure if pulling images from a private Docker registry
+      #   - name: regcred # Replace 'regcred' with the name of your image pull secret
+
+---
+
+# Kubernetes Service for the API Gateway
+# This defines how to access the API Gateway application within and outside the Kubernetes cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-service # Unique name for the service
+  labels:
+    app: api-gateway          # Standard label for identifying the application
+    project: ltfs-offer-cdp   # Project-specific label for organization
+spec:
+  selector:
+    app: api-gateway # Selects pods with the label 'app: api-gateway' to route traffic to
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which this service will be exposed (e.g., external access port)
+      targetPort: 8080 # The port on the container to which the service will forward traffic
+      name: http # A descriptive name for the port
+  type: LoadBalancer # Exposes the service externally using a cloud provider's load balancer.
+                     # This will provision an external IP address that can be used to access the API Gateway.
+                     #
+                     # Alternatives:
+                     # - ClusterIP: Default type, exposes the service only within the cluster.
+                     #              Often used in conjunction with an Ingress controller for external access.
+                     # - NodePort: Exposes the service on a static port on each Node's IP.
+                     #             Useful in bare-metal environments where a cloud load balancer is not available.

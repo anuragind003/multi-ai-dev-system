@@ -1,0 +1,89 @@
+server:
+  port: 8080 # Default port for the Customer Service microservice
+
+spring:
+  application:
+    name: customer-service # Unique name for this Spring Boot application
+
+  # Database Configuration for PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customer_db # JDBC URL for the PostgreSQL database.
+                                                     # In production, consider using environment variables or Spring Cloud Config for this.
+    username: customer_user # Database username.
+    password: customer_password # Database password.
+    driver-class-name: org.postgresql.Driver # Specifies the PostgreSQL JDBC driver.
+    hikari: # HikariCP connection pool configuration for optimal performance.
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 5 # Minimum number of idle connections to maintain.
+      idle-timeout: 30000 # Maximum idle time for a connection in the pool (milliseconds).
+      connection-timeout: 20000 # Maximum wait time for a connection from the pool (milliseconds).
+
+  # JPA (Java Persistence API) and Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update # Controls schema generation.
+                       # 'update': updates the schema based on entities (useful for development).
+                       # 'none' or 'validate': recommended for production to prevent accidental schema changes.
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl # Standard naming strategy for database objects.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL.
+        format_sql: true # Formats SQL statements in logs for readability (set to false in production).
+        show_sql: true # Shows SQL statements in logs (set to false in production for performance/security).
+
+  # Kafka Configuration for Event-Driven Architecture
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses.
+                                      # In production, use a highly available Kafka cluster address.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON format).
+      properties:
+        spring.json.add.type.headers: false # Prevents Spring Kafka from adding type headers to JSON messages, simplifying deserialization.
+    consumer:
+      group-id: customer-service-group # Unique identifier for the consumer group.
+      auto-offset-reset: earliest # Determines where to start consuming if no offset is found for the consumer group.
+                                  # 'earliest': start from the beginning of the topic.
+                                  # 'latest': start from the latest offset.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON format).
+      properties:
+        # Specifies the default target type for JSON deserialization when no type information is present in headers.
+        # Replace with the actual package and class name of your Customer event DTO/model.
+        spring.json.value.default.type: com.ltfs.cdp.customerservice.model.event.CustomerEvent
+
+# Spring Boot Actuator Configuration for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus # Exposes common Actuator endpoints over HTTP.
+                                         # 'health': application health status.
+                                         # 'info': general application information.
+                                         # 'prometheus': metrics in Prometheus format for scraping.
+  endpoint:
+    health:
+      show-details: always # Always show full health details, including database and Kafka connection status.
+
+# Custom properties specific to the Customer Service
+customer-service:
+  deduplication:
+    enabled: true # Flag to enable or disable the customer deduplication logic.
+    strategy: fuzzy-matching # Defines the deduplication strategy (e.g., 'exact-match', 'fuzzy-matching').
+    threshold: 0.8 # Similarity threshold for fuzzy matching (e.g., 0.0 to 1.0).
+  validation:
+    enabled: true # Flag to enable or disable basic column-level data validation.
+    rules-config-path: classpath:validation-rules.json # Path to a configuration file defining validation rules.
+
+# Logging Configuration
+logging:
+  level:
+    com.ltfs.cdp.customerservice: DEBUG # Sets the logging level for the application's base package to DEBUG.
+    org.springframework.web: INFO # Sets the logging level for Spring Web components to INFO.
+    org.hibernate: INFO # Sets the logging level for Hibernate to INFO.
+    org.apache.kafka: INFO # Sets the logging level for Kafka client to INFO.
+  file:
+    name: logs/customer-service.log # Specifies the log file path and name.
+    max-size: 10MB # Maximum size of the log file before rotation.
+    max-history: 7 # Number of archived log files to keep.

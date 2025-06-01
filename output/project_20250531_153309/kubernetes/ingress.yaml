@@ -1,0 +1,50 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ltfs-cdp-ingress
+  annotations:
+    # Specify the Ingress class if multiple controllers are present in the cluster.
+    # For NGINX Ingress Controller, this annotation ensures it's picked up.
+    kubernetes.io/ingress.class: nginx
+    # Enforce HTTPS redirection for all HTTP traffic.
+    # Any request coming in on HTTP will be automatically redirected to HTTPS.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Set a default timeout for proxy reads (time to receive a response from the backend service).
+    # Adjust this value based on the expected maximum response time of your API Gateway.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300" # 5 minutes
+    # Set a default timeout for proxy sends (time to send a request to the backend service).
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300" # 5 minutes
+    # Configure the buffer size for client request bodies. Useful for larger payloads.
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "10m" # 10 megabytes
+    # Set the maximum allowed size of the client request body.
+    # This prevents large, potentially malicious, requests from consuming resources.
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m" # 10 megabytes
+spec:
+  # Define the Ingress class name explicitly. This is required for Kubernetes 1.18+
+  # and ensures the correct Ingress controller processes this resource.
+  ingressClassName: nginx
+  # Configure TLS for secure communication (HTTPS).
+  # This section specifies the hostname(s) for which TLS is enabled and the Kubernetes Secret
+  # that contains the TLS certificate and private key.
+  tls:
+    - hosts:
+        - cdp.ltfs.com # Replace with your actual domain name for the CDP system.
+      secretName: ltfs-cdp-tls-secret # Name of the Kubernetes Secret holding the TLS certificate and key.
+                                      # This secret must exist in the same namespace as the Ingress.
+  # Define routing rules for incoming traffic.
+  rules:
+    - host: cdp.ltfs.com # The hostname that this Ingress rule applies to.
+                         # Requests to this host will be routed according to the paths defined below.
+      http:
+        paths:
+          - path: / # Route all traffic for the specified host to the backend service.
+                    # This means any path (e.g., /customers, /offers) will be forwarded.
+            pathType: Prefix # Matches any URL path that begins with the specified path.
+                             # For '/', this effectively matches all paths.
+            backend:
+              service:
+                name: api-gateway-service # Name of the Kubernetes Service that exposes the API Gateway.
+                                          # This service must exist in the same namespace.
+                port:
+                  number: 8080 # The target port on the 'api-gateway-service' where the API Gateway
+                               # application is listening for incoming connections.

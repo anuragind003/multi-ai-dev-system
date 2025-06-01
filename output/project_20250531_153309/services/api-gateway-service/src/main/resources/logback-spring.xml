@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logback configuration for the API Gateway Service.
+    This configuration uses Spring profiles to provide different logging behaviors
+    for development and production environments.
+-->
+<configuration>
+
+    <!-- Spring property to dynamically get the application name from application.properties -->
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="api-gateway-service"/>
+
+    <!-- Define log directory and base file name -->
+    <property name="LOG_PATH" value="logs"/>
+    <property name="LOG_FILE_NAME" value="${APP_NAME}"/>
+
+    <!--
+        Console Appender:
+        Outputs log messages to the console with a colored pattern for better readability
+        during development.
+    -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Pattern for console output: timestamp, level (highlighted), logger (cyan), thread (magenta), message -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) %cyan(%logger{36}) %magenta([%thread]) - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        Rolling File Appender:
+        Outputs log messages to a file, with daily rollover and size-based triggering.
+        Old log files are compressed and retained for a specified history.
+    -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- Current log file name -->
+        <file>${LOG_PATH}/${LOG_FILE_NAME}.log</file>
+
+        <!-- Rolling policy: Time-based rolling (daily) with size-based triggering -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--
+                File name pattern for archived log files.
+                %d{yyyy-MM-dd} for daily rollover.
+                %i for index in case multiple files are created on the same day due to size.
+                .gz for gzip compression.
+            -->
+            <fileNamePattern>${LOG_PATH}/${LOG_FILE_NAME}-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <!-- Keep 30 days of history -->
+            <maxHistory>30</maxHistory>
+            <!--
+                Triggering policy: Rolls over based on time AND size.
+                If the current log file exceeds 100MB, it will roll over even if the day hasn't ended.
+            -->
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>100MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+
+        <!-- Encoder for file output: Standard pattern without colors -->
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        Root Logger Configuration (Default):
+        Sets the default logging level to INFO and attaches both CONSOLE and FILE appenders.
+        This configuration applies if no specific Spring profile is active or overrides it.
+    -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <!--
+        Spring Profile: "dev" (Development Environment)
+        Enables more verbose logging (DEBUG level) for application-specific packages
+        and Spring Cloud Gateway components to aid in development and debugging.
+    -->
+    <springProfile name="dev">
+        <!-- Set DEBUG level for the application's base package -->
+        <logger name="com.ltfs.cdp.apigateway" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <!-- Set DEBUG level for Spring Cloud Gateway components for detailed routing logs -->
+        <logger name="org.springframework.cloud.gateway" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <!-- Set DEBUG level for Spring Web Reactive components (used by Gateway) -->
+        <logger name="org.springframework.web.reactive" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <!-- Set DEBUG level for Reactor Netty (underlying network engine for Gateway) -->
+        <logger name="reactor.netty" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <!-- Ensure root logger is still INFO, but specific loggers are DEBUG -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!--
+        Spring Profile: "prod" (Production Environment)
+        Sets logging levels to INFO for production, focusing on important events
+        and minimizing log volume while ensuring critical information is captured.
+    -->
+    <springProfile name="prod">
+        <!-- Set INFO level for the application's base package -->
+        <logger name="com.ltfs.cdp.apigateway" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <!-- Root logger remains INFO -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!--
+        Spring Profile: Default fallback (if neither 'dev' nor 'prod' is active)
+        Ensures a consistent INFO level logging for the application and root logger.
+    -->
+    <springProfile name="!dev &amp; !prod">
+        <logger name="com.ltfs.cdp.apigateway" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

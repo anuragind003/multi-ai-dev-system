@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-validation-service-deployment
+  labels:
+    app: data-validation-service
+    tier: backend
+    environment: dev # Or staging/production, depending on the target environment
+spec:
+  replicas: 2 # Start with 2 replicas for high availability and basic load balancing
+  selector:
+    matchLabels:
+      app: data-validation-service
+  template:
+    metadata:
+      labels:
+        app: data-validation-service
+        tier: backend
+    spec:
+      # Optional: Define a service account if specific RBAC permissions are needed for the pod
+      # serviceAccountName: data-validation-service-sa
+      containers:
+        - name: data-validation-service
+          image: ltfs-offer-cdp/data-validation-service:1.0.0 # Use a specific image version for production
+          imagePullPolicy: IfNotPresent # Use Always for development, IfNotPresent for production
+          ports:
+            - containerPort: 8080 # The port your Spring Boot application listens on
+          env:
+            # Spring Boot profile for Kubernetes environment
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection details for PostgreSQL
+            # Assuming a PostgreSQL service named 'postgresql-service' in the same namespace
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_db
+            # Database username fetched from a Kubernetes Secret
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret containing DB credentials
+                  key: username # Key within the secret for the username
+            # Database password fetched from a Kubernetes Secret
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret containing DB credentials
+                  key: password # Key within the secret for the password
+            # Optional: Kafka broker configuration if the service interacts with Kafka
+            # - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+            # Optional: Other application-specific environment variables
+            # - name: APP_CONFIG_PROPERTY
+            #   value: some-value
+          resources:
+            requests:
+              memory: "512Mi" # Request 512 MiB of memory
+              cpu: "255m"    # Request 255 millicores of CPU
+            limits:
+              memory: "1024Mi" # Limit to 1024 MiB of memory
+              cpu: "500m"    # Limit to 500 millicores of CPU
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Start checking readiness sooner than liveness
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # Optional: Node selector to schedule pods on specific nodes
+      # nodeSelector:
+      #   kubernetes.io/os: linux
+      # Optional: Affinity rules for advanced scheduling
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchLabels:
+      #             app: data-validation-service
+      #         topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-validation-service # The name of the Kubernetes Service
+  labels:
+    app: data-validation-service
+    tier: backend
+spec:
+  selector:
+    app: data-validation-service # Selects pods with the label 'app: data-validation-service'
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which the service will be exposed within the cluster
+      targetPort: 8080 # The port on the container that the service will forward traffic to
+      name: http # Name for the port
+  type: ClusterIP # Exposes the service on a cluster-internal IP. Only reachable from within the cluster.
+                  # Use NodePort or LoadBalancer for external access if needed.

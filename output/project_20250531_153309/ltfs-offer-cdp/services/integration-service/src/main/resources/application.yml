@@ -1,0 +1,110 @@
+# Application properties for the Integration Service
+# This file defines core application settings, database connectivity,
+# external system integration details, and batch job scheduling.
+
+spring:
+  application:
+    name: integration-service # Name of the Spring Boot application
+  profiles:
+    active: dev # Default active profile (can be overridden by environment variables like SPRING_PROFILES_ACTIVE)
+
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ltfs_cdp_integration} # Database connection URL
+    username: ${DB_USERNAME:cdp_user} # Database username (use environment variables for production)
+    password: ${DB_PASSWORD:cdp_password} # Database password (use environment variables for production)
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL
+    hikari: # HikariCP connection pool configuration for optimal performance
+      maximum-pool-size: 10 # Max number of connections in the pool
+      minimum-idle: 5 # Min number of idle connections to maintain
+      idle-timeout: 30000 # Maximum idle time for a connection (30 seconds)
+      connection-timeout: 30000 # Maximum wait time for a connection from the pool (30 seconds)
+      max-lifetime: 600000 # Maximum lifetime of a connection in the pool (10 minutes)
+
+  # JPA/Hibernate Configuration for Object-Relational Mapping
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'validate' ensures schema matches entities on startup. Use 'none' or 'validate' for production.
+                         # Avoid 'create', 'create-drop', 'update' in production environments.
+    show-sql: false # Set to true for debugging SQL queries (should be false in production for performance and security)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+        format_sql: false # Format SQL logs (only effective if show-sql is true)
+
+server:
+  port: 8081 # Port on which the Integration Service will run. Choose a unique port for microservices.
+
+# External System Integrations Configuration
+external-systems:
+  offermart: # Configuration for the Offermart system, source of customer and offer data
+    api-base-url: ${OFFERMART_API_URL:http://localhost:8085/api/offermart} # Base URL for Offermart API
+    client-id: ${OFFERMART_CLIENT_ID:offermart_integration_client} # Client ID for authentication with Offermart
+    client-secret: ${OFFERMART_CLIENT_SECRET:offermart_integration_secret} # Client Secret (use environment variables for production)
+    endpoints: # Specific API endpoints for different data types
+      customer-data: /customers # Endpoint to fetch customer data
+      campaign-data: /campaigns # Endpoint to fetch campaign data
+      offer-data: /offers # Endpoint to fetch offer data
+    timeout-ms: 10000 # Timeout for Offermart API calls in milliseconds (10 seconds)
+    page-size: 1000 # Default page size for fetching data in batches
+
+  customer360: # Configuration for the Customer 360 (Live Book) system, used for deduplication
+    api-base-url: ${CUSTOMER360_API_URL:http://localhost:8086/api/customer360} # Base URL for Customer 360 API
+    api-key: ${CUSTOMER360_API_KEY:c360_integration_api_key} # API Key for authentication (use environment variables for production)
+    endpoints: # Specific API endpoints
+      customer-profile: /profile # Endpoint to query customer profiles for deduplication
+    timeout-ms: 5000 # Timeout for Customer 360 API calls in milliseconds (5 seconds)
+
+# Batch Job Scheduling Configuration
+# Defines cron expressions and properties for various scheduled tasks within the Integration Service.
+# Cron expression format: second minute hour day-of-month month day-of-week
+# Example: "0 0 2 * * *" means 2 AM every day
+batch-jobs:
+  offermart-data-ingestion: # Job to pull raw customer, campaign, and offer data from Offermart
+    enabled: true # Whether this job is enabled
+    cron-expression: ${OFFERMART_INGESTION_CRON:0 0 2 * * *} # Runs daily at 2 AM
+    page-size: 5000 # Number of records to fetch per API call during ingestion
+    max-retries: 5 # Maximum number of retries for failed ingestion attempts
+    retry-delay-ms: 10000 # Delay between retries in milliseconds (10 seconds)
+
+  customer-deduplication: # Job to deduplicate customer data against Customer 360 (Live Book)
+    enabled: true
+    cron-expression: ${CUSTOMER_DEDUPE_CRON:0 30 3 * * *} # Runs daily at 3:30 AM
+    batch-size: 1000 # Number of customers to process in one deduplication batch
+    dedupe-strategy: fuzzy-match # Example strategy: can be configured (e.g., exact-match, fuzzy-match)
+
+  topup-offer-deduplication: # Job to deduplicate top-up loan offers only within other top-up offers
+    enabled: true
+    cron-expression: ${TOPUP_DEDUPE_CRON:0 0 4 * * *} # Runs daily at 4 AM
+    batch-size: 500 # Number of top-up offers to process in a batch
+
+  data-validation: # Job to perform basic column-level validation on ingested data
+    enabled: true
+    cron-expression: ${DATA_VALIDATION_CRON:0 0 1 * * *} # Runs daily at 1 AM
+    validation-rules-config-path: classpath:validation-rules/offermart-data-validation.json # Path to JSON file defining validation rules
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for the entire application
+    org.springframework.web: INFO # Spring web framework logging
+    org.hibernate: WARN # Hibernate ORM logging (reduce verbosity in production)
+    com.ltfs.cdp.integrationservice: DEBUG # Specific package for detailed logging (change to INFO for production)
+  file:
+    name: logs/integration-service.log # Path to the log file. Logs will be written here.
+    max-size: 10MB # Maximum size of the log file before rolling over
+    max-history: 7 # Number of archived log files to keep
+
+# Spring Actuator for monitoring and management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,scheduledtasks # Expose useful endpoints for monitoring
+  endpoint:
+    health:
+      show-details: always # Show full health details (e.g., database status, disk space)
+    metrics:
+      enabled: true # Enable metrics collection
+    prometheus:
+      enabled: true # Enable Prometheus endpoint for scraping metrics (e.g., by Grafana)

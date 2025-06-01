@@ -1,0 +1,133 @@
+package rules.dedupe;
+
+// Import necessary Java classes for fact types and enums.
+// These classes are expected to be defined within the business-rule-engine-service's model package.
+import com.ltfs.cdp.offercdp.businessruleengine.model.Offer;
+import com.ltfs.cdp.offercdp.businessruleengine.model.DedupeCandidate; // Represents a pair of offers being considered for deduplication.
+import com.ltfs.cdp.offercdp.businessruleengine.model.DedupeExclusion; // Represents an offer that should be excluded from removal during deduplication.
+import com.ltfs.cdp.offercdp.businessruleengine.model.ProductType; // Enum for different loan product types (e.g., TOP_UP, LOYALTY).
+import com.ltfs.cdp.offercdp.businessruleengine.model.OfferStatus; // Enum for different offer statuses (e.g., FINALIZED, ACTIVE, CANCELLED).
+
+/**
+ * Drools rules for defining exceptions to the standard deduplication logic.
+ * These rules identify specific offers or pairs of offers that should
+ * not be subjected to the general deduplication process, or where special
+ * handling is required.
+ *
+ * The primary goal of these rules is to assert 'DedupeExclusion' facts for offers
+ * that should be preserved or ignored during the deduplication process.
+ * These 'DedupeExclusion' facts can then be consumed by subsequent main deduplication
+ * rules (typically in another DRL file) to prevent incorrect removal of offers.
+ *
+ * Each rule includes a System.out.println statement for basic logging/debugging.
+ * In a production environment, this should be replaced with a proper logging framework (e.g., SLF4J).
+ */
+
+// Rule 1: Exclude deduplication between Top-up offers and non-Top-up offers.
+// As per requirements, Top-up loans must only be deduped against other Top-up loans.
+// This rule asserts an exclusion for *both* offers in a candidate pair if they are
+// of different product types (one TOP_UP, one not), effectively preventing their
+// deduplication by the general rule set.
+rule "Exclude Dedupe - Top-up vs Non-Top-up Offers"
+    when
+        // Match a DedupeCandidate fact, which contains two offers being compared.
+        $candidate : DedupeCandidate(
+            $offer1 : offer1,
+            $offer2 : offer2
+        )
+        // Condition: Check if one offer is of type TOP_UP and the other is not.
+        (
+            ( $offer1.productType == ProductType.TOP_UP && $offer2.productType != ProductType.TOP_UP ) ||
+            ( $offer1.productType != ProductType.TOP_UP && $offer2.productType == ProductType.TOP_UP )
+        )
+    then
+        // Action: Insert DedupeExclusion facts for both offers, indicating they should not be deduped against each other.
+        // This implies that the main dedupe rule should check for *any* exclusion on either offer in the pair.
+        insert(new DedupeExclusion($offer1.offerId, "Dedupe excluded: Offer 1 is part of a Top-up vs Non-Top-up pair."));
+        insert(new DedupeExclusion($offer2.offerId, "Dedupe excluded: Offer 2 is part of a Top-up vs Non-Top-up pair."));
+        System.out.println("Dedupe Exclusion asserted for offers " + $offer1.offerId + " and " + $offer2.offerId + ": Top-up vs Non-Top-up product types.");
+end
+
+// Rule 2: Mark offers that are already in a 'FINALIZED' or 'ACTIVE' status as excluded from removal.
+// These offers are typically from the 'live book' (Customer 360) and should be preserved
+// as the authoritative record against which new offers are deduped.
+rule "Exclude Dedupe - Finalized/Active Offers from Removal"
+    when
+        // Match any Offer fact.
+        $offer : Offer(
+            // Condition: The offer's status is either FINALIZED or ACTIVE.
+            offerStatus == OfferStatus.FINALIZED || offerStatus == OfferStatus.ACTIVE
+        )
+        // Condition: Ensure we don't insert duplicate exclusion facts for the same offer.
+        not DedupeExclusion(offerId == $offer.offerId)
+    then
+        // Action: Assert a DedupeExclusion fact for this offer, indicating it should be preserved.
+        insert(new DedupeExclusion($offer.offerId, "Dedupe excluded: Offer is FINALIZED/ACTIVE and should be preserved as live book entry."));
+        System.out.println("Dedupe Exclusion asserted for offer " + $offer.offerId + ": FINALIZED/ACTIVE status.");
+end
+
+// Rule 3: Mark offers with 'CANCELLED' or 'REJECTED' status as excluded from any active deduplication.
+// These offers are no longer relevant for active offer management and should be ignored
+// by the deduplication process.
+rule "Exclude Dedupe - Cancelled/Rejected Offers"
+    when
+        // Match any Offer fact.
+        $offer : Offer(
+            // Condition: The offer's status is either CANCELLED or REJECTED.
+            offerStatus == OfferStatus.CANCELLED || offerStatus == OfferStatus.REJECTED
+        )
+        // Condition: Ensure we don't insert duplicate exclusion facts for the same offer.
+        not DedupeExclusion(offerId == $offer.offerId)
+    then
+        // Action: Assert a DedupeExclusion fact for this offer, indicating it should be ignored.
+        insert(new DedupeExclusion($offer.offerId, "Dedupe excluded: Offer is CANCELLED/REJECTED and should be ignored."));
+        System.out.println("Dedupe Exclusion asserted for offer " + $offer.offerId + ": CANCELLED/REJECTED status.");
+end
+
+// Rule 4: Mark offers that are identical (same offerId) within a candidate pair as excluded from removal.
+// This is a basic sanity check to prevent self-deduplication or issues arising from
+// processing identical records as potential duplicates.
+rule "Exclude Dedupe - Identical Offers in Candidate Pair"
+    when
+        // Match a DedupeCandidate fact.
+        $candidate : DedupeCandidate(
+            $offer1 : offer1,
+            $offer2 : offer2,
+            // Condition: The offer IDs of the two offers in the candidate pair are identical.
+            $offer1.offerId == $offer2.offerId
+        )
+        // Condition: Ensure we don't insert duplicate exclusion facts for the same offer.
+        not DedupeExclusion(offerId == $offer1.offerId)
+    then
+        // Action: Assert a DedupeExclusion fact for the offer, as it's identical to another in the pair.
+        // Since they are identical, asserting for one is sufficient, as the other is the same entity.
+        insert(new DedupeExclusion($offer1.offerId, "Dedupe excluded: Offer is identical to another in the candidate pair (same offerId)."));
+        System.out.println("Dedupe Exclusion asserted for offer " + $offer1.offerId + ": Identical offer in candidate pair.");
+end
+
+// --- How DedupeExclusion facts are consumed by main deduplication logic ---
+// The main deduplication rules (which would typically reside in a separate DRL file,
+// e.g., 'dedupe-logic-rules.drl') would then check for the presence of these
+// 'DedupeExclusion' facts before performing any removal or merging actions.
+//
+// Example of how a main deduplication rule might use DedupeExclusion:
+//
+// rule "Perform Standard Deduplication and Mark for Removal"
+//     when
+//         $candidate : DedupeCandidate(
+//             $offer1 : offer1,
+//             $offer2 : offer2
+//         )
+//         // Ensure neither offer in the candidate pair has been marked for exclusion from removal.
+//         // If an exclusion exists for either offer, this rule will not fire for this pair.
+//         not DedupeExclusion(offerId == $offer1.offerId)
+//         not DedupeExclusion(offerId == $offer2.offerId)
+//         // Add other conditions for actual deduplication (e.g., matching customerId, product, etc.)
+//         // Example: $offer1.customerId == $offer2.customerId && $offer1.productType == $offer2.productType
+//     then
+//         // Perform deduplication action, e.g., mark one offer for removal and link to the other.
+//         // Example: insert(new DedupeAction($offer2.offerId, $offer1.offerId, "Duplicate of " + $offer1.offerId));
+//         System.out.println("Standard deduplication logic applied for offers " + $offer1.offerId + " and " + $offer2.offerId);
+// end
+//
+// This design promotes clear separation of concerns, making the rules easier to manage and debug.

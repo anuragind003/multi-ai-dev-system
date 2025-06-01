@@ -1,0 +1,123 @@
+# Application properties
+spring:
+  application:
+    name: data-validation-service
+  profiles:
+    active: dev # Default active profile for development
+
+server:
+  port: 8082 # Port on which the Data Validation Service will run
+
+# Kafka Configuration
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092 # Default Kafka broker address. Update for production environments.
+    consumer:
+      group-id: data-validation-group # Consumer group ID for this service
+      auto-offset-reset: earliest # Start reading from the beginning if no offset is found
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Expecting JSON payloads
+      properties:
+        spring.json.trusted.packages: "*" # Trust all packages for JSON deserialization to avoid ClassNotFoundException
+        # Max poll records and interval to control consumer processing rate
+        max.poll.records: 500
+        max.poll.interval.ms: 300000 # 5 minutes
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Producing JSON payloads
+      acks: all # Ensure all replicas have received the message
+      retries: 3 # Number of times to retry sending a message
+      batch-size: 16384 # Default batch size (16KB)
+      linger-ms: 1 # Linger for 1ms to allow more messages to accumulate in the batch
+
+# Custom Kafka topic configuration for the service
+kafka:
+  topics:
+    input-raw-data: offermart.data.raw # Topic from which raw data (e.g., from Offermart) is consumed for validation
+    output-validated-data: cdp.data.validated # Topic to which successfully validated data is published
+    output-invalid-data: cdp.data.invalid # Topic to which data failing validation is published (e.g., for error handling/logging)
+
+# Data Validation Rules Configuration
+# This section defines the column-level validation rules applied to incoming data.
+# Each top-level key represents a data field (column name), and its nested properties
+# define the specific validation constraints for that field.
+validation:
+  rules:
+    # Example rules for common customer/offer data fields.
+    # These rules will be loaded and applied by the Data Validation Service.
+
+    customer_id:
+      not_null: true # Field must not be null
+      min_length: 5 # Minimum allowed length
+      max_length: 20 # Maximum allowed length
+      regex_pattern: "^[A-Z0-9]+$" # Regular expression pattern for alphanumeric, uppercase
+      error_message: "Customer ID must be non-null, 5-20 alphanumeric characters (uppercase)."
+
+    pan_number:
+      not_null: true
+      min_length: 10
+      max_length: 10
+      regex_pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$" # Standard Indian PAN format (e.g., ABCDE1234F)
+      error_message: "PAN Number must be 10 characters and follow standard format (e.g., ABCDE1234F)."
+
+    mobile_number:
+      not_null: true
+      min_length: 10
+      max_length: 10
+      regex_pattern: "^[6-9][0-9]{9}$" # Indian mobile number format (starts with 6,7,8,9 followed by 9 digits)
+      error_message: "Mobile Number must be 10 digits and start with 6, 7, 8, or 9."
+
+    email_address:
+      not_null: false # This field is optional
+      regex_pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$" # Standard email regex
+      error_message: "Email Address must be a valid email format."
+
+    date_of_birth:
+      not_null: true
+      data_type: "DATE" # Expected data type for parsing and specific date validations
+      format: "yyyy-MM-dd" # Expected date format
+      min_age: 18 # Example: Customer must be at least 18 years old
+      error_message: "Date of Birth must be valid, in YYYY-MM-DD format, and indicate age >= 18."
+
+    loan_amount:
+      not_null: true
+      data_type: "DECIMAL" # Expected data type for numerical validations
+      min_value: 10000.00 # Minimum allowed loan amount
+      max_value: 10000000.00 # Maximum allowed loan amount
+      error_message: "Loan Amount must be a valid decimal between 10,000 and 10,000,000."
+
+    product_type:
+      not_null: true
+      allowed_values: ["Loyalty", "Preapproved", "E-aggregator", "Top-up", "Personal Loan", "Home Loan"] # Allowed discrete values
+      error_message: "Product Type must be one of the predefined allowed values."
+
+    offer_id:
+      not_null: true
+      min_length: 8
+      max_length: 30
+      regex_pattern: "^[A-Z0-9\\-]+$" # Alphanumeric with hyphens
+      error_message: "Offer ID must be non-null, 8-30 alphanumeric characters or hyphens."
+
+    campaign_code:
+      not_null: true
+      min_length: 3
+      max_length: 15
+      regex_pattern: "^[A-Z0-9_]+$" # Alphanumeric with underscores
+      error_message: "Campaign Code must be non-null, 3-15 alphanumeric characters or underscores."
+
+    # Add more fields and their respective validation rules as per the data model
+    # Example:
+    # customer_segment:
+    #   not_null: true
+    #   allowed_values: ["High Net Worth", "Mass Affluent", "Retail"]
+    #   error_message: "Customer Segment must be one of the allowed values."
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for all packages
+    com.ltfs.cdp.datavalidation: DEBUG # Set specific package to DEBUG for more detailed logs
+  file:
+    name: logs/data-validation-service.log # Path to the log file
+    max-size: 10MB # Maximum size of the log file before it's rolled
+    max-history: 7 # Number of archived log files to keep

@@ -1,0 +1,72 @@
+server:
+  port: 8080 # Default port for the API Gateway service
+
+spring:
+  application:
+    name: api-gateway-service # Name of this Spring Boot application
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true # Enables integration with discovery client (e.g., Eureka)
+          lower-case-service-id: true # Converts service IDs to lowercase for routing
+      routes:
+        # Route for Customer Service
+        - id: customer-service-route
+          uri: lb://CUSTOMER-SERVICE # Load balance to the service registered as 'CUSTOMER-SERVICE' in Eureka
+          predicates:
+            - Path=/api/v1/customers/** # Matches requests starting with /api/v1/customers/
+          filters:
+            # Rewrites the path to ensure the downstream service receives the expected URL.
+            # This example keeps the full path as received by the gateway.
+            - RewritePath=/api/v1/customers/(?<segment>.*), /api/v1/customers/$\{segment}
+
+        # Route for Offer Service
+        - id: offer-service-route
+          uri: lb://OFFER-SERVICE # Load balance to the service registered as 'OFFER-SERVICE' in Eureka
+          predicates:
+            - Path=/api/v1/offers/** # Matches requests starting with /api/v1/offers/
+          filters:
+            - RewritePath=/api/v1/offers/(?<segment>.*), /api/v1/offers/$\{segment}
+
+        # Route for Campaign Service
+        - id: campaign-service-route
+          uri: lb://CAMPAIGN-SERVICE # Load balance to the service registered as 'CAMPAIGN-SERVICE' in Eureka
+          predicates:
+            - Path=/api/v1/campaigns/** # Matches requests starting with /api/v1/campaigns/
+          filters:
+            - RewritePath=/api/v1/campaigns/(?<segment>.*), /api/v1/campaigns/$\{segment}
+
+        # Route for Deduplication Service
+        - id: deduplication-service-route
+          uri: lb://DEDUPLICATION-SERVICE # Load balance to the service registered as 'DEDUPLICATION-SERVICE' in Eureka
+          predicates:
+            - Path=/api/v1/deduplication/** # Matches requests starting with /api/v1/deduplication/
+          filters:
+            - RewritePath=/api/v1/deduplication/(?<segment>.*), /api/v1/deduplication/$\{segment}
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # Eureka server URL for service registration and discovery
+    fetch-registry: true # Indicates whether the client should fetch the Eureka registry
+    register-with-eureka: true # Indicates whether the client should register itself with Eureka
+  instance:
+    hostname: localhost # Hostname to register with Eureka. Use actual IP/hostname in production.
+
+# Cross-Origin Resource Sharing (CORS) Configuration
+# This is crucial for frontend applications making requests to the API Gateway.
+spring:
+  web:
+    cors:
+      add-mappings: true # Enable CORS mappings
+      allowed-origins: "*" # Allows requests from any origin. For production, specify exact frontend domains (e.g., http://localhost:3000, https://your-frontend.com)
+      allowed-methods: # HTTP methods allowed for CORS requests
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowed-headers: "*" # Allows all headers. For production, specify required headers.
+      allow-credentials: true # Indicates whether the client can send cookies/HTTP authentication credentials
+      max-age: 3600 # How long the results of a preflight request (OPTIONS) can be cached (in seconds)

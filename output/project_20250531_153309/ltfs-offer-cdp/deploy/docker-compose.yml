@@ -1,0 +1,200 @@
+version: '3.8'
+
+# This Docker Compose file orchestrates the LTFS Offer CDP microservices
+# and their dependencies (PostgreSQL, Zookeeper, Kafka) for local development and testing.
+#
+# To run this:
+# 1. Ensure Docker Desktop is running.
+# 2. Navigate to the 'deploy' directory: cd ltfs-offer-cdp/deploy
+# 3. Execute: docker-compose up --build -d
+# 4. To stop: docker-compose down
+#
+# Prerequisites:
+# - Each microservice (customer-service, offer-service, etc.) must have a Dockerfile
+#   in its respective root directory (e.g., ltfs-offer-cdp/customer-service/Dockerfile).
+# - The Dockerfiles should build a Spring Boot executable JAR.
+
+services:
+  # PostgreSQL Database Service
+  # Used as the primary data store for all microservices.
+  postgresql:
+    image: postgres:13-alpine # Using a lightweight Alpine-based PostgreSQL image
+    container_name: ltfs-cdp-postgresql
+    ports:
+      - "5432:5432" # Map container port 5432 to host port 5432
+    environment:
+      POSTGRES_DB: ltfs_cdp_db # Database name
+      POSTGRES_USER: ltfs_user # Database user
+      POSTGRES_PASSWORD: ltfs_password # Database password
+    volumes:
+      - ltfs_cdp_pgdata:/var/lib/postgresql/data # Persist PostgreSQL data
+    healthcheck: # Healthcheck to ensure PostgreSQL is ready before dependent services start
+      test: ["CMD-SHELL", "pg_isready -U ltfs_user -d ltfs_cdp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s # Give the database some time to start up
+
+  # Zookeeper Service
+  # Essential for Kafka, managing Kafka brokers and topics.
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1 # Confluent's Zookeeper image
+    container_name: ltfs-cdp-zookeeper
+    ports:
+      - "2181:2181" # Map container port 2181 to host port 2181
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  # Kafka Broker Service
+  # Provides event streaming capabilities for inter-service communication.
+  kafka:
+    image: confluentinc/cp-kafka:7.0.1 # Confluent's Kafka image
+    container_name: ltfs-cdp-kafka
+    ports:
+      - "9092:9092" # Map container port 9092 to host port 9092 (for internal communication)
+      - "29092:29092" # Map container port 29092 to host port 29092 (for external access, e.g., Kafka clients on host)
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181 # Connects to the Zookeeper service
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092 # Listeners for internal and external access
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # Set to 1 for local development
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0 # Reduce rebalance delay for faster startup
+    depends_on:
+      - zookeeper # Kafka depends on Zookeeper being up
+    healthcheck: # Healthcheck to ensure Kafka is ready
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"] # Check if Kafka topics can be listed
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s # Give Kafka some time to start up
+
+  # LTFS CDP Microservices
+  # Each service is built from its respective Dockerfile and configured to connect
+  # to PostgreSQL and Kafka.
+
+  # Customer Service: Manages customer profiles and deduplication.
+  customer-service:
+    build:
+      context: ../.. # Build context is the project root (ltfs-offer-cdp)
+      dockerfile: customer-service/Dockerfile # Path to the Dockerfile relative to the context
+    container_name: ltfs-cdp-customer-service
+    ports:
+      - "8080:8080" # Expose service on host port 8080
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/ltfs_cdp_db # Connect to PostgreSQL service
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092 # Connect to Kafka service
+      SPRING_PROFILES_ACTIVE: local # Activate 'local' Spring profile
+    depends_on: # Ensure database and Kafka are healthy before starting
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # Uncomment the following volume for hot-reloading/local code changes during development.
+    # This mounts the local source code into the container.
+    # volumes:
+    #   - ../../customer-service:/app/customer-service # Adjust /app/customer-service to your application's internal path if needed
+
+  # Offer Service: Manages offer data and campaign associations.
+  offer-service:
+    build:
+      context: ../..
+      dockerfile: offer-service/Dockerfile
+    container_name: ltfs-cdp-offer-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # volumes:
+    #   - ../../offer-service:/app/offer-service
+
+  # Campaign Service: Manages campaign definitions and targeting.
+  campaign-service:
+    build:
+      context: ../..
+      dockerfile: campaign-service/Dockerfile
+    container_name: ltfs-cdp-campaign-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # volumes:
+    #   - ../../campaign-service:/app/campaign-service
+
+  # Dedupe Service: Applies deduplication logic across customer and offer data.
+  dedupe-service:
+    build:
+      context: ../..
+      dockerfile: dedupe-service/Dockerfile
+    container_name: ltfs-cdp-dedupe-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # volumes:
+    #   - ../../dedupe-service:/app/dedupe-service
+
+  # Validation Service: Performs column-level validation on incoming data.
+  validation-service:
+    build:
+      context: ../..
+      dockerfile: validation-service/Dockerfile
+    container_name: ltfs-cdp-validation-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # volumes:
+    #   - ../../validation-service:/app/validation-service
+
+# Docker Volumes for data persistence
+volumes:
+  ltfs_cdp_pgdata:
+    driver: local # Use a local volume for PostgreSQL data
+
+# Networks (optional, Docker Compose creates a default bridge network if not specified)
+# Defining it explicitly can be useful for more complex setups or custom network configurations.
+# networks:
+#   ltfs-cdp-network:
+#     driver: bridge
+#     # You can add custom network configurations here if needed

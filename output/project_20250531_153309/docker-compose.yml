@@ -1,0 +1,189 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  # This service sets up a PostgreSQL database for the LTFS Offer CDP system.
+  # It uses a persistent volume for data and includes a health check to ensure
+  # the database is fully ready before dependent services start.
+  db:
+    image: postgres:13-alpine # Using a stable and lightweight PostgreSQL image
+    container_name: ltfs-cdp-postgres
+    environment:
+      POSTGRES_DB: ltfs_cdp_db # Database name
+      POSTGRES_USER: ltfs_user # Database user
+      POSTGRES_PASSWORD: ltfs_password # Database password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persistent data volume for PostgreSQL
+      # Uncomment the line below if 'db-init.sh' contains SQL scripts
+      # that should be executed on the first startup of the PostgreSQL container.
+      # - ./scripts/db-init.sh:/docker-entrypoint-initdb.d/init.sh
+    ports:
+      - "5432:5432" # Expose PostgreSQL port to the host for direct access (e.g., via pgAdmin)
+    healthcheck: # Health check to ensure the database is accepting connections
+      test: ["CMD-SHELL", "pg_isready -U ltfs_user -d ltfs_cdp_db"]
+      interval: 5s # Check every 5 seconds
+      timeout: 5s # Timeout after 5 seconds
+      retries: 5 # Retry 5 times before marking as unhealthy
+    restart: unless-stopped # Restart policy: always restart unless explicitly stopped
+
+  # API Gateway Service
+  # The entry point for all external requests, routing them to appropriate microservices.
+  api-gateway-service:
+    build:
+      context: ./services/api-gateway-service # Path to the API Gateway service directory
+      dockerfile: Dockerfile # Name of the Dockerfile
+    container_name: ltfs-cdp-api-gateway
+    ports:
+      - "8080:8080" # Expose API Gateway port to the host
+    environment:
+      SPRING_PROFILES_ACTIVE: dev # Activate 'dev' Spring profile
+      # Add any other environment variables specific to API Gateway, e.g., Eureka server URL
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is healthy before starting API Gateway
+    restart: on-failure # Restart if the container exits with a non-zero status
+
+  # Customer Service
+  # Manages customer profiles and deduplication logic.
+  customer-service:
+    build:
+      context: ./services/customer-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-customer-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db # Connect to the 'db' service
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      # Add any other environment variables, e.g., for inter-service communication
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Offer Service
+  # Manages offer data and related business logic.
+  offer-service:
+    build:
+      context: ./services/offer-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-offer-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Campaign Service
+  # Manages campaign definitions and associations with offers.
+  campaign-service:
+    build:
+      context: ./services/campaign-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-campaign-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Integration Service
+  # Handles data ingestion from Offermart and other external systems.
+  integration-service:
+    build:
+      context: ./services/integration-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-integration-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+      # Add environment variables for external system connections
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Admin Portal Service
+  # Provides an administrative interface for managing CDP configurations and data.
+  admin-portal-service:
+    build:
+      context: ./services/admin-portal-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-admin-portal-service
+    ports:
+      - "8081:8081" # Assuming a different port for the admin portal
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Data Validation Service
+  # Performs column-level validation on incoming data.
+  data-validation-service:
+    build:
+      context: ./services/data-validation-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-data-validation-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Business Rule Engine Service
+  # Applies business rules for offer finalization and deduplication.
+  business-rule-engine-service:
+    build:
+      context: ./services/business-rule-engine-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-business-rule-engine-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  # Reporting Service
+  # Generates reports based on customer, offer, and campaign data.
+  reporting-service:
+    build:
+      context: ./services/reporting-service
+      dockerfile: Dockerfile
+    container_name: ltfs-cdp-reporting-service
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ltfs_cdp_db
+      SPRING_DATASOURCE_USERNAME: ltfs_user
+      SPRING_DATASOURCE_PASSWORD: ltfs_password
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  # Define a named volume for PostgreSQL data to ensure data persistence
+  # even if the 'db' container is removed or recreated.
+  postgres_data:

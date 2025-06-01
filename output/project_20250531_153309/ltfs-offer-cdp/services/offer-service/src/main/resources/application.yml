@@ -1,0 +1,118 @@
+spring:
+  application:
+    name: offer-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ltfs_offer_cdp_db
+    username: ltfs_user
+    password: ltfs_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      connection-timeout: 30000
+      pool-name: OfferServiceHikariPool
+  jpa:
+    hibernate:
+      ddl-auto: update # In production, consider 'none' and use Flyway/Liquibase
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        show_sql: true
+    open-in-view: false # Recommended for REST APIs to avoid N+1 issues
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker address
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers for simpler JSON
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.value.default.type: com.ltfs.cdp.offerservice.event.OfferEvent # Default type for deserialization
+      group-id: offer-service-group
+      auto-offset-reset: earliest
+
+server:
+  port: 8081 # Default port for Offer Service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus # Expose common actuator endpoints
+  endpoint:
+    health:
+      show-details: always # Show full health details
+
+logging:
+  level:
+    root: INFO
+    com.ltfs.cdp.offerservice: DEBUG # Specific logging level for application packages
+    org.springframework.web: INFO
+    org.hibernate: INFO
+
+# Custom properties for Offer Service
+offer:
+  deduplication:
+    enabled: true
+    strategy: customer_id_product_type # Example: Dedupe by customer ID and product type
+    topup-loan-dedupe-enabled: true # Specific flag for top-up loan deduplication
+  validation:
+    enabled: true
+    rules-config-path: classpath:validation-rules.json # Path to a JSON file defining validation rules
+  event:
+    topics:
+      offer-created: offer-created-events # Kafka topic for new offer creation events
+      offer-deduplicated: offer-deduplicated-events # Kafka topic for deduplicated offers
+      offer-finalized: offer-finalized-events # Kafka topic for finalized offers
+      customer-profile-updated: customer-profile-updated-events # Kafka topic for customer profile updates (for live book dedupe)
+
+# Resilience4j Circuit Breaker configuration (example)
+resilience4j:
+  circuitbreaker:
+    instances:
+      customer360Service: # Circuit breaker for calls to Customer 360 service
+        registerHealthIndicator: true
+        slidingWindowSize: 100
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 10
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+
+# External service configurations (example)
+external-services:
+  customer360:
+    base-url: http://localhost:8080/api/v1/customer # Base URL for Customer 360 service
+    timeout-ms: 5000 # Timeout for API calls
+
+# Security related properties (placeholders, actual values should be externalized/vaulted)
+security:
+  jwt:
+    secret: ${JWT_SECRET:aStrongSecretKeyForJWTTokenGenerationAndValidation} # JWT secret key
+    expiration-ms: 3600000 # Token expiration time in milliseconds (1 hour)
+  api-key:
+    header-name: X-API-KEY
+    valid-keys: ${API_KEYS:key1,key2} # Comma-separated list of valid API keys
+
+# Profile-specific configurations can be added using application-dev.yml, application-prod.yml etc.
+# Example:
+# ---
+# spring:
+#   config:
+#     activate:
+#       on-profile: dev
+# server:
+#   port: 8082
+# spring:
+#   datasource:
+#     url: jdbc:postgresql://localhost:5433/ltfs_offer_cdp_dev_db

@@ -1,0 +1,109 @@
+# Application properties for the Admin Portal Service
+# Project: LTFS Offer CDP (Customer Data Platform)
+# Service: admin-portal-service
+
+server:
+  port: 8081 # Default port for the Admin Portal Service
+
+spring:
+  application:
+    name: admin-portal-service
+  profiles:
+    active: dev # Default profile, can be overridden by environment variables (e.g., via SPRING_PROFILES_ACTIVE environment variable)
+  
+  # Database configuration for the Admin Portal Service
+  # This database might be used for managing admin users, roles, audit logs, or service-specific configurations.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/admin_portal_db # Replace with actual PostgreSQL host, port, and database name
+    username: admin_user # Replace with actual database username
+    password: admin_password # Replace with actual database password (consider using environment variables for production)
+    driver-class-name: org.postgresql.Driver
+    hikari: # HikariCP connection pool configuration
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 2 # Minimum number of idle connections maintained in the pool
+      idle-timeout: 600000 # Maximum amount of time a connection can sit idle in the pool (10 minutes)
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool (30 minutes)
+      pool-name: AdminPortalHikariCP
+
+  jpa:
+    hibernate:
+      ddl-auto: update # 'update' for development (updates schema), 'none' or 'validate' for production (prevents schema changes)
+    show-sql: true # Set to 'false' in production to prevent SQL statements from being logged
+    properties:
+      hibernate:
+        format_sql: true # Formats the SQL statements for better readability in logs
+
+  # Kafka configuration for event-driven communication within the microservices architecture
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker address (can be a comma-separated list)
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Use JsonSerializer for sending JSON payloads
+      properties:
+        spring.json.add.type.headers: false # Prevents adding __TypeId__ header when using JsonSerializer, useful for interoperability
+    consumer:
+      group-id: admin-portal-group # Consumer group ID for this service
+      auto-offset-reset: earliest # Start reading from the beginning of the topic if no offset is committed
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Use JsonDeserializer for receiving JSON payloads
+      properties:
+        spring.json.value.default.type: com.ltfs.cdp.adminportal.event.AdminPortalEvent # Default target type for JSON deserialization if no type header is present
+
+# Admin Portal specific configurations for file storage and processing
+admin-portal:
+  file-storage:
+    base-directory: /opt/ltfs-cdp/admin-portal/uploads # Base directory for all uploaded files (e.g., campaign files, offer data)
+    max-file-size-mb: 50 # Maximum allowed file size for uploads in megabytes
+    temp-directory: ${admin-portal.file-storage.base-directory}/temp # Temporary directory for files during processing
+    campaign-upload-directory: ${admin-portal.file-storage.base-directory}/campaigns # Directory for campaign definition file uploads
+    offer-upload-directory: ${admin-portal.file-storage.base-directory}/offers # Directory for offer data file uploads
+    customer-upload-directory: ${admin-portal.file-storage.base-directory}/customers # Directory for customer data bulk uploads (e.g., for deduplication)
+    processed-directory: ${admin-portal.file-storage.base-directory}/processed # Directory for files successfully processed and moved
+    error-directory: ${admin-portal.file-storage.base-directory}/errors # Directory for files that failed processing, along with error logs
+
+  processing:
+    batch-size: 1000 # Default batch size for processing large files (e.g., CSV imports) to optimize memory usage
+    validation-rules-path: classpath:/validation-rules/default-rules.json # Path to a file containing data validation rules (e.g., JSON schema)
+    # Example: Polling interval for a file watcher if the service monitors a directory for new files
+    # file-watcher-interval-seconds: 60
+
+  kafka:
+    topics: # Custom Kafka topics used by the Admin Portal Service for publishing events
+      campaign-upload-event: cdp.admin.portal.campaign.upload.event # Topic for events related to campaign file uploads
+      offer-upload-event: cdp.admin.portal.offer.upload.event # Topic for events related to offer data file uploads
+      customer-data-upload-event: cdp.admin.portal.customer.data.upload.event # Topic for events related to customer data bulk uploads
+      # Add other topics as needed for inter-service communication (e.g., for status updates, notifications)
+
+# Logging configuration for the application
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    org.springframework.web: INFO # Logging level for Spring Web components
+    com.ltfs.cdp.adminportal: DEBUG # Set to DEBUG for more detailed logs from your application-specific packages
+  file:
+    name: /var/log/ltfs-cdp/admin-portal-service/admin-portal-service.log # Path to the log file
+    max-size: 10MB # Maximum size of the log file before it's rolled over
+    max-history: 7 # Number of archived log files to keep
+
+# Actuator endpoints for monitoring and management of the application
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose common Actuator endpoints via HTTP
+  endpoint:
+    health:
+      show-details: always # Always show full health details (useful for debugging, consider 'when_authorized' for production)
+
+# Security configuration (placeholder - actual implementation would involve Spring Security, OAuth2, JWT, etc.)
+security:
+  jwt:
+    secret: ${JWT_SECRET:aStrongSecretKeyForDevelopmentOnlyChangeInProduction} # JWT secret key for token signing (use environment variable in production)
+    expiration-ms: 3600000 # Token expiration time in milliseconds (1 hour)
+  cors: # Cross-Origin Resource Sharing configuration for frontend applications
+    allowed-origins: http://localhost:4200,http://localhost:3000 # Comma-separated list of allowed origins (e.g., Angular, React frontend URLs)
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS # Allowed HTTP methods
+    allowed-headers: Authorization,Content-Type,X-Requested-With,Accept # Allowed request headers
+    allow-credentials: true # Whether to allow credentials (cookies, HTTP authentication)
+    max-age-seconds: 3600 # How long the results of a preflight request can be cached (1 hour)

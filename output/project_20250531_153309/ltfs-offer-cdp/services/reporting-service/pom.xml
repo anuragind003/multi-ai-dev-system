@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!-- Parent POM for Spring Boot applications.
+	     Provides dependency management and default plugin configurations,
+	     ensuring consistent versions and build setup across Spring Boot projects. -->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.5</version> <!-- Using a recent stable Spring Boot 3 version -->
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<groupId>com.ltfs.cdp</groupId>
+	<artifactId>reporting-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>reporting-service</name>
+	<description>Reporting service for LTFS Offer CDP</description>
+
+	<properties>
+		<java.version>17</java.version> <!-- Aligning with modern Spring Boot and best practices for Java LTS -->
+		<lombok.version>1.18.30</lombok.version> <!-- Latest stable Lombok version for boilerplate reduction -->
+	</properties>
+
+	<dependencies>
+		<!-- Spring Boot Starter Web:
+		     Provides all necessary dependencies for building web applications, including RESTful services.
+		     Includes embedded Tomcat, Spring MVC, and Jackson for JSON processing. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Starter Data JPA:
+		     Provides dependencies for using Spring Data JPA with Hibernate.
+		     Simplifies database access and persistence operations. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!-- PostgreSQL JDBC Driver:
+		     The official JDBC driver for PostgreSQL, required to connect to a PostgreSQL database.
+		     Scoped as 'runtime' as it's only needed during application execution. -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Spring Boot Starter Actuator:
+		     Provides production-ready features like monitoring and management endpoints (e.g., health, info, metrics).
+		     Essential for observing the microservice's operational status. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Lombok:
+		     A library that helps reduce boilerplate code (e.g., getters, setters, constructors, equals, hashCode).
+		     Uses annotation processing to generate code at compile time.
+		     Scoped as 'provided' because it's only needed during compilation. -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<version>${lombok.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Spring Boot Starter Test:
+		     Provides comprehensive dependencies for testing Spring Boot applications,
+		     including JUnit 5, Mockito, AssertJ, and Spring Test. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Spring Boot DevTools:
+		     Provides development-time features like automatic application restarts when files change,
+		     LiveReload support, and default property overrides.
+		     Scoped as 'runtime' and 'optional' to ensure it's not included in production builds. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<scope>runtime</scope>
+			<optional>true</optional>
+		</dependency>
+
+		<!-- Spring Kafka:
+		     For building event-driven components that interact with Apache Kafka.
+		     Given the "Microservices Architecture with Event-Driven Components" context,
+		     this service might consume events from Kafka to build its reports or update its state. -->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin:
+			     Used to package the application as an executable JAR,
+			     which includes all dependencies and an embedded web server.
+			     Also provides 'run' goal for easy local execution. -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- Exclude Lombok from the final JAR to avoid potential conflicts,
+					     as its generated code is already part of the compiled classes. -->
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+			<!-- Maven Compiler Plugin:
+			     Ensures the project is compiled with the specified Java version.
+			     Also configures annotation processing for Lombok. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+					<annotationProcessorPaths>
+						<!-- Path to Lombok's annotation processor, crucial for Lombok to work correctly. -->
+						<path>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+							<version>${lombok.version}</version>
+						</path>
+					</annotationProcessorPaths>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

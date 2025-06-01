@@ -1,0 +1,97 @@
+# Spring Application Configuration
+spring:
+  application:
+    name: business-rule-engine-service
+  profiles:
+    active: dev # Default profile for local development
+
+  # Datasource Configuration for PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ltfs_cdp_bre_db # Database URL for the Business Rule Engine service
+    username: cdp_bre_user # Database username
+    password: cdp_bre_password # Database password
+    driver-class-name: org.postgresql.Driver
+    hikari: # Connection pool configuration
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 5 # Minimum number of idle connections in the pool
+      idle-timeout: 600000 # Maximum idle time for a connection in the pool (10 minutes)
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool (30 minutes)
+
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none # 'none' for production, 'update' for development to update schema, 'create-drop' for testing
+      dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+    show-sql: false # Set to true to log SQL statements to the console (useful for debugging)
+    properties:
+      hibernate:
+        format_sql: false # Set to true to format the SQL statements logged to the console
+
+  # Kafka Configuration for Event-Driven Architecture
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker address(es)
+    consumer:
+      group-id: business-rule-engine-group # Consumer group ID for this service
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist any more on the server
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (JSON)
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.bre.model.*, com.ltfs.cdp.bre.event.*" # Packages to trust for JSON deserialization to prevent security issues
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (JSON)
+      acks: all # The number of acknowledgments the producer requires the leader to have received before considering a request complete. 'all' means all in-sync replicas must acknowledge.
+      retries: 3 # Number of times the producer will retry sending a record
+      batch-size: 16384 # The default batch size in bytes (16KB)
+      linger-ms: 1 # The producer will wait for this amount of time before sending a batch (1ms)
+
+# Server Port Configuration
+server:
+  port: 8082 # Unique port for the Business Rule Engine Service
+
+# Actuator Endpoints for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics # Expose common endpoints and Prometheus metrics for monitoring
+  endpoint:
+    health:
+      show-details: always # Show full health details including database, Kafka, etc.
+
+# Custom Application Properties for Business Rule Engine Service
+app:
+  kafka:
+    topics:
+      # Input topics for data ingestion
+      customer-profile-in: ltfs.cdp.customer.profile.events.in # Topic for incoming customer profile data
+      offer-data-in: ltfs.cdp.offer.data.events.in # Topic for incoming offer data
+      # Output topics for processed data
+      deduplication-results-out: ltfs.cdp.deduplication.results.events.out # Topic for deduplication results
+      finalized-offer-out: ltfs.cdp.finalized.offer.events.out # Topic for offers after rule processing and finalization
+      # Add other topics as needed, e.g., for campaign data, product data, validation failures
+
+  rule-engine:
+    # Path to rule definition files (e.g., Drools DRL files, or a directory where rules are stored)
+    # If rules are managed dynamically (e.g., from a database or external service), this property might be used differently
+    rule-definitions-path: classpath:/rules/ # Example path for rules stored in the classpath
+    # Feature toggles for different rule sets or functionalities
+    deduplication-enabled: true # Enable/disable the deduplication logic
+    validation-enabled: true # Enable/disable column-level validation logic
+    # Specific parameters for rule execution
+    dedupe-match-threshold: 0.85 # A threshold (e.g., 0.0 to 1.0) for determining a match in deduplication (85% similarity)
+    top-up-loan-dedupe-only-within-top-up: true # Specific flag for the functional requirement: Top-up loan offers deduped only within other Top-up offers
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    com.ltfs.cdp.bre: DEBUG # Set specific package to DEBUG for more detailed logs from this service
+    org.springframework.web: INFO # Logging level for Spring Web components
+    org.hibernate: INFO # Logging level for Hibernate
+    org.apache.kafka: INFO # Logging level for Kafka client
+  file:
+    name: logs/business-rule-engine-service.log # Path to the log file
+    max-size: 10MB # Maximum size of the log file before it's rolled over
+    max-history: 7 # Number of archived log files to keep

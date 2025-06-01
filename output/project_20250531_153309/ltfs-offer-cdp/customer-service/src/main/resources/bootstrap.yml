@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: customer-service # Unique name for this microservice, used for Eureka registration and Config Server lookup
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server
+      profile: dev # Active profile to fetch configuration for (e.g., dev, qa, prod)
+      label: main # Git branch label to fetch configuration from (e.g., main, master)
+      fail-fast: true # If true, application will fail to start if it cannot connect to the Config Server
+      retry:
+        initial-interval: 1000 # Initial retry interval in milliseconds
+        max-interval: 2000 # Maximum retry interval in milliseconds
+        max-attempts: 6 # Maximum number of retry attempts
+        multiplier: 1.1 # Multiplier for the retry interval
+  profiles:
+    active: dev # Default active profile for the application
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Discovery Server
+    enabled: true # Enable Eureka client
+    fetch-registry: true # Indicates whether the client should fetch the Eureka registry information
+    register-with-eureka: true # Indicates whether the client should register itself with Eureka
+  instance:
+    hostname: localhost # Hostname to register with Eureka
+    prefer-ip-address: true # Prefer IP address over hostname for Eureka registration
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique instance ID for Eureka registration

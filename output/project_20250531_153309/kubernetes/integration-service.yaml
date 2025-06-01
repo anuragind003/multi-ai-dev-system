@@ -1,0 +1,121 @@
+# Kubernetes Deployment and Service definitions for the LTFS Offer CDP Integration Service.
+# This file defines how the Integration Service Spring Boot application is deployed
+# and exposed within the Kubernetes cluster.
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: integration-service-deployment
+  labels:
+    app: integration-service
+    project: ltfs-offer-cdp
+spec:
+  # Define the number of desired replicas for high availability and scalability.
+  # This aligns with the non-functional requirement for scalability.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: integration-service
+  template:
+    metadata:
+      labels:
+        app: integration-service
+        project: ltfs-offer-cdp
+    spec:
+      # Define imagePullSecrets if your Docker image is hosted in a private registry.
+      # Example:
+      # imagePullSecrets:
+      #   - name: regcred
+      containers:
+        - name: integration-service
+          # Replace with your actual Docker image name and tag.
+          # It's recommended to use a specific version tag (e.g., 1.0.0) for production.
+          image: ltfs-offer-cdp/integration-service:1.0.0
+          # Use Always to ensure Kubernetes pulls the latest image on every deployment,
+          # or IfNotPresent for faster local development if the image is already present.
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            # Spring Boot profile for Kubernetes environment.
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Server port for the Spring Boot application.
+            - name: SERVER_PORT
+              value: "8080"
+            # Database connection details, fetched from a Kubernetes Secret for security.
+            # Ensure a Secret named 'cdp-db-secret' exists with 'jdbc-url', 'username', and 'password' keys.
+            # This addresses the security non-functional requirement.
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-secret
+                  key: jdbc-url
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-secret
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-secret
+                  key: password
+            # Kafka/Event Bus configuration for event-driven architecture.
+            # Replace with your Kafka service name and port.
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka-broker-service:9092
+            # Example of an application-specific environment variable.
+            - name: INTEGRATION_SERVICE_PROPERTY
+              value: "some-value"
+          # Resource requests and limits for performance and stability.
+          # This aligns with the performance non-functional requirement.
+          resources:
+            requests:
+              cpu: 200m  # 0.2 CPU core
+              memory: 512Mi # 512 Megabytes
+            limits:
+              cpu: 500m  # 0.5 CPU core
+              memory: 1024Mi # 1 Gigabyte
+          # Liveness probe to detect if the application is unhealthy and needs a restart.
+          # Uses Spring Boot Actuator's health endpoint.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe to detect if the application is ready to serve traffic.
+          # Prevents traffic from being sent to an unready pod during startup or after a restart.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30 # Shorter than liveness, as it's about readiness for traffic
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: integration-service
+  labels:
+    app: integration-service
+    project: ltfs-offer-cdp
+spec:
+  # Selects pods with the label 'app: integration-service' to route traffic to.
+  selector:
+    app: integration-service
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which the service will be exposed within the cluster.
+      targetPort: 8080 # The port on the container that the service will forward traffic to.
+      name: http
+  # ClusterIP makes the service only reachable from within the cluster,
+  # suitable for internal microservices communication.
+  type: ClusterIP

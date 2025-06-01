@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: offer-service-deployment
+  labels:
+    app: offer-service
+    component: offer-service
+    tier: backend
+spec:
+  replicas: 2 # Number of desired pods for high availability and scalability
+  selector:
+    matchLabels:
+      app: offer-service
+  template:
+    metadata:
+      labels:
+        app: offer-service
+        component: offer-service
+        tier: backend
+    spec:
+      # Optional: Define image pull secrets if using a private Docker registry
+      # imagePullSecrets:
+      #   - name: regcred
+      containers:
+        - name: offer-service
+          # Replace with your actual Docker image name and tag
+          # Example: ltfs-offer-cdp/offer-service:1.0.0 or a specific build tag
+          image: ltfs-offer-cdp/offer-service:latest
+          imagePullPolicy: Always # Ensures the latest image is pulled on each deployment
+          ports:
+            - containerPort: 8080 # Default Spring Boot application port
+              name: http-app
+          env:
+            # Spring Boot application profile for Kubernetes environment
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection details for PostgreSQL
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://offer-service-db:5432/offer_cdp_db
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: offer-service-db-secret # Name of the Kubernetes Secret holding DB credentials
+                  key: db_username # Key within the secret for the username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: offer-service-db-secret # Name of the Kubernetes Secret holding DB credentials
+                  key: db_password # Key within the secret for the password
+            # Example for Kafka broker configuration (if applicable)
+            # - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+            # Other application-specific environment variables can be added here
+            - name: APPLICATION_LOG_LEVEL
+              value: INFO
+          resources:
+            # Resource requests and limits for the container
+            # These help Kubernetes schedule pods efficiently and prevent resource exhaustion
+            requests:
+              memory: "512Mi" # Request 512 MiB of memory
+              cpu: "500m"    # Request 0.5 CPU core
+            limits:
+              memory: "1024Mi" # Limit to 1024 MiB (1 GiB) of memory
+              cpu: "1000m"   # Limit to 1 CPU core
+          livenessProbe:
+            # Liveness probe checks if the application is running and healthy.
+            # If it fails, Kubernetes will restart the container.
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Initial delay before the first probe
+            periodSeconds: 10     # How often to perform the probe
+            timeoutSeconds: 5     # How long to wait for a response
+            failureThreshold: 3   # Number of consecutive failures before restarting
+          readinessProbe:
+            # Readiness probe checks if the application is ready to serve traffic.
+            # If it fails, Kubernetes will stop sending traffic to this pod.
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 20 # Initial delay before the first probe
+            periodSeconds: 5      # How often to perform the probe
+            timeoutSeconds: 3     # How long to wait for a response
+            failureThreshold: 3   # Number of consecutive failures before marking as unready
+      # Optional: Define a service account if specific RBAC permissions are needed
+      # serviceAccountName: offer-service-sa
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: offer-service # Name of the Kubernetes Service
+  labels:
+    app: offer-service
+    component: offer-service
+    tier: backend
+spec:
+  selector:
+    app: offer-service # Selects pods with the label 'app: offer-service'
+  ports:
+    - protocol: TCP
+      port: 80         # The port on which the service will be exposed within the cluster
+      targetPort: 8080 # The port on which the application inside the container is listening
+      name: http
+  type: ClusterIP # Exposes the service on a cluster-internal IP.
+                  # Use LoadBalancer for external access (requires cloud provider integration)
+                  # or NodePort to expose on each node's IP at a static port.
+                  # For microservices, ClusterIP is common, with Ingress for external routing.

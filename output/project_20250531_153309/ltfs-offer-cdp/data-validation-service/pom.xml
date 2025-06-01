@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+	Parent POM for Spring Boot applications.
+	It provides dependency management and plugin configuration,
+	ensuring consistent versions and build practices across Spring Boot projects.
+	-->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.5</version> <!-- Using a recent stable Spring Boot 3.x version -->
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<!-- Project coordinates: groupId, artifactId, and version uniquely identify this project. -->
+	<groupId>com.ltfs.cdp</groupId>
+	<artifactId>data-validation-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>data-validation-service</name>
+	<description>
+		Microservice responsible for performing basic column-level data validation
+		on incoming data for the LTFS Offer CDP system.
+	</description>
+
+	<!-- Project properties for consistent version management and configuration. -->
+	<properties>
+		<java.version>17</java.version> <!-- Specifies Java 17 as the target JVM version, compatible with Spring Boot 3.x -->
+		<lombok.version>1.18.30</lombok.version> <!-- Defines the version for Lombok library -->
+	</properties>
+
+	<!-- Project dependencies: Essential libraries required for the Data Validation Service. -->
+	<dependencies>
+		<!--
+		Spring Boot Starter Web:
+		Provides all necessary dependencies for building web applications, including RESTful services.
+		This is crucial for exposing endpoints to receive data for validation.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+		Spring Boot Starter Validation:
+		Integrates with Bean Validation (JSR 380) for declarative data validation using annotations
+		(e.g., @NotNull, @Size, @Pattern). This is fundamental for column-level validation.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+		Lombok:
+		A popular library that reduces boilerplate code by automatically generating getters, setters,
+		constructors, equals, hashCode, and toString methods via annotations.
+		Marked as 'optional' as it's a compile-time dependency for code generation.
+		-->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<version>${lombok.version}</version>
+			<optional>true</optional>
+		</dependency>
+
+		<!--
+		Spring Boot Starter Test:
+		Provides comprehensive dependencies for testing Spring Boot applications, including JUnit 5,
+		Spring Test, Mockito, and AssertJ. Essential for writing unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope> <!-- This dependency is only needed during the test phase -->
+		</dependency>
+
+		<!--
+		Spring Boot DevTools:
+		Provides development-time features such as automatic application restarts when files change,
+		LiveReload, and enhanced debugging information. It's a runtime-only dependency.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<scope>runtime</scope> <!-- This dependency is only needed during runtime in development -->
+			<optional>true</optional>
+		</dependency>
+
+		<!--
+		Note on other potential dependencies:
+		- If the validation logic requires fetching reference data from a database (e.g., PostgreSQL),
+		  'spring-boot-starter-data-jpa' and 'postgresql' driver would be added.
+		  However, for "basic column-level validation", this might not be necessary if rules are
+		  code-driven or configuration-driven without direct DB lookups.
+		- If the service is primarily event-driven (e.g., consuming validation requests from Kafka),
+		  'spring-kafka' would be included. Given the "Microservices Architecture with Event-Driven Components"
+		  context, this is a strong possibility for future integration.
+		  For this initial POM, focusing on core validation capabilities via web endpoints is sufficient.
+		-->
+
+	</dependencies>
+
+	<!-- Build configuration: Defines how the project is built. -->
+	<build>
+		<plugins>
+			<!--
+			Spring Boot Maven Plugin:
+			This plugin is crucial for Spring Boot applications. It packages the project as an
+			executable JAR, making it easy to run the application directly. It also handles
+			classpath setup and dependency shading.
+			-->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!--
+					Excludes Lombok from the final JAR. While Lombok is a compile-time dependency,
+					excluding it from the packaged JAR can slightly reduce its size, as its
+					annotations are processed during compilation.
+					-->
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

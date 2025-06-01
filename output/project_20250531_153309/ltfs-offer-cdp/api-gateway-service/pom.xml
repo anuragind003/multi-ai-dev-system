@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!-- Parent POM for Spring Boot applications, providing dependency management and plugin configuration. -->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.5</version> <!-- Specifies the Spring Boot version for consistent dependency management. -->
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<!-- Project coordinates -->
+	<groupId>com.ltfs.cdp</groupId>
+	<artifactId>api-gateway-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>api-gateway-service</name>
+	<description>API Gateway Service for LTFS Offer CDP, handling routing, security, and cross-cutting concerns.</description>
+
+	<!-- Project properties, defining versions for Java and Spring Cloud. -->
+	<properties>
+		<java.version>17</java.version> <!-- Specifies the Java version to be used for compilation and execution. -->
+		<spring-cloud.version>2023.0.1</spring-cloud.version> <!-- Defines the Spring Cloud release train version. -->
+	</properties>
+
+	<!-- Project dependencies -->
+	<dependencies>
+		<!-- Spring Boot WebFlux Starter:
+		     Required for Spring Cloud Gateway, which is built on Spring WebFlux (reactive stack). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webflux</artifactId>
+		</dependency>
+
+		<!-- Spring Cloud Gateway Starter:
+		     The core dependency for building an API Gateway with Spring Cloud.
+		     Provides routing, filtering, and other gateway functionalities. -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-gateway</artifactId>
+		</dependency>
+
+		<!-- Spring Cloud Netflix Eureka Client:
+		     Enables service registration and discovery with a Eureka Server,
+		     allowing the gateway to dynamically route requests to microservices. -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Security Starter:
+		     Provides comprehensive security features for the API Gateway,
+		     including authentication, authorization, and protection against common vulnerabilities. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Actuator:
+		     Adds production-ready features to monitor and manage the application,
+		     such as health checks, metrics, and information endpoints. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Spring Boot DevTools:
+		     Provides development-time conveniences like automatic application restarts
+		     when files change, LiveReload, and enhanced debugging information.
+		     Scoped to 'runtime' and 'optional' to exclude from production builds. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<scope>runtime</scope>
+			<optional>true</optional>
+		</dependency>
+
+		<!-- Spring Boot Test Starter:
+		     Includes essential libraries for testing Spring Boot applications,
+		     such as JUnit, Mockito, and Spring Test. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Spring Security Test:
+		     Provides utilities for testing Spring Security configurations,
+		     allowing for easier simulation of authenticated users and security contexts in tests. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<!-- Dependency Management for Spring Cloud:
+	     This section uses a BOM (Bill of Materials) to ensure that all Spring Cloud
+	     dependencies used in the project are compatible with each other and with the
+	     specified Spring Cloud release train version. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<!-- Build configuration -->
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin:
+			     Packages the application into an executable JAR file,
+			     making it easy to run the Spring Boot application. -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Maven Compiler Plugin:
+			     Ensures that the project is compiled using the specified Java version.
+			     The -parameters argument retains parameter names for reflection, useful for Spring. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+					<compilerArgs>
+						<arg>-parameters</arg>
+					</compilerArgs>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

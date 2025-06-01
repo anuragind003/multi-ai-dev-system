@@ -1,0 +1,125 @@
+version: '3.8'
+
+# Docker Compose file for the LTFS Offer CDP local development environment.
+# This file orchestrates PostgreSQL, Kafka, Zookeeper, and the Spring Boot microservices.
+#
+# To run:
+# 1. Ensure Docker Desktop (or Docker Engine) is running.
+# 2. Navigate to the root directory of your project where this docker-compose.yml resides.
+# 3. Execute: `docker-compose up --build -d`
+#    - `--build`: Builds images for services that have a `build` context (e.g., Spring Boot apps).
+#    - `-d`: Runs containers in detached mode (in the background).
+#
+# To stop and remove containers, networks, and volumes:
+# `docker-compose down -v`
+#    - `-v`: Removes named volumes declared in the `volumes` section.
+
+services:
+  # PostgreSQL Database Service
+  # Used by all Spring Boot microservices for data persistence.
+  postgres:
+    image: postgres:13-alpine # Using a lightweight PostgreSQL image
+    container_name: ltfscdp_postgres
+    environment:
+      POSTGRES_DB: ltfscdp_db # Default database name for the CDP system
+      POSTGRES_USER: ltfscdp_user # Database user for application access
+      POSTGRES_PASSWORD: ltfscdp_password # Database password
+      PGDATA: /var/lib/postgresql/data/pgdata # Custom data directory inside the container for persistence
+    ports:
+      - "5432:5432" # Map host port 5432 to container port 5432, allowing host access to DB
+    volumes:
+      - ltfscdp_pg_data:/var/lib/postgresql/data/pgdata # Persistent volume for database data
+    networks:
+      - ltfscdp_network # Connect to the custom network for inter-service communication
+    healthcheck: # Health check to ensure PostgreSQL is ready before dependent services start
+      test: ["CMD-SHELL", "pg_isready -U ltfscdp_user -d ltfscdp_db"]
+      interval: 5s # Check every 5 seconds
+      timeout: 5s # Timeout after 5 seconds
+      retries: 5 # Retry 5 times before marking as unhealthy
+
+  # Zookeeper Service
+  # Essential for Kafka, managing Kafka brokers and topic configurations.
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1 # Confluent's Zookeeper image for compatibility with Kafka
+    container_name: ltfscdp_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181 # Zookeeper client port
+      ZOOKEEPER_TICK_TIME: 2000 # Zookeeper tick time in milliseconds
+    ports:
+      - "2181:2181" # Map host port 2181 to container port 2181
+    networks:
+      - ltfscdp_network # Connect to the custom network
+
+  # Kafka Broker Service
+  # Provides event-driven capabilities for inter-service communication and data streaming.
+  kafka:
+    image: confluentinc/cp-kafka:7.0.1 # Confluent's Kafka image
+    container_name: ltfscdp_kafka
+    depends_on:
+      - zookeeper # Kafka depends on Zookeeper being up and running
+    environment:
+      KAFKA_BROKER_ID: 1 # Unique ID for the Kafka broker in a single-node setup
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181 # Zookeeper connection string, using service name 'zookeeper'
+      # KAFKA_ADVERTISED_LISTENERS allows Kafka to be accessible from other containers and the host.
+      # PLAINTEXT://kafka:9092 for internal container communication.
+      # PLAINTEXT_HOST://localhost:29092 for host applications to connect.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT # Defines security protocols
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT # Listener for inter-broker communication (important for multi-broker setups, but good practice)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # Replication factor for internal topics (set to 1 for single-node dev setup)
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0 # Reduces delay for consumer group rebalance during development
+    ports:
+      - "9092:9092" # Map internal Kafka port to host port (for internal container communication)
+      - "29092:29092" # Map external Kafka port to host port (for host applications to connect)
+    networks:
+      - ltfscdp_network # Connect to the custom network
+
+  # Example Spring Boot Microservice: Customer Profile Service
+  # This service manages customer profiles, including deduplication logic and providing a single profile view.
+  #
+  # To add more microservices (e.g., offer-management-service, campaign-service, deduplication-service, validation-service):
+  # 1. Duplicate this entire `customer-profile-service` block.
+  # 2. Change the service name (e.g., `offer-management-service`).
+  # 3. Adjust the `build.context` to point to the correct service directory (e.g., `./offer-management-service`).
+  # 4. Change the `container_name` to be unique.
+  # 5. Adjust the `ports` mapping to a unique host port (e.g., "8081:8080", "8082:8080", etc.).
+  # 6. Add any service-specific environment variables.
+  customer-profile-service:
+    # Assumes a Dockerfile exists in the `./customer-profile-service` directory.
+    # This Dockerfile should build the Spring Boot JAR and run it.
+    build:
+      context: ./customer-profile-service # Path to the directory containing the Dockerfile for this service
+      dockerfile: Dockerfile # Name of the Dockerfile (default is Dockerfile)
+    container_name: ltfscdp_customer_profile_service
+    ports:
+      - "8080:8080" # Map host port 8080 to container port 8080 (default Spring Boot port)
+    environment:
+      # Database connection details, using the service name 'postgres' for the host
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ltfscdp_db
+      SPRING_DATASOURCE_USERNAME: ltfscdp_user
+      SPRING_DATASOURCE_PASSWORD: ltfscdp_password
+      # Kafka broker connection details, using the service name 'kafka' for the host
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Add any other service-specific environment variables here (e.g., application-specific configs)
+      # SPRING_PROFILES_ACTIVE: dev
+    depends_on:
+      postgres:
+        condition: service_healthy # Ensure PostgreSQL is healthy before starting this service
+      kafka:
+        condition: service_started # Ensure Kafka is started before starting this service
+    networks:
+      - ltfscdp_network # Connect to the custom network
+    # Optional: Mount local source code for hot-reloading during development (uncomment and adjust paths)
+    # This allows changes to code on the host to be reflected inside the container without rebuilding the image.
+    # volumes:
+    #   - ./customer-profile-service:/app # Mount the service's source code directory
+    #   - /root/.m2:/root/.m2 # For Maven dependencies caching inside container (if building inside container)
+
+# Define named volumes for data persistence
+volumes:
+  ltfscdp_pg_data: # Volume for PostgreSQL data, ensuring data persists across container restarts
+
+# Define a custom bridge network for all services to communicate securely and efficiently
+networks:
+  ltfscdp_network:
+    driver: bridge # Use the default bridge driver for internal communication

@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: offer-service
+  labels:
+    app: offer-service
+    project: ltfs-offer-cdp
+spec:
+  replicas: 3 # Scalability: Start with 3 replicas for high availability and load distribution.
+  selector:
+    matchLabels:
+      app: offer-service
+  template:
+    metadata:
+      labels:
+        app: offer-service
+        project: ltfs-offer-cdp
+    spec:
+      # imagePullSecrets: # Uncomment and configure if using a private Docker registry
+      #   - name: regcred
+      containers:
+        - name: offer-service
+          image: ltfs-offer-cdp/offer-service:1.0.0 # Replace with your actual Docker image name and tag
+          ports:
+            - containerPort: 8080 # Default Spring Boot port
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes # Activate a specific Spring profile for Kubernetes environment
+            # Database connection details - ideally these should come from a Kubernetes Secret
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/offercdp_db # Assuming 'postgresql-service' is the K8s service name for PostgreSQL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: offer-service-db-secret # Name of the Kubernetes Secret
+                  key: db_username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: offer-service-db-secret
+                  key: db_password
+            # Kafka configuration for event-driven components
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka-broker-service:9092 # Assuming 'kafka-broker-service' is the K8s service name for Kafka
+            # Other application-specific environment variables can be added here
+            # - name: SOME_APP_PROPERTY
+            #   value: "some_value"
+          resources:
+            requests:
+              memory: "512Mi" # Request 512 MiB of memory
+              cpu: "500m"    # Request 0.5 CPU cores
+            limits:
+              memory: "1024Mi" # Limit to 1 GiB of memory
+              cpu: "1000m"   # Limit to 1 CPU core
+          livenessProbe: # Checks if the application is running and healthy
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe: # Checks if the application is ready to serve traffic
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Give the application time to initialize dependencies (e.g., DB connections)
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: offer-service # Name of the Kubernetes Service
+  labels:
+    app: offer-service
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: offer-service # Selects pods with the label 'app: offer-service'
+  ports:
+    - protocol: TCP
+      port: 8080       # The port on which the service will be exposed
+      targetPort: 8080 # The port on the container to which the service will forward traffic
+  type: ClusterIP     # Exposes the service on an internal IP in the cluster.
+                      # Use LoadBalancer if external access is required (e.g., for testing or specific external integrations),
+                      # but typically an Ingress controller is used for HTTP/HTTPS external access.

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: business-rule-engine-service-deployment
+  labels:
+    app: business-rule-engine-service
+    project: ltfs-offer-cdp
+spec:
+  # Define the number of desired replicas for high availability and scalability.
+  # Adjust based on expected load and performance requirements.
+  replicas: 3
+  selector:
+    matchLabels:
+      app: business-rule-engine-service
+  template:
+    metadata:
+      labels:
+        app: business-rule-engine-service
+        project: ltfs-offer-cdp
+    spec:
+      # Optional: Specify image pull secrets if using a private Docker registry.
+      # imagePullSecrets:
+      #   - name: regcred
+      containers:
+        - name: business-rule-engine-service
+          # Replace with your actual Docker image name and tag.
+          # It's recommended to use specific version tags instead of 'latest' in production.
+          image: ltfs-offer-cdp/business-rule-engine-service:1.0.0
+          ports:
+            # The port on which the Spring Boot application listens.
+            - containerPort: 8080
+          env:
+            # Spring Boot profile for Kubernetes environment.
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection details.
+            # It's highly recommended to use Kubernetes Secrets for sensitive information
+            # like database credentials in a production environment.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/cdp_db
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: username           # Key within the Secret for username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cdp-db-credentials # Name of the Kubernetes Secret
+                  key: password           # Key within the Secret for password
+            # Example for other environment variables if needed
+            # - name: KAFKA_BOOTSTRAP_SERVERS
+            #   value: kafka-broker-service:9092
+          resources:
+            # Define resource requests and limits to ensure stable performance
+            # and prevent resource exhaustion on nodes.
+            # Requests: Minimum resources guaranteed.
+            # Limits: Maximum resources the container can consume.
+            # Adjust these values based on actual profiling and load testing.
+            requests:
+              memory: "512Mi"
+              cpu: "500m" # 0.5 CPU core
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m" # 1 CPU core
+          # Liveness probe to check if the application is running and healthy.
+          # If the probe fails, Kubernetes will restart the container.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10     # Check every 10 seconds
+            timeoutSeconds: 5     # Timeout after 5 seconds
+            failureThreshold: 3   # After 3 consecutive failures, restart the container
+          # Readiness probe to check if the application is ready to serve traffic.
+          # If the probe fails, Kubernetes will stop sending traffic to this pod.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Give the application time to initialize
+            periodSeconds: 10     # Check every 10 seconds
+            timeoutSeconds: 5     # Timeout after 5 seconds
+            failureThreshold: 3   # After 3 consecutive failures, mark as unready
+      # Optional: Define a service account if specific RBAC permissions are required for the pod.
+      # serviceAccountName: business-rule-engine-service-sa
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: business-rule-engine-service
+  labels:
+    app: business-rule-engine-service
+    project: ltfs-offer-cdp
+spec:
+  # Selects pods with the label `app: business-rule-engine-service` to route traffic to.
+  selector:
+    app: business-rule-engine-service
+  ports:
+    # The port on which the service will be exposed within the cluster.
+    - protocol: TCP
+      port: 80
+      # The target port on the container where the application is listening.
+      targetPort: 8080
+  # ClusterIP type makes the service only reachable from within the Kubernetes cluster.
+  # Use NodePort or LoadBalancer if external access is required, or an Ingress controller.
+  type: ClusterIP

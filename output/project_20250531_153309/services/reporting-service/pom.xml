@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Parent POM for Spring Boot applications.
+         Provides dependency management and plugin configuration for Spring Boot projects. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version> <!-- Using a stable Spring Boot 3.x version -->
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>com.ltfs.cdp</groupId>
+    <artifactId>reporting-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>reporting-service</name>
+    <description>Reporting Service for LTFS Offer CDP - Provides insights and reports on customer, offer, and campaign data.</description>
+
+    <properties>
+        <java.version>17</java.version> <!-- Aligned with modern Spring Boot 3.x practices -->
+        <spring-cloud.version>2023.0.1</spring-cloud.version> <!-- For Spring Cloud components like Eureka -->
+        <lombok.version>1.18.30</lombok.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Starter for building web, including RESTful, applications.
+             Provides embedded Tomcat and Spring MVC. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Starter for using Spring Data JPA with Hibernate.
+             Enables easy interaction with relational databases. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL JDBC Driver.
+             Required to connect to the PostgreSQL database. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope> <!-- Only needed at runtime -->
+        </dependency>
+
+        <!-- Spring Boot Starter for Actuator, providing production-ready features.
+             Includes endpoints for monitoring, metrics, and health checks. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud Netflix Eureka Client for service registration and discovery.
+             Allows this service to register itself with a Eureka server and discover other services. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
+        <!-- Spring Kafka for building event-driven microservices with Apache Kafka.
+             Enables consuming and producing messages from/to Kafka topics. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- Validation API and Hibernate Validator implementation for DTO validation.
+             Used for declarative validation of request bodies and other data. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Lombok for reducing boilerplate code (e.g., getters, setters, constructors).
+             Simplifies development by auto-generating common methods. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <optional>true</optional> <!-- Lombok is a compile-time dependency, not needed at runtime -->
+        </dependency>
+
+        <!-- Spring Boot Starter for testing Spring applications.
+             Includes JUnit 5, Mockito, AssertJ, and Spring Test. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Spring Kafka Test for testing Kafka-related components.
+             Provides utilities for testing Kafka consumers and producers. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- Dependency Management for Spring Cloud.
+         Ensures consistent versions for all Spring Cloud components used in the project. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Spring Boot Maven Plugin to package the application as an executable JAR.
+                 Also handles classpath and creates a fat JAR. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Exclude Lombok from the final JAR as it's only needed during compilation. -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

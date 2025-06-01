@@ -1,0 +1,112 @@
+# Application-level properties for the Campaign Service
+spring:
+  # Define the application name, useful for service discovery, logging, and monitoring
+  application:
+    name: campaign-service
+
+  # Datasource configuration for PostgreSQL database
+  datasource:
+    # Database URL, using environment variables with default fallback values for local development
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ltfs_offer_cdp}
+    # Database username, using environment variable with a default fallback
+    username: ${DB_USERNAME:ltfs_user}
+    # Database password, using environment variable with a default fallback
+    password: ${DB_PASSWORD:ltfs_password}
+    # JDBC driver class name for PostgreSQL
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool configuration for optimal database performance
+    hikari:
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 2       # Minimum number of idle connections maintained
+      idle-timeout: 30000   # Maximum idle time for a connection before being removed from the pool (milliseconds)
+      connection-timeout: 30000 # Maximum wait time for a connection from the pool (milliseconds)
+      max-lifetime: 1800000 # Maximum lifetime of a connection in the pool (milliseconds)
+
+  # JPA (Java Persistence API) and Hibernate configuration
+  jpa:
+    hibernate:
+      # 'ddl-auto' strategy for database schema management.
+      # 'none' is recommended for production to prevent accidental schema modifications.
+      # Use 'update' for development environments if schema changes are frequent.
+      ddl-auto: none
+    # Set to 'true' to log SQL statements executed by Hibernate (useful for debugging)
+    show-sql: false
+    properties:
+      hibernate:
+        # Format the SQL statements in logs for better readability
+        format_sql: false
+        # Specify the dialect for PostgreSQL database
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Spring Task Scheduling configuration
+  task:
+    scheduling:
+      pool:
+        size: 5 # Number of threads in the scheduling pool for concurrent tasks
+      thread-name-prefix: campaign-scheduler- # Prefix for thread names created by the scheduler
+
+# Server port on which the Campaign Service will run
+server:
+  port: 8082 # Default port for the campaign-service microservice
+
+# Custom properties specifically for Moengage file generation and related processes
+moengage:
+  file-generation:
+    # Base directory where all Moengage-related output files will be stored
+    base-path: /opt/ltfs-offer-cdp/moengage-files
+    # Subdirectory for campaign offer files, derived from the base path
+    campaign-offers-path: ${moengage.file-generation.base-path}/campaign-offers
+    # Subdirectory for customer profile files, derived from the base path
+    customer-profiles-path: ${moengage.file-generation.base-path}/customer-profiles
+    # Prefix for campaign offer CSV filenames (e.g., campaign_offers_YYYYMMDD.csv)
+    campaign-offers-filename-prefix: campaign_offers_
+    # Prefix for customer profile CSV filenames (e.g., customer_profiles_YYYYMMDD.csv)
+    customer-profiles-filename-prefix: customer_profiles_
+    # Cron expression for scheduling the generation of Moengage campaign offer files.
+    # Example: "0 0 2 * * *" means every day at 2:00 AM.
+    campaign-offers-cron: "0 0 2 * * *"
+    # Cron expression for scheduling the generation of Moengage customer profile files.
+    # Example: "0 0 3 * * *" means every day at 3:00 AM.
+    customer-profiles-cron: "0 0 3 * * *"
+    # Delimiter character to be used in generated CSV files
+    csv-delimiter: ","
+    # Boolean flag to indicate whether to include a header row in the generated CSV files
+    include-header: true
+
+# Custom properties for general campaign processing logic
+campaign:
+  processing:
+    # Cron expression for scheduling the core campaign offer processing logic.
+    # This task might involve evaluating rules, generating new offers, or updating existing ones.
+    # Example: "0 */15 * * * *" means every 15 minutes.
+    process-offers-cron: "0 */15 * * * *"
+    # Default batch size for processing records (e.g., offers, customers) in chunks
+    batch-size: 1000
+
+# Logging configuration for the application
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    org.springframework.web: INFO # Logging level for Spring Web components
+    org.hibernate: INFO # Logging level for Hibernate
+    # Set to DEBUG for more detailed logs from our specific application packages
+    com.ltfs.cdp.campaign: DEBUG
+  file:
+    # Path to the application log file. Ensure the directory exists and is writable.
+    name: /var/log/ltfs-offer-cdp/campaign-service/application.log
+
+# Spring Boot Actuator configuration for monitoring and management
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose common Actuator endpoints via HTTP for monitoring tools
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # Show full details of the health check (e.g., database status, disk space)
+      show-details: always
+    metrics:
+      enabled: true # Enable the metrics endpoint
+    prometheus:
+      enabled: true # Enable the Prometheus endpoint for scraping metrics

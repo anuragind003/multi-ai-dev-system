@@ -1,0 +1,84 @@
+# application.yml for Admin Portal Service
+
+# Spring Application Configuration
+spring:
+  application:
+    name: admin-portal-service # Unique name for this microservice, used for logging and service discovery
+
+  # Database Configuration for PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_admin_db # Database connection URL. Replace 'localhost' and 'cdp_admin_db' as needed.
+    username: cdp_admin_user # Database username. In production, consider using environment variables or a secret management system.
+    password: cdp_admin_password # Database password. In production, strongly recommend using environment variables or a secret management system.
+    driver-class-name: org.postgresql.Driver # JDBC driver for PostgreSQL
+    hikari: # HikariCP connection pool configuration for optimal database performance
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 5 # Minimum number of idle connections to maintain
+      idle-timeout: 30000 # Maximum idle time for a connection in the pool (30 seconds)
+      connection-timeout: 20000 # Maximum time a client will wait for a connection from the pool (20 seconds)
+      max-lifetime: 600000 # Maximum lifetime of a connection in the pool (10 minutes)
+
+  # JPA (Java Persistence API) and Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update # Hibernate DDL generation strategy. 'update' is suitable for development; for production, consider 'none' or 'validate' and manage schema migrations with tools like Flyway/Liquibase.
+    show-sql: false # Set to 'true' to log SQL statements to the console (useful for debugging, set to 'false' for production)
+    properties:
+      hibernate:
+        format_sql: false # Set to 'true' to format SQL statements in logs (useful for debugging)
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+
+  # Servlet and Multipart (File Upload) Configuration
+  servlet:
+    multipart:
+      max-file-size: 10MB # Maximum allowed size for a single uploaded file
+      max-request-size: 10MB # Maximum allowed size for a multipart request (including all files and form data)
+
+# Server Port Configuration
+server:
+  port: 8081 # The port on which the Admin Portal Service will listen
+
+# Custom Application Properties
+app:
+  # Configuration for file storage, likely for uploaded campaign data, offer templates, or reports
+  file-storage:
+    base-path: /opt/ltfs-cdp/admin-portal/uploads # Base directory where files will be stored. Adjust for your environment (e.g., C:/ltfs-cdp/admin-portal/uploads for Windows, or a mounted volume path in Docker/Kubernetes).
+
+  # Integration Endpoints for other CDP microservices
+  # The Admin Portal Service will interact with other services to manage customer, offer, and campaign data.
+  integration:
+    customer-service:
+      base-url: http://localhost:8082/api/v1/customers # Base URL for the Customer Service API
+      timeout-ms: 5000 # Connection and read timeout for calls to Customer Service (5 seconds)
+    offer-service:
+      base-url: http://localhost:8083/api/v1/offers # Base URL for the Offer Service API
+      timeout-ms: 5000 # Connection and read timeout for calls to Offer Service (5 seconds)
+    campaign-service:
+      base-url: http://localhost:8084/api/v1/campaigns # Base URL for the Campaign Service API
+      timeout-ms: 5000 # Connection and read timeout for calls to Campaign Service (5 seconds)
+    deduplication-service:
+      base-url: http://localhost:8085/api/v1/deduplication # Base URL for the Deduplication Service API
+      timeout-ms: 10000 # Connection and read timeout for calls to Deduplication Service (10 seconds, as deduplication might be a more intensive operation)
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    org.springframework.web: INFO # Logging level for Spring Web components
+    com.ltfs.cdp.admin: DEBUG # Specific logging level for the application's package (set to DEBUG for more detailed logs during development)
+  file:
+    name: logs/admin-portal-service.log # Path to the log file. Logs will be written to this file.
+
+# Actuator Endpoints for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose common Actuator endpoints via HTTP for monitoring
+  endpoint:
+    health:
+      show-details: always # Always show full health details (e.g., database status, disk space)
+    metrics:
+      export:
+        prometheus:
+          enabled: true # Enable Prometheus metrics export, allowing Prometheus to scrape metrics from /actuator/prometheus

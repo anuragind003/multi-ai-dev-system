@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-server-deployment
+  labels:
+    app: eureka-server
+    tier: common-service
+    project: ltfs-offer-cdp
+spec:
+  replicas: 2 # Deploy 2 replicas for high availability of the Eureka server
+  selector:
+    matchLabels:
+      app: eureka-server
+  template:
+    metadata:
+      labels:
+        app: eureka-server
+        tier: common-service
+        project: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: eureka-server
+          image: ltfs-offer-cdp/eureka-server:1.0.0 # Replace with your actual Eureka server Docker image and tag
+          ports:
+            - containerPort: 8761 # Default port for Eureka server
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes # Activates the 'kubernetes' Spring profile for the application
+            - name: EUREKA_CLIENT_REGISTER-WITH-EUREKA
+              value: "false" # Eureka server itself should not register with Eureka
+            - name: EUREKA_CLIENT_FETCH-REGISTRY
+              value: "false" # Eureka server itself should not fetch registry from Eureka
+            # Note: For true peer-to-peer Eureka replication (multiple Eureka instances
+            # registering with each other), a StatefulSet and Headless Service
+            # would typically be used, along with specific Eureka configuration
+            # pointing to peer hostnames. This setup assumes clients connect
+            # to the 'eureka-server' ClusterIP service, and the Eureka instances
+            # behind it operate independently as registries.
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m" # JVM memory options for the Eureka server
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "768Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8761
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8761
+            initialDelaySeconds: 30 # Application is ready sooner than it's fully live
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-server # This name will be used by other microservices for service discovery (e.g., http://eureka-server:8761/eureka/)
+  labels:
+    app: eureka-server
+    tier: common-service
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: eureka-server # Selects pods with the label 'app: eureka-server'
+  ports:
+    - protocol: TCP
+      port: 8761 # The port that the service exposes
+      targetPort: 8761 # The port on the pod that the service targets
+  type: ClusterIP # Exposes the service on an internal IP in the cluster. Only accessible from within the cluster.

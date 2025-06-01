@@ -1,0 +1,191 @@
+package com.ltfs.cdp.bre.rules;
+
+// Import the fact classes that will be asserted into the working memory
+import com.ltfs.cdp.bre.model.Customer;
+import com.ltfs.cdp.bre.model.Offer;
+
+/**
+ * Drools rules for determining offer eligibility in the LTFS Offer CDP system.
+ * These rules evaluate various criteria based on customer data and offer details
+ * to mark an offer as 'ELIGIBLE' or 'INELIGIBLE' with a specific rejection reason.
+ *
+ * The rules operate on 'Offer' and 'Customer' facts asserted into the working memory.
+ *
+ * Eligibility Status Flow:
+ * 1. An 'Offer' is initially inserted with eligibilityStatus = "PENDING".
+ * 2. Rules will evaluate conditions and update 'eligibilityStatus' to "INELIGIBLE"
+ *    and set a 'rejectionReason' if any condition is not met.
+ * 3. If no 'INELIGIBLE' rule fires, a final rule can mark it as "ELIGIBLE".
+ * 4. A final rule updates the main 'status' field of the Offer object.
+ */
+
+// Rule Salience: Rules with higher salience fire first.
+// We want initialization rules to run first, then rejection rules, and finally the default eligible rule.
+
+// Rule 1: Initialize Offer Eligibility Status
+// This rule ensures that every offer starts with a PENDING status,
+// allowing subsequent rules to mark it as INELIGIBLE.
+rule "Initialize Offer Eligibility Status"
+    salience 100 // High salience to ensure it runs first
+    when
+        $offer : Offer( eligibilityStatus == null || eligibilityStatus.trim().isEmpty() )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "PENDING" ),
+            setRejectionReason( null )
+        }
+        // In a production environment, replace System.out.println with a proper logging framework (e.g., SLF4J)
+        System.out.println("Rule: Initialized offer " + $offer.getOfferId() + " to PENDING.");
+end
+
+// Rule 2: Basic Offer Data Validation - Missing Offer Type
+rule "Reject Offer - Missing Offer Type"
+    salience 90 // Higher salience for basic validation failures
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            offerType == null || offerType.trim().isEmpty()
+        )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Missing Offer Type" )
+        }
+        System.out.println("Rule: Offer " + $offer.getOfferId() + " rejected due to missing offer type.");
+end
+
+// Rule 3: Basic Offer Data Validation - Missing or Invalid Loan Amount
+rule "Reject Offer - Missing or Invalid Loan Amount"
+    salience 90 // Higher salience for basic validation failures
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            loanAmount == null || loanAmount <= 0
+        )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Missing or Invalid Loan Amount" )
+        }
+        System.out.println("Rule: Offer " + $offer.getOfferId() + " rejected due to missing or invalid loan amount.");
+end
+
+// Rule 4: Customer 360 Presence Check
+// Ensures that a corresponding customer profile exists in the system (Customer 360)
+// for the offer's customer reference ID.
+rule "Reject Offer - Customer Not Found in 360"
+    salience 80 // Medium salience for core data availability checks
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            customerRefId != null && !customerRefId.trim().isEmpty()
+        )
+        // Check if no Customer fact exists for the given customerRefId
+        not Customer( customerId == $offer.getCustomerRefId() )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Customer profile not found in Customer 360" )
+        }
+        System.out.println("Rule: Offer " + $offer.getOfferId() + " rejected as customer " + $offer.getCustomerRefId() + " not found in 360.");
+end
+
+// Rule 5: Credit Score Eligibility Check
+// Example: Customer must have a credit score of at least 650 for any offer.
+rule "Reject Offer - Low Credit Score"
+    salience 70 // Salience for common eligibility criteria
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            customerRefId != null
+        )
+        $customer : Customer(
+            customerId == $offer.getCustomerRefId(),
+            creditScore != null && creditScore < 650
+        )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Credit score below minimum requirement (650)" )
+        }
+        System.out.println("Rule: Offer " + $offer.getOfferId() + " rejected due to low credit score for customer " + $customer.getCustomerId() + " (" + $customer.getCreditScore() + ").");
+end
+
+// Rule 6: Top-up Offer Specific - Existing Loan Requirement
+// For 'TOP_UP' offers, the customer must have an existing 'PERSONAL_LOAN' to be eligible.
+// This ensures that top-up offers are only extended to customers with a relevant existing product.
+rule "Reject Top-up Offer - No Qualifying Existing Loan"
+    salience 60 // Salience for offer-type specific rules
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            offerType == "TOP_UP",
+            customerRefId != null
+        )
+        $customer : Customer(
+            customerId == $offer.getCustomerRefId(),
+            existingLoanProducts != null && !existingLoanProducts.contains("PERSONAL_LOAN") // Assuming "PERSONAL_LOAN" is the type that qualifies for top-up
+        )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Customer does not have a qualifying existing personal loan for top-up" )
+        }
+        System.out.println("Rule: Top-up offer " + $offer.getOfferId() + " rejected as customer " + $customer.getCustomerId() + " lacks qualifying existing loan.");
+end
+
+// Rule 7: Pre-approved Offer Specific - No Existing Personal Loan
+// For 'PREAPPROVED' offers, the customer should NOT have an existing 'PERSONAL_LOAN'.
+// This is a common scenario where pre-approved offers target new loan acquisitions or
+// cross-sell to different product types, not existing personal loan holders.
+rule "Reject Pre-approved Offer - Existing Personal Loan Found"
+    salience 60 // Salience for offer-type specific rules
+    when
+        $offer : Offer(
+            eligibilityStatus == "PENDING",
+            offerType == "PREAPPROVED",
+            customerRefId != null
+        )
+        $customer : Customer(
+            customerId == $offer.getCustomerRefId(),
+            existingLoanProducts != null && existingLoanProducts.contains("PERSONAL_LOAN")
+        )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "INELIGIBLE" ),
+            setRejectionReason( "Customer already has an existing personal loan, not eligible for this pre-approved offer" )
+        }
+        System.out.println("Rule: Pre-approved offer " + $offer.getOfferId() + " rejected as customer " + $customer.getCustomerId() + " has an existing personal loan.");
+end
+
+// Rule 8: Default Eligibility - Mark as Eligible if no rejection rules fired
+// This rule should have the lowest salience to ensure all rejection rules have a chance to fire first.
+rule "Mark Offer as Eligible"
+    salience 0 // Lowest salience for default success case
+    when
+        $offer : Offer( eligibilityStatus == "PENDING" )
+    then
+        modify( $offer ) {
+            setEligibilityStatus( "ELIGIBLE" ),
+            setRejectionReason( null ) // Clear any previous rejection reason if it was set by mistake or for a different flow
+        }
+        System.out.println("Rule: Offer " + $offer.getOfferId() + " marked as ELIGIBLE.");
+end
+
+// Rule 9: Finalize Offer Status based on Eligibility Status
+// This rule updates the main 'status' field of the Offer object
+// after all eligibility rules have been evaluated. This is crucial for the
+// downstream systems to understand the final state of the offer.
+rule "Finalize Offer Status"
+    salience -10 // Even lower salience to run after all eligibility decisions are made
+    when
+        $offer : Offer(
+            eligibilityStatus != "PENDING", // Ensure eligibility has been determined
+            status != eligibilityStatus // Only update if the status needs to change
+        )
+    then
+        modify( $offer ) {
+            setStatus( $offer.getEligibilityStatus() )
+        }
+        System.out.println("Rule: Finalized offer " + $offer.getOfferId() + " status to " + $offer.getStatus() + " with reason: " + ($offer.getRejectionReason() != null ? $offer.getRejectionReason() : "N/A"));
+end

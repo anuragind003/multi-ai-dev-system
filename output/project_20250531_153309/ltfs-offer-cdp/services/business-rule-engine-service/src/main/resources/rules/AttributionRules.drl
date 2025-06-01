@@ -1,0 +1,277 @@
+package com.ltfs.cdp.offercdp.rules;
+
+// Import necessary Java classes. These classes are expected to be part of the
+// business-rule-engine-service's classpath or a shared model library.
+// Ensure these paths match your actual project structure.
+import com.ltfs.cdp.offercdp.model.Customer;
+import com.ltfs.cdp.offercdp.model.Offer;
+import com.ltfs.cdp.offercdp.model.enums.OfferType; // Assuming enums for types and statuses
+import com.ltfs.cdp.offercdp.model.enums.OfferStatus;
+import com.ltfs.cdp.offercdp.model.Campaign;
+
+// Global variables can be injected into the working memory from the Java application.
+// For example, a logger for debugging or a service for external lookups.
+// Uncomment and configure these in your Drools KIE session setup if needed.
+// global org.slf4j.Logger logger; // Example: for logging within rules
+
+/**
+ * DRL file containing the complex attribution logic (BR009-BR016) for offers
+ * within the LTFS Offer CDP system.
+ *
+ * This file defines rules for:
+ * - Deduplication of Consumer Loan offers (general and Top-up specific).
+ * - Prioritization against 'Live Book' (Customer 360) offers.
+ * - Filtering invalid/expired offers.
+ * - Campaign-specific deduplication rules.
+ * - Customer eligibility checks.
+ * - Offer value prioritization.
+ * - Final offer selection and cleanup.
+ *
+ * Assumptions:
+ * - Java POJOs (Customer, Offer, Campaign) with appropriate fields and getters/setters
+ *   are available on the classpath.
+ * - OfferStatus and OfferType are enums defined in the model package.
+ * - The 'Offer' class has a 'deduplicated' boolean field, initialized to false,
+ *   and methods like 'isDuplicateOfLiveBookOffer(Offer liveBookOffer)'.
+ * - 'offerValue' is a comparable numeric field (e.g., double or BigDecimal).
+ * - 'creationDate' and 'expirationDate' are java.util.Date objects.
+ */
+
+// --- BR009: Deduplicate Offers by Customer and Product Type (General CL) ---
+// This rule identifies and marks duplicate Consumer Loan offers for the same customer
+// based on product type. It keeps the offer with the highest value.
+rule "BR009 - Deduplicate General Consumer Loan Offers by Product Type"
+    salience 100 // Higher salience to run this deduplication early
+    when
+        // Find an offer (offer1) that is active and not yet marked for removal
+        $offer1 : Offer(
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            offerType != OfferType.TOP_UP_LOAN // Exclude Top-up loans as they have specific rules (BR010)
+        )
+
+        // Find another offer (offer2) that is a duplicate of offer1
+        $offer2 : Offer(
+            this != $offer1, // Ensure it's a different offer object
+            customerId == $offer1.customerId, // Same customer
+            productType == $offer1.productType, // Same product type (e.g., Loyalty, Preapproved)
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            offerType != OfferType.TOP_UP_LOAN,
+            // Prioritization logic: If offer1 has a strictly higher value, or equal value but is older,
+            // then offer2 is considered a duplicate to be removed.
+            // This ensures a stable selection (e.g., highest value, then oldest among equals).
+            (offerValue < $offer1.offerValue || (offerValue == $offer1.offerValue && creationDate.after($offer1.creationDate)))
+        )
+    then
+        // Mark the duplicate offer for removal.
+        // The 'deduplicated' flag indicates it should not be considered for final selection.
+        // The status is updated for auditing/tracking purposes.
+        modify( $offer2 ) { setDeduplicated( true ), setStatus(OfferStatus.DUPLICATE) };
+        // if (logger != null) logger.info("BR009: Marked offer {} (value: {}) as duplicate of {} (value: {}) for customer {}", $offer2.getOfferId(), $offer2.getOfferValue(), $offer1.getOfferId(), $offer1.getOfferValue(), $offer1.getCustomerId());
+end
+
+// --- BR010: Deduplicate Top-up Loan Offers (Specific) ---
+// This rule specifically handles deduplication for Top-up loan offers.
+// Top-up loans are deduped only among themselves, following specific criteria.
+rule "BR010 - Deduplicate Top-up Loan Offers"
+    salience 90 // Runs after general CL deduplication, but specific to Top-up
+    when
+        // Find a Top-up loan offer (offer1) not yet marked for removal
+        $offer1 : Offer(
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            offerType == OfferType.TOP_UP_LOAN
+        )
+
+        // Find another Top-up loan offer (offer2) that is a duplicate of offer1
+        $offer2 : Offer(
+            this != $offer1,
+            customerId == $offer1.customerId,
+            offerType == OfferType.TOP_UP_LOAN,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            // Prioritization logic: Keep the one with higher value. If values are equal, keep the one with later creation date.
+            (offerValue < $offer1.offerValue || (offerValue == $offer1.offerValue && creationDate.before($offer1.creationDate)))
+        )
+    then
+        modify( $offer2 ) { setDeduplicated( true ), setStatus(OfferStatus.DUPLICATE_TOP_UP) };
+        // if (logger != null) logger.info("BR010: Marked Top-up offer {} (value: {}) as duplicate of {} (value: {}) for customer {}", $offer2.getOfferId(), $offer2.getOfferValue(), $offer1.getOfferId(), $offer1.getOfferValue(), $offer1.getCustomerId());
+end
+
+// --- BR011: Prioritize Offers from 'Live Book' (Customer 360) ---
+// This rule assumes that offers already present in the 'live book' (Customer 360)
+// might invalidate or supersede incoming offers. This typically involves a lookup
+// against the Customer 360 system. For DRL, we assume the 'Offer' object has a
+// mechanism (e.g., a method or pre-populated flag) to determine if it's superseded
+// by a live book offer.
+rule "BR011 - Prioritize Offers against Live Book (Customer 360)"
+    salience 80 // Runs after initial deduplication
+    when
+        $customer : Customer(customerId != null) // Ensure we have a customer context
+
+        // An incoming offer that is active and not yet deduped
+        $incomingOffer : Offer(
+            customerId == $customer.customerId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false
+        )
+
+        // A 'live book' offer that matches the incoming offer (e.g., same product, similar terms).
+        // This 'liveBookOffer' would be asserted into working memory, possibly from a pre-processing step.
+        $liveBookOffer : Offer(
+            this != $incomingOffer,
+            customerId == $incomingOffer.customerId,
+            productType == $incomingOffer.productType,
+            status == OfferStatus.LIVE_BOOK_ACTIVE // Assuming a status for offers already in live book
+        )
+        // Additional conditions to determine if $incomingOffer is a duplicate of $liveBookOffer.
+        // This method should encapsulate the complex matching logic against live book offers.
+        eval($incomingOffer.isDuplicateOfLiveBookOffer($liveBookOffer))
+    then
+        // If an incoming offer duplicates a live book offer, mark the incoming one for removal.
+        modify( $incomingOffer ) { setDeduplicated( true ), setStatus(OfferStatus.SUPERSEDED_BY_LIVE_BOOK) };
+        // if (logger != null) logger.info("BR011: Incoming offer {} superseded by live book offer {} for customer {}", $incomingOffer.getOfferId(), $liveBookOffer.getOfferId(), $incomingOffer.getCustomerId());
+end
+
+// --- BR012: Offer Validity/Status Check ---
+// This rule filters out offers that are expired, invalid, or have a non-active status
+// that makes them unsuitable for final consideration.
+rule "BR012 - Filter Invalid or Expired Offers"
+    salience 70
+    when
+        $offer : Offer(
+            deduplicated == false, // Only process offers not yet marked as duplicate
+            // Check for expiration
+            (expirationDate != null && expirationDate.before(new java.util.Date())) ||
+            // Check for non-active status that implies invalidity (e.g., CANCELLED, REJECTED)
+            (status != OfferStatus.ACTIVE && status != OfferStatus.LIVE_BOOK_ACTIVE)
+        )
+    then
+        // Mark these offers as invalid or for removal.
+        if ($offer.getExpirationDate() != null && $offer.getExpirationDate().before(new java.util.Date())) {
+            modify( $offer ) { setDeduplicated( true ), setStatus(OfferStatus.EXPIRED) };
+            // if (logger != null) logger.info("BR012: Marked offer {} as EXPIRED.", $offer.getOfferId());
+        } else if ($offer.getStatus() != OfferStatus.ACTIVE && $offer.getStatus() != OfferStatus.LIVE_BOOK_ACTIVE) {
+            modify( $offer ) { setDeduplicated( true ), setStatus(OfferStatus.INVALID_STATUS) };
+            // if (logger != null) logger.info("BR012: Marked offer {} as INVALID due to status {}.", $offer.getOfferId(), $offer.getStatus());
+        }
+end
+
+// --- BR013: Campaign-Specific Deduplication ---
+// This rule applies specific deduplication logic based on the campaign an offer belongs to.
+// Example: A campaign might allow only one offer per customer, or prioritize certain offers.
+rule "BR013 - Campaign Specific Deduplication"
+    salience 60
+    when
+        $campaign : Campaign(
+            campaignId != null,
+            allowMultipleOffersPerCustomer == false // Example: Campaign allows only one offer per customer
+        )
+
+        $offer1 : Offer(
+            campaignId == $campaign.campaignId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false
+        )
+
+        $offer2 : Offer(
+            this != $offer1,
+            customerId == $offer1.customerId,
+            campaignId == $campaign.campaignId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            // Prioritization: If multiple offers from a "single-offer" campaign, keep the one with higher value.
+            // If values are equal, keep the one with later creation date.
+            (offerValue < $offer1.offerValue || (offerValue == $offer1.offerValue && creationDate.before($offer1.creationDate)))
+        )
+    then
+        modify( $offer2 ) { setDeduplicated( true ), setStatus(OfferStatus.DUPLICATE_CAMPAIGN) };
+        // if (logger != null) logger.info("BR013: Marked offer {} as duplicate due to campaign {} single offer policy.", $offer2.getOfferId(), $campaign.getCampaignId());
+end
+
+// --- BR014: Customer Eligibility Check (Pre-dedupe) ---
+// This rule checks basic customer eligibility for an offer.
+// This might involve checking customer's credit score, blacklist status, etc.
+// Offers for ineligible customers are marked for removal.
+rule "BR014 - Customer Eligibility Check"
+    salience 50
+    when
+        $customer : Customer(
+            isBlacklisted == true || // Customer is blacklisted
+            creditScore < 600 // Example: Customer's credit score is below threshold
+        )
+
+        $offer : Offer(
+            customerId == $customer.customerId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false
+        )
+    then
+        // Mark offers for ineligible customers as invalid.
+        modify( $offer ) { setDeduplicated( true ), setStatus(OfferStatus.CUSTOMER_INELIGIBLE) };
+        // if (logger != null) logger.warn("BR014: Marked offer {} as customer ineligible for customer {}.", $offer.getOfferId(), $customer.getCustomerId());
+end
+
+// --- BR015: Offer Value Prioritization ---
+// After initial deduplication and filtering, this rule prioritizes remaining active offers
+// based on their value. If a customer has multiple *distinct* active offers, this rule
+// aims to identify the "best" one and mark others as superseded.
+rule "BR015 - Prioritize Offers by Value"
+    salience 40
+    when
+        $customer : Customer(customerId != null)
+
+        // Find an active, non-deduplicated offer (offer1)
+        $offer1 : Offer(
+            customerId == $customer.customerId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false
+        )
+
+        // Find another active, non-deduplicated offer (offer2) for the same customer
+        // that is considered "less desirable" than offer1 based on value.
+        // This rule implies that if multiple offers are still active, we might want to
+        // select only the "best" one or mark others as lower priority.
+        $offer2 : Offer(
+            this != $offer1,
+            customerId == $offer1.customerId,
+            status == OfferStatus.ACTIVE,
+            deduplicated == false,
+            offerValue < $offer1.offerValue // Offer2 has lower value than offer1
+        )
+        // Add more complex prioritization logic here if needed, e.g., based on interest rate, terms, etc.
+    then
+        // Mark the lower value offer as superseded by a better offer.
+        modify( $offer2 ) { setDeduplicated( true ), setStatus(OfferStatus.SUPERSEDED_BY_BETTER_OFFER) };
+        // if (logger != null) logger.info("BR015: Marked offer {} as superseded by better offer {} for customer {}.", $offer2.getOfferId(), $offer1.getOfferId(), $customer.getCustomerId());
+end
+
+// --- BR016: Final Offer Selection / Cleanup ---
+// This rule performs final cleanup or marks offers that are definitively selected.
+// After all deduplication, filtering, and prioritization, any offer still marked
+// as 'ACTIVE' and 'deduplicated == false' is considered a final candidate.
+// This rule could move them to a 'final_offers' list or simply update their status.
+rule "BR016 - Final Offer Selection and Cleanup"
+    salience 10 // Runs last to finalize the selection
+    when
+        $offer : Offer(
+            status == OfferStatus.ACTIVE,
+            deduplicated == false
+        )
+    then
+        // Mark the offer as 'FINAL_CANDIDATE'. This status indicates it has passed all rules.
+        modify( $offer ) { setStatus(OfferStatus.FINAL_CANDIDATE) };
+        // if (logger != null) logger.info("BR016: Offer {} is a FINAL_CANDIDATE for customer {}.", $offer.getOfferId(), $offer.getCustomerId());
+end
+
+// --- Helper Rule: Log Deduplicated Offers (Optional) ---
+// This rule can be used for debugging or auditing to log all offers that were marked as deduplicated.
+// It runs with a very low salience to ensure all other rules have fired.
+rule "Helper - Log Deduplicated Offers"
+    salience 0 // Run very late
+    when
+        $offer : Offer(deduplicated == true)
+    then
+        // if (logger != null) logger.debug("Offer {} (Customer: {}) was marked as deduplicated with status: {}", $offer.getOfferId(), $offer.getCustomerId(), $offer.getStatus());
+end

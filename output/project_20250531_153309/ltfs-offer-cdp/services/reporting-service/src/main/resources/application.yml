@@ -1,0 +1,98 @@
+# Application properties for the LTFS Offer CDP Reporting Service.
+# This file configures the server, database, and messaging components for the service.
+
+# --- Server Configuration ---
+server:
+  port: 8083 # Unique port for the Reporting Service.
+
+# --- Spring Application Configuration ---
+spring:
+  application:
+    name: reporting-service # Name of the Spring Boot application.
+
+  # --- Database Configuration (PostgreSQL) ---
+  # The Reporting Service will connect to the PostgreSQL database to retrieve data for reports.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ltfs_cdp_reporting} # Database connection URL. Use environment variables for host, port, and name.
+    username: ${DB_USERNAME:reporting_user} # Database username. Use environment variable for production.
+    password: ${DB_PASSWORD:reporting_password} # Database password. Use environment variable for production.
+    driver-class-name: org.postgresql.Driver # JDBC driver for PostgreSQL.
+    hikari: # Connection pool configuration using HikariCP (default in Spring Boot).
+      maximum-pool-size: 10 # Max number of connections in the pool. Adjust based on load.
+      minimum-idle: 2 # Min number of idle connections.
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+      idle-timeout: 600000 # Maximum amount of time a connection can sit idle in the pool (10 minutes).
+      max-lifetime: 1800000 # Maximum time a connection can live in the pool (30 minutes).
+      pool-name: ReportingServiceHikariCP # Name for the connection pool.
+
+  # --- JPA/Hibernate Configuration ---
+  jpa:
+    hibernate:
+      ddl-auto: none # 'none' for production to prevent schema changes. 'validate' can be used to check schema consistency.
+    show-sql: false # Do not show SQL statements in logs for production.
+    properties:
+      hibernate:
+        format_sql: false # Do not format SQL statements in logs.
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specify PostgreSQL dialect for Hibernate.
+
+  # --- Kafka Configuration ---
+  # The Reporting Service may consume events (e.g., CustomerProfileUpdated, OfferFinalized)
+  # to update its internal reporting data models or trigger report generation.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} # Kafka broker addresses. Use environment variable for production.
+    consumer:
+      group-id: reporting-service-group # Consumer group ID for this service.
+      auto-offset-reset: earliest # Start reading from the beginning if no offset is found for the group.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payload).
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.reporting.event.*, com.ltfs.cdp.common.event.*" # Specify trusted packages for JSON deserialization to prevent security vulnerabilities.
+        # If the event type is not specified in headers, this default type will be used.
+        # Ensure 'com.ltfs.cdp.reporting.event.GenericEvent' is a valid class or interface that can represent incoming events.
+        spring.json.value.default.type: com.ltfs.cdp.reporting.event.GenericEvent
+    producer: # The reporting service might also produce events (e.g., report generation complete, data quality alerts).
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all # Require acknowledgment from all in-sync replicas for durability.
+      retries: 3 # Number of times to retry sending a message in case of transient errors.
+      batch-size: 16384 # Default batch size in bytes.
+      linger.ms: 1 # Linger time for batching messages.
+
+# --- Logging Configuration ---
+logging:
+  level:
+    root: INFO # Default logging level for the entire application.
+    org.springframework.web: INFO # Log web requests at INFO level.
+    org.hibernate: WARN # Suppress verbose Hibernate logs, only show warnings and errors.
+    org.apache.kafka: WARN # Suppress verbose Kafka client logs.
+    com.ltfs.cdp.reporting: DEBUG # Set specific package logging to DEBUG for more detailed logs during development/troubleshooting.
+  file:
+    name: logs/reporting-service.log # Log to a file named 'reporting-service.log' inside a 'logs' directory.
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # Console log pattern.
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # File log pattern.
+  logback:
+    rollingpolicy:
+      max-history: 7 # Keep logs for 7 days.
+      max-file-size: 10MB # Max size of each log file before rolling over.
+
+# --- Management Endpoints (Spring Boot Actuator) ---
+# Actuator provides production-ready features like monitoring and managing the application.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose useful endpoints for monitoring and observability.
+  endpoint:
+    health:
+      show-details: always # Show full health details, including database and Kafka connection status.
+    prometheus:
+      enabled: true # Enable Prometheus endpoint for metrics scraping by a Prometheus server.
+
+# --- Custom Application Properties (if any specific to reporting logic) ---
+# These properties can be used to configure reporting-specific behaviors,
+# such as report generation schedules, output formats, or data retention policies.
+# reporting:
+#   report-generation-cron: "0 0 2 * * ?" # Example: Daily report generation at 2 AM (Cron expression).
+#   output-directory: /app/reports # Example: Directory where generated reports should be stored.
+#   data-retention-days: 365 # Example: Number of days to retain historical reporting data.

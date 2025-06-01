@@ -1,0 +1,98 @@
+# application.yml for Business Rule Engine Service
+
+# Spring Application Configuration
+spring:
+  application:
+    name: business-rule-engine-service # Name of the microservice
+
+  # Server Port Configuration
+  server:
+    port: 8082 # Unique port for this service to avoid conflicts with other microservices
+
+  # Datasource Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_rule_engine_db # Database URL for the rule engine's data (if any)
+    username: cdp_user # Database username for connection
+    password: cdp_password # Database password for connection
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL
+
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none # 'none' in production environments; schema migrations should be handled externally.
+                     # Use 'update' or 'create-drop' only for development/testing if automatic schema generation is desired.
+    show-sql: false # Do not show SQL queries in logs in production for performance and security
+    properties:
+      hibernate:
+        format_sql: false # Do not format SQL queries in logs
+    database-platform: org.hibernate.dialect.PostgreSQLDialect # Specify the database dialect for Hibernate
+
+  # Kafka Configuration for Event-Driven Architecture
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses
+    consumer:
+      group-id: business-rule-engine-group # Consumer group ID for this service's Kafka consumers
+      auto-offset-reset: earliest # Strategy to use when there is no initial offset in Kafka or if the current offset does not exist anymore on the server.
+                                  # 'earliest' means start from the beginning, 'latest' means start from the end.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payload)
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.bre.model.*, com.ltfs.cdp.bre.event.*" # Specify trusted packages for JSON deserialization for security.
+                                                                                           # Avoid "*" in production; list specific packages.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON payload)
+      retries: 3 # Number of times the producer will retry sending a record if it fails
+      batch-size: 16384 # The batch size in bytes that the producer will attempt to batch records together
+      buffer-memory: 33554432 # The total bytes of memory the producer can use to buffer records waiting to be sent to the server
+
+# Custom Properties for Business Rule Engine
+rule-engine:
+  # Kafka Topics for Rule Engine Input/Output
+  kafka:
+    topics:
+      # Topic for incoming offer validation requests from other services (e.g., Offermart)
+      offer-validation-request: cdp.offer.validation.request
+      # Topic for incoming offer deduplication requests
+      offer-deduplication-request: cdp.offer.deduplication.request
+      # Topic for validated and/or deduplicated offers (output event)
+      offer-processed-event: cdp.offer.processed.event
+      # Topic for offers that failed validation or deduplication rules
+      offer-rejected-event: cdp.offer.rejected.event
+
+  # Configuration for external services integration (e.g., Customer 360 for deduplication data)
+  external-services:
+    customer-360:
+      base-url: http://localhost:8080/api/customer360 # Base URL for the Customer 360 service API
+      timeout-ms: 5000 # Timeout for HTTP calls to Customer 360 API in milliseconds
+
+  # Rule configuration (e.g., path to rule definitions, if externalized)
+  # This could be a path to DRL files (for Drools), a URL to a rule management service, etc.
+  rule-definitions-path: classpath:/rules/ # Example: path to a directory containing rule files (e.g., Drools DRLs)
+  # Flags to enable/disable specific rule sets or the entire engine's functionality
+  enable-deduplication-rules: true # Controls whether deduplication rules are active
+  enable-validation-rules: true # Controls whether column-level validation rules are active
+
+# Actuator Endpoints for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics # Expose common Actuator endpoints for monitoring and introspection
+  endpoint:
+    health:
+      show-details: always # Show full health details (e.g., database, Kafka connection status)
+    metrics:
+      enabled: true # Enable the metrics endpoint for collecting application metrics
+    prometheus:
+      enabled: true # Enable the Prometheus endpoint for scraping metrics by Prometheus
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    org.springframework.web: INFO # Logging level for Spring Web components
+    org.hibernate: INFO # Logging level for Hibernate (JPA provider)
+    com.ltfs.cdp.bre: DEBUG # Specific logging level for the application's own packages (e.g., for detailed debugging)
+  file:
+    name: logs/business-rule-engine-service.log # Path to the log file. Logs will be written to this file.

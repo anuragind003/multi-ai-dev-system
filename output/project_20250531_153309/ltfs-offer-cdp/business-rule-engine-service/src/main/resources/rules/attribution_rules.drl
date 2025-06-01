@@ -1,0 +1,259 @@
+package com.ltfs.cdp.offer.bre.rules
+
+// Import necessary fact types from the Java model.
+// These classes are expected to be simple POJOs with standard getters and setters.
+import com.ltfs.cdp.offer.bre.model.Offer;
+import com.ltfs.cdp.offer.bre.model.Customer;
+import com.ltfs.cdp.offer.bre.model.OfferStatus; // Assuming an enum for offer status management
+import java.util.List;
+import java.util.Date;
+import java.util.Comparator;
+import java.util.stream.Collectors;
+
+/**
+ * Drools rules for Offer Attribution Logic (BR009-BR016).
+ *
+ * This rule file defines the business logic for attributing offers to customers,
+ * performing deduplication based on various criteria, and managing the lifecycle
+ * status of offers within the LTFS Offer CDP system.
+ *
+ * The rules operate on 'Offer' and 'Customer' facts inserted into the Drools
+ * working memory. The 'OfferStatus' enum is crucial for tracking the state
+ * of an offer as it progresses through the attribution process.
+ *
+ * Salience is used to control the firing order of rules, ensuring that
+ * specific deduplication logic (e.g., Top-up loans) runs before more general
+ * prioritization rules, and finalization rules run last.
+ */
+
+// BR009: Initialize New Offer Status
+// All new offers entering the Business Rule Engine (BRE) are given an initial
+// status to mark them for subsequent attribution processing. This ensures a
+// consistent starting point for all offers.
+rule "BR009_Initialize_New_Offer_Status"
+    salience 20 // High salience to ensure it runs early for all new offers
+    when
+        // Match offers that are newly inserted or have no status yet
+        $offer : Offer(status == OfferStatus.NEW_FOR_PROCESSING || status == null)
+    then
+        // Set the status to PENDING_ATTRIBUTION, indicating it's ready for evaluation
+        $offer.setStatus(OfferStatus.PENDING_ATTRIBUTION);
+        update($offer); // Notify Drools that the fact has been modified
+        System.out.println("Rule BR009: Initialized offer " + $offer.getOfferId() + " to PENDING_ATTRIBUTION.");
+end
+
+// BR011: Top-up Loan Specific Deduplication
+// This rule implements the specific requirement: "Top-up loan offers must be
+// deduped only within other Top-up offers, and matches found should be removed."
+// If multiple Top-up offers exist for the same customer, the most recent one
+// is prioritized, and others are marked as duplicates.
+rule "BR011_Top_Up_Loan_Deduplication"
+    salience 15 // Higher salience to ensure top-up specific logic runs before general prioritization
+    when
+        $customer : Customer()
+        // Collect all Top-up offers for the current customer that are pending attribution
+        $topUpOffers : List() from collect (
+            Offer(
+                customerId == $customer.getCustomerId(),
+                productType == "TOP_UP_LOAN", // Identify Top-up loans
+                status == OfferStatus.PENDING_ATTRIBUTION
+            )
+        )
+        // This rule only applies if there are multiple Top-up offers for the same customer
+        eval ($topUpOffers.size() > 1)
+    then
+        // Sort the collected Top-up offers by creation date in descending order (most recent first)
+        List<Offer> sortedTopUpOffers = $topUpOffers.stream()
+            .sorted(Comparator.comparing(Offer::getCreationDate).reversed())
+            .collect(Collectors.toList());
+
+        // The first offer in the sorted list is the primary (most recent) Top-up offer
+        Offer primaryTopUpOffer = sortedTopUpOffers.get(0);
+        primaryTopUpOffer.setStatus(OfferStatus.ATTRIBUTED);
+        update(primaryTopUpOffer);
+        System.out.println("Rule BR011: Top-up offer " + primaryTopUpOffer.getOfferId() + " prioritized as ATTRIBUTED for customer " + $customer.getCustomerId() + " (most recent Top-up).");
+
+        // Mark all other Top-up offers as duplicates specific to Top-up deduplication
+        for (int i = 1; i < sortedTopUpOffers.size(); i++) {
+            Offer duplicateTopUpOffer = sortedTopUpOffers.get(i);
+            // Only update if the offer hasn't been processed by another higher-priority rule
+            if (duplicateTopUpOffer.getStatus() == OfferStatus.PENDING_ATTRIBUTION) {
+                duplicateTopUpOffer.setStatus(OfferStatus.DUPLICATE_TOP_UP);
+                update(duplicateTopUpOffer);
+                System.out.println("Rule BR011: Top-up offer " + duplicateTopUpOffer.getOfferId() + " marked as DUPLICATE_TOP_UP for customer " + $customer.getCustomerId() + ".");
+            }
+        }
+end
+
+// BR010: Prioritize Offers by Product Type
+// This rule prioritizes offers based on a predefined hierarchy of product types
+// (e.g., Pre-approved > Loyalty > Consumer > E-aggregator). If a customer has
+// multiple offers of different types, the one with the highest priority product
+// type is selected as primary.
+rule "BR010_Prioritize_Offers_By_Product_Type"
+    salience 10 // Runs after specific Top-up deduplication
+    when
+        $customer : Customer()
+        // Collect all offers for the current customer that are pending attribution
+        $offers : List() from collect (
+            Offer(
+                customerId == $customer.getCustomerId(),
+                status == OfferStatus.PENDING_ATTRIBUTION
+            )
+        )
+        // This rule only applies if there are multiple offers to prioritize
+        eval ($offers.size() > 1)
+    then
+        // Define a comparator based on product type hierarchy.
+        // Lower return value means higher priority.
+        List<Offer> sortedOffers = $offers.stream()
+            .sorted(Comparator.comparing((Offer o) -> {
+                switch (o.getProductType()) {
+                    case "PREAPPROVED_LOAN": return 1;
+                    case "LOYALTY_LOAN": return 2;
+                    case "CONSUMER_LOAN": return 3;
+                    case "E_AGGREGATOR_LOAN": return 4;
+                    // TOP_UP_LOAN is handled by BR011, but included here for completeness
+                    // in case it somehow reaches this rule without being processed by BR011.
+                    case "TOP_UP_LOAN": return 5;
+                    default: return 99; // Assign a low priority to unknown product types
+                }
+            }))
+            .collect(Collectors.toList());
+
+        // The first offer in the sorted list is the highest priority by product type
+        Offer primaryOffer = sortedOffers.get(0);
+        primaryOffer.setStatus(OfferStatus.ATTRIBUTED);
+        update(primaryOffer);
+        System.out.println("Rule BR010: Offer " + primaryOffer.getOfferId() + " prioritized as ATTRIBUTED for customer " + $customer.getCustomerId() + " due to product type: " + primaryOffer.getProductType());
+
+        // Mark all other offers as duplicates based on product type priority
+        for (int i = 1; i < sortedOffers.size(); i++) {
+            Offer duplicateOffer = sortedOffers.get(i);
+            if (duplicateOffer.getStatus() == OfferStatus.PENDING_ATTRIBUTION) {
+                duplicateOffer.setStatus(OfferStatus.DUPLICATE_PRODUCT_PRIORITY);
+                update(duplicateOffer);
+                System.out.println("Rule BR010: Offer " + duplicateOffer.getOfferId() + " marked as DUPLICATE_PRODUCT_PRIORITY for customer " + $customer.getCustomerId() + " (Product Type: " + duplicateOffer.getProductType() + ").");
+            }
+        }
+end
+
+// BR014: Campaign-Specific Attribution
+// This rule attributes an offer if it is explicitly linked to a campaign.
+// This might be used for offers from high-priority campaigns that should
+// bypass some general deduplication if they meet specific campaign criteria.
+rule "BR014_Campaign_Specific_Attribution"
+    salience 8 // Runs after initial status, but before general recency/value
+    when
+        $offer : Offer(
+            campaignId != null && !campaignId.isEmpty(), // Offer must be linked to a campaign
+            status == OfferStatus.PENDING_ATTRIBUTION
+            // Additional conditions could be added here, e.g., checking campaign validity
+            // or specific campaign IDs: && $offer.getCampaignId().equals("SPECIAL_PROMO_2025")
+        )
+        // Optionally, if Campaign facts are inserted, you could match against them:
+        // $campaign : Campaign(campaignId == $offer.getCampaignId(), isActive == true)
+    then
+        // If an offer is clearly linked to a valid campaign and no stronger dedupe applies,
+        // it is directly attributed.
+        $offer.setStatus(OfferStatus.ATTRIBUTED_BY_CAMPAIGN);
+        update($offer);
+        System.out.println("Rule BR014: Offer " + $offer.getOfferId() + " attributed by campaign " + $offer.getCampaignId() + ".");
+end
+
+// BR012: Deduplicate against 'Live Book' (Customer 360)
+// This rule performs deduplication against the 'live book' (Customer 360).
+// If a customer already has an active offer recorded in the Customer 360 system,
+// new offers for the same customer might be marked as duplicates or lower priority.
+// This assumes the 'Customer' fact contains information about existing active offers.
+rule "BR012_Deduplicate_Against_Live_Book"
+    salience 5 // Lower salience than specific product type or top-up rules
+    when
+        $customer : Customer(customer360Id != null && hasActiveLiveBookOffer()) // Customer exists in 360 view and has an active offer
+        $offer : Offer(
+            customerId == $customer.getCustomerId(),
+            status == OfferStatus.PENDING_ATTRIBUTION
+        )
+    then
+        // If an active offer already exists in the live book for this customer,
+        // the new offer is considered a duplicate.
+        $offer.setStatus(OfferStatus.DUPLICATE_LIVE_BOOK);
+        update($offer);
+        System.out.println("Rule BR012: Offer " + $offer.getOfferId() + " marked as DUPLICATE_LIVE_BOOK for customer " + $customer.getCustomerId() + " due to existing active offer in Customer 360.");
+end
+
+// BR015: Offer Recency Prioritization (Fallback)
+// This rule acts as a general fallback. If multiple offers for the same customer
+// remain in PENDING_ATTRIBUTION status after other, more specific rules have run,
+// the most recent offer (based on creation date) is prioritized.
+rule "BR015_Offer_Recency_Prioritization"
+    salience 3 // Lower salience, acts as a fallback for remaining pending offers
+    when
+        $customer : Customer()
+        // Collect all offers for the current customer that are still pending attribution
+        $pendingOffers : List() from collect (
+            Offer(
+                customerId == $customer.getCustomerId(),
+                status == OfferStatus.PENDING_ATTRIBUTION
+            )
+        )
+        // Only apply if there are multiple offers still pending for the same customer
+        eval ($pendingOffers.size() > 1)
+    then
+        // Sort the collected offers by creation date in descending order (most recent first)
+        List<Offer> sortedByRecency = $pendingOffers.stream()
+            .sorted(Comparator.comparing(Offer::getCreationDate).reversed())
+            .collect(Collectors.toList());
+
+        // The first offer in the sorted list is the primary (most recent)
+        Offer primaryOffer = sortedByRecency.get(0);
+        primaryOffer.setStatus(OfferStatus.ATTRIBUTED);
+        update(primaryOffer);
+        System.out.println("Rule BR015: Offer " + primaryOffer.getOfferId() + " prioritized as ATTRIBUTED for customer " + $customer.getCustomerId() + " (most recent fallback).");
+
+        // Mark all other offers as duplicates based on recency
+        for (int i = 1; i < sortedByRecency.size(); i++) {
+            Offer duplicateOffer = sortedByRecency.get(i);
+            if (duplicateOffer.getStatus() == OfferStatus.PENDING_ATTRIBUTION) {
+                duplicateOffer.setStatus(OfferStatus.DUPLICATE_RECENCY);
+                update(duplicateOffer);
+                System.out.println("Rule BR015: Offer " + duplicateOffer.getOfferId() + " marked as DUPLICATE_RECENCY for customer " + $customer.getCustomerId() + ".");
+            }
+        }
+end
+
+// BR013: Finalize Duplicate Offers
+// This rule processes offers that have been marked as duplicates by any of the
+// preceding deduplication rules (e.g., by product priority, Top-up specific,
+// live book, or recency). It sets their final status to 'REMOVED' or 'INACTIVE'.
+rule "BR013_Finalize_Duplicate_Offers"
+    salience -5 // Runs after all other deduplication/prioritization rules have had a chance to mark duplicates
+    when
+        $offer : Offer(
+            status == OfferStatus.DUPLICATE_PRODUCT_PRIORITY ||
+            status == OfferStatus.DUPLICATE_TOP_UP ||
+            status == OfferStatus.DUPLICATE_LIVE_BOOK ||
+            status == OfferStatus.DUPLICATE_RECENCY
+        )
+    then
+        // Set the final status for identified duplicates to REMOVED (or INACTIVE, depending on business need)
+        $offer.setStatus(OfferStatus.REMOVED);
+        update($offer);
+        System.out.println("Rule BR013: Offer " + $offer.getOfferId() + " finalized as REMOVED (was " + $offer.getStatus() + ").");
+end
+
+// BR016: Finalize Remaining Attributed Offers
+// This is the ultimate fallback rule. Any offer that is still in
+// PENDING_ATTRIBUTION status after all other rules have executed (meaning
+// it wasn't marked as a duplicate and wasn't explicitly attributed by a
+// higher-priority rule) is considered the primary offer for its customer.
+rule "BR016_Finalize_Remaining_Attributed_Offers"
+    salience -10 // Lowest salience, ensures it runs last to catch any remaining pending offers
+    when
+        $offer : Offer(status == OfferStatus.PENDING_ATTRIBUTION)
+    then
+        // Mark the offer as ATTRIBUTED as a final step
+        $offer.setStatus(OfferStatus.ATTRIBUTED);
+        update($offer);
+        System.out.println("Rule BR016: Offer " + $offer.getOfferId() + " finalized as ATTRIBUTED (default fallback).");
+end

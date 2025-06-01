@@ -1,0 +1,101 @@
+# Spring Application Configuration
+spring:
+  application:
+    name: integration-service # Name of the Spring Boot application
+  profiles:
+    active: dev # Default active profile for development. Can be overridden for different environments (e.g., prod, qa).
+
+  # Database Configuration for PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ltfs_cdp_integration # JDBC URL for the PostgreSQL database. Replace 'localhost:5432' and 'ltfs_cdp_integration' with actual values.
+    username: cdp_user # Database username. Replace with actual username.
+    password: cdp_password # Database password. Replace with actual password.
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL
+    hikari: # HikariCP connection pool settings for optimal database performance
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 5 # Minimum number of idle connections to maintain
+      idle-timeout: 30000 # Maximum idle time for a connection in the pool (30 seconds)
+      connection-timeout: 30000 # Maximum time a client will wait for a connection from the pool (30 seconds)
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Hibernate DDL generation strategy. 'validate' checks schema against entities. Use 'none' or 'validate' for production. 'update' can be used for development but is risky in production.
+    show-sql: true # Enable logging of SQL statements. Set to 'false' in production for performance.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL
+        format_sql: true # Formats SQL statements in logs for better readability
+
+  # Kafka Producer Configuration for sending messages to Kafka topics
+  kafka:
+    producer:
+      bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses. Replace with actual Kafka cluster addresses.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys (e.g., String)
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (e.g., JSON objects)
+      acks: all # Controls the durability of records that are sent. 'all' ensures all in-sync replicas have received the message.
+      retries: 3 # Number of times the producer will retry sending a record if it fails
+      batch-size: 16384 # The maximum size of a batch of records that will be sent (16 KB)
+      linger-ms: 10 # The amount of time to wait before sending a batch if it's not full (10 milliseconds)
+      buffer-memory: 33554432 # The total memory the producer can use for buffering records waiting to be sent to the server (32 MB)
+      properties:
+        spring.json.add.type.headers: false # Prevents Spring Kafka from adding __TypeId__ headers to JSON messages, simplifying consumption by non-Spring applications.
+
+# Custom Application Properties
+app:
+  # Configuration for external API endpoints that the integration service interacts with
+  external-apis:
+    offermart: # Configuration for the Offermart system API
+      base-url: http://localhost:8080/offermart-api/v1 # Base URL for the Offermart API. Replace with actual URL.
+      endpoints:
+        ingest-data: /data/export # Specific endpoint path for data export/ingestion from Offermart
+      connection-timeout-ms: 5000 # Connection timeout for HTTP calls to Offermart (5 seconds)
+      read-timeout-ms: 10000 # Read timeout for HTTP calls to Offermart (10 seconds)
+    customer360: # Configuration for the Customer 360 system API (used for deduplication against live book)
+      base-url: http://localhost:8083/customer360-api/v1 # Base URL for the Customer 360 API. Replace with actual URL.
+      endpoints:
+        deduplicate-customer: /customer/deduplicate # Endpoint for triggering customer deduplication
+        get-customer-profile: /customer/{id} # Endpoint for fetching a customer's profile by ID
+      connection-timeout-ms: 5000 # Connection timeout for HTTP calls to Customer 360 (5 seconds)
+      read-timeout-ms: 15000 # Read timeout for HTTP calls to Customer 360 (15 seconds)
+
+  # Kafka Topics used by the integration service for event-driven communication
+  kafka-topics:
+    offermart-ingestion-topic: ltfs.cdp.offermart.data.ingested # Topic for raw data ingested from Offermart
+    customer-deduplication-request-topic: ltfs.cdp.customer.deduplication.request # Topic for sending requests to trigger customer deduplication
+    offer-deduplication-request-topic: ltfs.cdp.offer.deduplication.request # Topic for sending requests to trigger offer deduplication
+    finalized-offer-topic: ltfs.cdp.offer.finalized # Topic for publishing offers that have completed all processing (e.g., validation, deduplication)
+
+  # Configuration for scheduled batch jobs within the integration service
+  batch-jobs:
+    offermart-data-ingestion: # Job for ingesting data from Offermart
+      enabled: true # Set to 'false' to disable this scheduled job
+      cron-expression: "0 0 2 * * ?" # Cron expression to schedule the job (e.g., "0 0 2 * * ?" runs every day at 2 AM UTC)
+      batch-size: 1000 # Number of records to process in a single batch during ingestion
+    deduplication-trigger: # Job for triggering deduplication processes
+      enabled: true # Set to 'false' to disable this scheduled job
+      cron-expression: "0 30 2 * * ?" # Cron expression to schedule the job (e.g., "0 30 2 * * ?" runs every day at 2:30 AM UTC)
+
+  # Data Validation Configuration
+  validation:
+    enabled: true # Set to 'false' to disable all data validation
+    rules-config-path: classpath:validation-rules/offermart-data-rules.json # Path to a file containing externalized validation rules (e.g., JSON, YAML)
+
+  # Deduplication Specific Configuration
+  deduplication:
+    topup-loan-strategy: ISOLATED_DEDUPE # Strategy for handling top-up loan deduplication. Options could be 'ISOLATED_DEDUPE' (dedupe only within top-up offers) or 'GLOBAL_DEDUPE'.
+    match-threshold: 0.8 # Similarity threshold (0.0 to 1.0) for determining a match during deduplication (e.g., 0.8 means 80% similarity)
+    remove-matched-offers: true # Boolean flag to indicate whether matched (duplicate) offers should be removed or marked
+
+# Spring Boot Actuator Configuration for monitoring and management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers # Expose common Actuator endpoints via HTTP
+  endpoint:
+    health:
+      show-details: always # Always show full health details (e.g., database status, disk space)
+    metrics:
+      enabled: true # Enable metrics collection
+    prometheus:
+      enabled: true # Enable Prometheus endpoint for scraping metrics

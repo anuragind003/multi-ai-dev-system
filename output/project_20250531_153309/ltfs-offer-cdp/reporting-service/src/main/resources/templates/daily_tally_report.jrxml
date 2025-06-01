@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    JasperReports template for the daily data tally report.
+    This report provides a summary of daily processing counts for various entities
+    within the LTFS Offer CDP system, such as customers, offers, and campaigns.
+    It helps in monitoring the daily throughput and identifying any discrepancies
+    in data processing, validation, and deduplication.
+-->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="DailyTallyReport"
+              pageWidth="595"
+              pageHeight="842"
+              columnWidth="555"
+              leftMargin="20"
+              rightMargin="20"
+              topMargin="20"
+              bottomMargin="20"
+              uuid="a1b2c3d4-e5f6-7890-1234-567890abcdef">
+
+    <property name="com.jaspersoft.studio.data.defaultdataadapter" value="One Empty Record"/>
+    <property name="com.jaspersoft.studio.unit." value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.pageHeight" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.pageWidth" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.topMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.bottomMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.leftMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.rightMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.columnWidth" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.columnSpacing" value="pixel"/>
+
+    <!-- Report Parameters -->
+    <parameter name="REPORT_DATE" class="java.time.LocalDate">
+        <defaultValueExpression><![CDATA[java.time.LocalDate.now()]]></defaultValueExpression>
+    </parameter>
+    <parameter name="REPORT_TITLE" class="java.lang.String">
+        <defaultValueExpression><![CDATA["Daily Data Tally Report"]]></defaultValueExpression>
+    </parameter>
+    <parameter name="REPORT_GENERATED_BY" class="java.lang.String">
+        <defaultValueExpression><![CDATA["LTFS Offer CDP Reporting Service"]]></defaultValueExpression>
+    </parameter>
+
+    <!-- SQL Query to fetch daily tally data -->
+    <!--
+        This query is a placeholder. In a real scenario, it would query
+        specific tables (e.g., customer_processing_log, offer_processing_log,
+        campaign_processing_log) to aggregate counts for the given report date.
+        The actual table and column names would depend on the database schema.
+        It's designed to return rows for different entities (Customers, Offers, Campaigns)
+        with their respective processing statistics.
+    -->
+    <queryString language="SQL">
+        <![CDATA[
+            SELECT
+                'Customers' AS entity_name,
+                COALESCE(SUM(CASE WHEN log_type = 'INGESTION' THEN 1 ELSE 0 END), 0) AS total_processed,
+                COALESCE(SUM(CASE WHEN status = 'VALID' THEN 1 ELSE 0 END), 0) AS total_valid,
+                COALESCE(SUM(CASE WHEN status = 'INVALID' THEN 1 ELSE 0 END), 0) AS total_invalid,
+                COALESCE(SUM(CASE WHEN is_deduped = TRUE THEN 1 ELSE 0 END), 0) AS total_deduped,
+                COALESCE(SUM(CASE WHEN status = 'FINALIZED' THEN 1 ELSE 0 END), 0) AS total_finalized
+            FROM customer_processing_log
+            WHERE processing_date = $P{REPORT_DATE}
+            UNION ALL
+            SELECT
+                'Offers' AS entity_name,
+                COALESCE(SUM(CASE WHEN log_type = 'GENERATION' THEN 1 ELSE 0 END), 0) AS total_processed,
+                COALESCE(SUM(CASE WHEN status = 'VALID' THEN 1 ELSE 0 END), 0) AS total_valid,
+                COALESCE(SUM(CASE WHEN status = 'INVALID' THEN 1 ELSE 0 END), 0) AS total_invalid,
+                COALESCE(SUM(CASE WHEN is_deduped = TRUE THEN 1 ELSE 0 END), 0) AS total_deduped,
+                COALESCE(SUM(CASE WHEN status = 'FINALIZED' THEN 1 ELSE 0 END), 0) AS total_finalized
+            FROM offer_processing_log
+            WHERE processing_date = $P{REPORT_DATE}
+            UNION ALL
+            SELECT
+                'Campaigns' AS entity_name,
+                COALESCE(SUM(CASE WHEN log_type = 'EXECUTION' THEN 1 ELSE 0 END), 0) AS total_processed,
+                COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS total_valid,
+                COALESCE(SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0) AS total_invalid,
+                0 AS total_deduped, -- Deduplication not directly applicable to campaigns in this context
+                COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS total_finalized
+            FROM campaign_processing_log
+            WHERE processing_date = $P{REPORT_DATE}
+        ]]>
+    </queryString>
+
+    <!-- Report Fields (corresponding to SQL query columns) -->
+    <field name="entity_name" class="java.lang.String">
+        <fieldDescription><![CDATA[Name of the entity (e.g., Customers, Offers, Campaigns)]]></fieldDescription>
+    </field>
+    <field name="total_processed" class="java.lang.Long">
+        <fieldDescription><![CDATA[Total records processed for the entity]]></fieldDescription>
+    </field>
+    <field name="total_valid" class="java.lang.Long">
+        <fieldDescription><![CDATA[Total valid records after validation]]></fieldDescription>
+    </field>
+    <field name="total_invalid" class="java.lang.Long">
+        <fieldDescription><![CDATA[Total invalid records (failed validation)]]></fieldDescription>
+    </field>
+    <field name="total_deduped" class="java.lang.Long">
+        <fieldDescription><![CDATA[Total records that underwent deduplication]]></fieldDescription>
+    </field>
+    <field name="total_finalized" class="java.lang.Long">
+        <fieldDescription><![CDATA[Total records finalized (e.g., ready for next stage)]]></fieldDescription>
+    </field>
+
+    <!-- Report Variables (for calculations if needed, e.g., grand totals) -->
+    <variable name="GrandTotalProcessed" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{total_processed}]]></variableExpression>
+    </variable>
+    <variable name="GrandTotalValid" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{total_valid}]]></variableExpression>
+    </variable>
+    <variable name="GrandTotalInvalid" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{total_invalid}]]></variableExpression>
+    </variable>
+    <variable name="GrandTotalDeduped" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{total_deduped}]]></variableExpression>
+    </variable>
+    <variable name="GrandTotalFinalized" class="java.lang.Long" calculation="Sum">
+        <variableExpression><![CDATA[$F{total_finalized}]]></variableExpression>
+    </variable>
+
+    <!-- Title Band: Displays the main report title and date -->
+    <title>
+        <band height="70" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="555" height="30" uuid="f1e2d3c4-b5a6-9870-6543-210fedcba987"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="18" isBold="true" pdfFontName="Helvetica-Bold"/>
+                </textElement>
+                <text><![CDATA[LTFS Offer CDP]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="0" y="30" width="555" height="20" uuid="e1d2c3b4-a596-8760-5432-10fedcba9876"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="14" isBold="true" pdfFontName="Helvetica-Bold"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{REPORT_TITLE}]]></textFieldExpression>
+            </textField>
+            <textField pattern="dd-MMM-yyyy">
+                <reportElement x="0" y="50" width="555" height="20" uuid="d1c2b3a4-9586-7650-4321-0fedcba98765"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="12"/>
+                </textElement>
+                <textFieldExpression><![CDATA["For Date: " + new java.text.SimpleDateFormat("dd-MMM-yyyy").format(java.sql.Date.valueOf($P{REPORT_DATE}))]]></textFieldExpression>
+            </textField>
+        </band>
+    </title>
+
+    <!-- Page Header Band: Displays column headers on each page -->
+    <pageHeader>
+        <band height="20" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="100" height="20" uuid="c1b2a394-8576-6540-3210-fedcba987654"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Entity Name]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="100" y="0" width="90" height="20" uuid="b1a29384-7566-5430-2109-edcba9876543"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Total Processed]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="190" y="0" width="90" height="20" uuid="a1928374-6556-4320-1098-dcba98765432"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0="/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Total Valid]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="280" y="0" width="90" height="20" uuid="91827364-5546-3210-0987-cba987654321"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Total Invalid]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="370" y="0" width="90" height="20" uuid="81726354-4536-2109-9876-ba9876543210"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Total Deduped]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="460" y="0" width="95" height="20" uuid="71625344-3526-1098-8765-a98765432109"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Total Finalized]]></text>
+            </staticText>
+        </band>
+    </pageHeader>
+
+    <!-- Detail Band: Iterates through each record from the query -->
+    <detail>
+        <band height="20" splitType="Stretch">
+            <textField>
+                <reportElement x="0" y="0" width="100" height="20" uuid="61524334-2516-0987-7654-987654321098"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Left" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <leftIndent>5</leftIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{entity_name}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="100" y="0" width="90" height="20" uuid="51423324-1506-9876-6543-876543210987"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{total_processed}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="190" y="0" width="90" height="20" uuid="41322314-0596-8765-5432-765432109876"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{total_valid}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="280" y="0" width="90" height="20" uuid="31221304-9586-7654-4321-654321098765"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{total_invalid}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="370" y="0" width="90" height="20" uuid="21120294-8576-6543-3210-543210987654"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{total_deduped}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="460" y="0" width="95" height="20" uuid="11019284-7566-5432-2109-432109876543"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="9"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$F{total_finalized}]]></textFieldExpression>
+            </textField>
+        </band>
+    </detail>
+
+    <!-- Summary Band: Displays grand totals at the end of the report -->
+    <summary>
+        <band height="40" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="100" height="20" uuid="01918174-6556-4321-1098-321098765432"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Left" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <leftIndent>5</leftIndent>
+                </textElement>
+                <text><![CDATA[Grand Totals:]]></text>
+            </staticText>
+            <textField pattern="#,##0">
+                <reportElement x="100" y="0" width="90" height="20" uuid="f0e0d0c4-b0a0-9080-7060-210987654321"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$V{GrandTotalProcessed}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="190" y="0" width="90" height="20" uuid="e0d0c0b4-a090-8070-6050-109876543210"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$V{GrandTotalValid}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="280" y="0" width="90" height="20" uuid="d0c0b0a4-9080-7060-5040-098765432109"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$V{GrandTotalInvalid}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="370" y="0" width="90" height="20" uuid="c0b0a094-8070-6050-4030-987654321098"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$V{GrandTotalDeduped}]]></textFieldExpression>
+            </textField>
+            <textField pattern="#,##0">
+                <reportElement x="460" y="0" width="95" height="20" uuid="b0a09084-7060-5040-3020-876543210987"/>
+                <box>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="10" isBold="true"/>
+                    <rightIndent>5</rightIndent>
+                </textElement>
+                <textFieldExpression><![CDATA[$V{GrandTotalFinalized}]]></textFieldExpression>
+            </textField>
+            <staticText>
+                <reportElement x="0" y="20" width="555" height="20" uuid="a0908074-6050-4030-2010-765432109876"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="8" isItalic="true"/>
+                </textElement>
+                <text><![CDATA[End of Report]]></text>
+            </staticText>
+        </band>
+    </summary>
+
+    <!-- Page Footer Band: Displays page number and generation info -->
+    <pageFooter>
+        <band height="20" splitType="Stretch">
+            <textField>
+                <reportElement x="0" y="0" width="200" height="20" uuid="90807064-5040-3020-1000-654321098765"/>
+                <textElement verticalAlignment="Middle">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Generated by: " + $P{REPORT_GENERATED_BY}]]></textFieldExpression>
+            </textField>
+            <textField evaluationTime="Report">
+                <reportElement x="455" y="0" width="100" height="20" uuid="80706054-4030-2010-0000-543210987654"/>
+                <textElement textAlignment="Right" verticalAlignment="Middle">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER} + " of " + $V{REPORT_COUNT}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="200" y="0" width="255" height="20" uuid="70605044-3020-1000-0000-432109876543"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="8"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Report Generated On: " + new java.text.SimpleDateFormat("dd-MMM-yyyy HH:mm:ss").format(new java.util.Date())]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageFooter>
+</jasperReport>

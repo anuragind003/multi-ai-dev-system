@@ -1,0 +1,83 @@
+# Server configuration for the API Gateway service
+server:
+  port: 8080 # The port on which the API Gateway will listen for incoming requests.
+
+# Spring application configuration
+spring:
+  application:
+    name: api-gateway-service # The name of this Spring Boot application, used for Eureka registration.
+  cloud:
+    gateway:
+      # Global filters can be applied to all routes.
+      # For example, for logging, security, or request/response manipulation.
+      # default-filters:
+      #   - DedupeRequestHeader=X-Forwarded-For, X-Request-ID
+
+      # Define routing rules for different microservices.
+      # Each route maps a specific path to a target service.
+      routes:
+        # Route for the Customer Service
+        # This route forwards requests starting with /customer/ to the 'customer-service'.
+        - id: customer-service-route # Unique identifier for this route.
+          uri: lb://customer-service # 'lb://' indicates load balancing via Eureka for 'customer-service'.
+          predicates:
+            - Path=/customer/** # Matches any URL path that starts with /customer/.
+          filters:
+            - StripPrefix=1 # Removes the first path segment (/customer) before forwarding the request.
+                            # E.g., /customer/api/v1/profile becomes /api/v1/profile for the target service.
+            # Example of a RewritePath filter if more complex path manipulation is needed:
+            # - RewritePath=/customer/(?<segment>.*), /api/v1/${segment}
+
+        # Route for the Offer Service
+        # This route forwards requests starting with /offer/ to the 'offer-service'.
+        - id: offer-service-route
+          uri: lb://offer-service # Load balances requests to the 'offer-service'.
+          predicates:
+            - Path=/offer/** # Matches any URL path that starts with /offer/.
+          filters:
+            - StripPrefix=1 # Removes the /offer prefix.
+
+        # Route for the Campaign Service
+        # This route forwards requests starting with /campaign/ to the 'campaign-service'.
+        - id: campaign-service-route
+          uri: lb://campaign-service # Load balances requests to the 'campaign-service'.
+          predicates:
+            - Path=/campaign/** # Matches any URL path that starts with /campaign/.
+          filters:
+            - StripPrefix=1 # Removes the /campaign prefix.
+
+        # Add more routes here as new microservices are developed and integrated.
+        # Example for another service:
+        # - id: another-service-route
+        #   uri: lb://another-service-name
+        #   predicates:
+        #     - Path=/another-path/**
+        #   filters:
+        #     - StripPrefix=1
+
+# Eureka Client Configuration for Service Discovery
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/ # The URL of the Eureka Discovery Server.
+                                                 # This is where the API Gateway will register itself and discover other services.
+    fetch-registry: true # Set to true to enable the client to fetch the registry from the Eureka server.
+    register-with-eureka: true # Set to true to enable the client to register itself with the Eureka server.
+  instance:
+    hostname: localhost # The hostname of this service instance. For local development, 'localhost' is common.
+                        # In production, this might be dynamically assigned or an actual hostname.
+    prefer-ip-address: true # Prefer using the IP address over the hostname when registering with Eureka.
+                            # This can be useful in containerized environments or when DNS resolution is tricky.
+
+# Spring Boot Actuator Configuration for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" # Expose all Actuator endpoints via web (HTTP).
+                     # This allows access to /actuator/health, /actuator/info, /actuator/metrics, etc.
+                     # In production, consider limiting exposed endpoints for security.
+  endpoint:
+    health:
+      show-details: always # Always show full details for the health endpoint.
+                           # Useful for debugging and monitoring service health.

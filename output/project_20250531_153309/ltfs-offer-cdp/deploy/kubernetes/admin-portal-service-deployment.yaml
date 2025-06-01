@@ -1,0 +1,108 @@
+# Kubernetes Deployment for the Admin Portal Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-portal-service-deployment
+  labels:
+    app: admin-portal-service
+    tier: frontend
+    project: ltfs-offer-cdp
+spec:
+  replicas: 2 # Ensure high availability for the admin portal
+  selector:
+    matchLabels:
+      app: admin-portal-service
+  template:
+    metadata:
+      labels:
+        app: admin-portal-service
+        tier: frontend
+        project: ltfs-offer-cdp
+    spec:
+      # Optional: If using a private Docker registry, specify image pull secrets
+      # imagePullSecrets:
+      #   - name: regcred
+      containers:
+        - name: admin-portal-service
+          image: ltfs-offer-cdp/admin-portal-service:1.0.0 # Use a specific version tag for production deployments
+          imagePullPolicy: IfNotPresent # Pull image if not present on the node
+          ports:
+            - containerPort: 8080 # Default Spring Boot application port
+          env:
+            # Spring Boot profile for Kubernetes environment
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes
+            # Database connection details for the Admin Portal's own data (e.g., user management, audit logs)
+            # It is highly recommended to use Kubernetes Secrets for sensitive data like database credentials.
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: admin-portal-db-secret # Name of the Kubernetes Secret containing DB credentials
+                  key: jdbc-url # Key within the secret for the JDBC URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: admin-portal-db-secret
+                  key: username # Key within the secret for the database username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: admin-portal-db-secret
+                  key: password # Key within the secret for the database password
+            # Server port for the Spring Boot application, matching containerPort
+            - name: SERVER_PORT
+              value: "8080"
+            # Example: If using Eureka for service discovery (uncomment and configure if applicable)
+            # - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+            #   value: http://eureka-server-service:8761/eureka/
+            # Add any other application-specific environment variables here
+            # - name: APP_CONFIG_KEY
+            #   value: "some_value"
+          resources:
+            requests:
+              memory: "512Mi" # Request 512 MB of memory for the container
+              cpu: "250m"    # Request 0.25 CPU core for the container
+            limits:
+              memory: "1024Mi" # Limit memory usage to 1 GB
+              cpu: "500m"    # Limit CPU usage to 0.5 CPU core
+          livenessProbe: # Checks if the application is still running and healthy
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Give the application time to start up
+            periodSeconds: 10 # Check every 10 seconds
+            timeoutSeconds: 5 # Timeout after 5 seconds
+            failureThreshold: 3 # Mark as failed after 3 consecutive failures
+          readinessProbe: # Checks if the application is ready to serve traffic
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 30 # Give the application time to initialize and connect to dependencies
+            periodSeconds: 10 # Check every 10 seconds
+            timeoutSeconds: 5 # Timeout after 5 seconds
+            failureThreshold: 3 # Mark as unready after 3 consecutive failures
+      # Optional: Define a service account if specific RBAC permissions are needed for the pod
+      # serviceAccountName: admin-portal-service-account
+
+---
+
+# Kubernetes Service for the Admin Portal Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-portal-service # Name of the Kubernetes Service, used for internal DNS resolution
+  labels:
+    app: admin-portal-service
+    tier: frontend
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: admin-portal-service # Selects pods with the label 'app: admin-portal-service'
+  ports:
+    - protocol: TCP
+      port: 80 # The port on which the service is exposed within the cluster
+      targetPort: 8080 # The port on the container that the service will forward traffic to
+  type: ClusterIP # Exposes the service internally within the cluster.
+                  # Use 'LoadBalancer' if direct external access is required and your cloud provider supports it.
+                  # For an admin portal, 'ClusterIP' is often used in conjunction with an Ingress controller
+                  # for controlled external access and routing.

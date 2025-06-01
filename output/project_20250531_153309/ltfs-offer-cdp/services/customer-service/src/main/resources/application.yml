@@ -1,0 +1,83 @@
+server:
+  port: 8081 # Default port for the Customer Service microservice
+
+spring:
+  application:
+    name: customer-service # Name of the microservice, used for logging and tracing
+
+  # Database configuration for PostgreSQL
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:customer_db} # JDBC URL for PostgreSQL. Use environment variables for host, port, and database name.
+    username: ${DB_USERNAME:customer_user} # Database username.
+    password: ${DB_PASSWORD:password} # Database password.
+    driver-class-name: org.postgresql.Driver # PostgreSQL JDBC driver class.
+    hikari: # HikariCP connection pool settings
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 2     # Minimum number of idle connections to maintain.
+      connection-timeout: 30000 # Maximum time (ms) that a client will wait for a connection from the pool.
+      idle-timeout: 600000    # Maximum idle time (ms) for a connection before it's removed from the pool.
+      max-lifetime: 1800000   # Maximum lifetime (ms) of a connection in the pool.
+
+  # JPA (Java Persistence API) and Hibernate configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'validate' checks schema against entities. Use 'none' for production if schema is managed externally. 'update' is for development only.
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl # Use standard physical naming strategy for database columns/tables.
+    show-sql: false # Set to true to log SQL queries executed by Hibernate (useful for debugging, set to false for production).
+    properties:
+      hibernate:
+        format_sql: false # Set to true to format logged SQL queries for readability (set to false for production).
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specify the Hibernate dialect for PostgreSQL.
+
+  # Kafka configuration for event-driven communication
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} # Comma-separated list of Kafka broker addresses.
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (JSON format).
+      acks: all # Producer acknowledgment setting: 'all' ensures all in-sync replicas have received the message.
+      retries: 3 # Number of times the producer will retry sending a message.
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers to JSON messages for simpler deserialization on the consumer side.
+
+    consumer:
+      group-id: customer-service-group # Unique identifier for this consumer group.
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist anymore on the server. 'earliest' starts from the beginning.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (JSON format).
+      properties:
+        # Specify the default type for JSON deserialization if type information is not in headers.
+        # Replace 'com.ltfs.cdp.customer.service.event.CustomerEvent' with the actual base class/interface for your Kafka events.
+        spring.json.value.default.type: com.ltfs.cdp.customer.service.event.CustomerEvent
+        # List of trusted packages for JSON deserialization to prevent security vulnerabilities.
+        # Ensure all event and model classes that are sent/received via Kafka are included.
+        spring.json.trusted.packages: "com.ltfs.cdp.customer.service.event.*, com.ltfs.cdp.customer.service.model.*"
+
+    listener:
+      ack-mode: record # Acknowledgment mode for Kafka listener. 'record' acknowledges each record individually.
+      concurrency: 3 # Number of consumer threads to run for each topic partition.
+
+# Custom application-specific properties
+application:
+  kafka:
+    topics:
+      customer-created: customer.events.created # Kafka topic for publishing new customer creation events.
+      customer-updated: customer.events.updated # Kafka topic for publishing customer update events.
+      customer-deduplicated: customer.events.deduplicated # Kafka topic for publishing results of customer deduplication.
+      customer-dedupe-request: customer.dedupe.request # Kafka topic for receiving deduplication requests.
+      customer-dedupe-response: customer.dedupe.response # Kafka topic for sending deduplication responses.
+
+  deduplication:
+    threshold: 0.8 # Similarity threshold (e.g., 0.8 for 80%) used in deduplication logic to identify potential duplicates.
+    batch-size: 1000 # Number of customer records to process in a single batch during deduplication.
+
+# Logging configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    org.springframework.web: INFO # Logging level for Spring Web components.
+    org.hibernate: INFO # Logging level for Hibernate.
+    com.ltfs.cdp.customer.service: DEBUG # Set specific package to DEBUG for more detailed application-specific logs.
+    org.apache.kafka: WARN # Reduce verbose logging from Kafka client libraries.

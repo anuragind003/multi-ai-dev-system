@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: reporting-service # Defines the application name for Spring Cloud Config and Eureka
+  cloud:
+    config:
+      uri: ${CONFIG_SERVER_URI:http://localhost:8888} # URI of the Spring Cloud Config Server. Environment variable takes precedence.
+      name: reporting-service # The name of the configuration file on the Config Server (e.g., reporting-service.yml, reporting-service-dev.yml)
+      profile: ${SPRING_PROFILES_ACTIVE:default} # Active profile to fetch configuration for (e.g., dev, qa, prod). Defaults to 'default'.
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the Config Server. Recommended for production.
+      retry:
+        initial-interval: 1000 # Initial retry interval in milliseconds
+        max-interval: 2000 # Maximum retry interval in milliseconds
+        max-attempts: 6 # Maximum number of retry attempts
+        multiplier: 1.1 # Multiplier for the retry interval
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:default} # Sets the active Spring profile. Can be overridden by environment variable.
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka} # URI of the Eureka Discovery Server. Environment variable takes precedence.
+    enabled: true # Enable Eureka client for service registration and discovery
+    healthcheck:
+      enabled: true # Enable Eureka health checks
+  instance:
+    preferIpAddress: true # Register service with IP address instead of hostname. Useful in containerized environments.
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique instance ID for Eureka registration
+    lease-renewal-interval-in-seconds: 5 # How often the client sends heartbeats to the Eureka server (default 30)
+    lease-expiration-duration-in-seconds: 10 # How long the Eureka server waits for a heartbeat before taking the instance out of service (default 90)

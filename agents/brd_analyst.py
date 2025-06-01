@@ -1,238 +1,394 @@
 import json
-import re
-from google.generativeai.types import HarmBlockThreshold, HarmCategory
-from config import get_gemini_model
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.prompts import PromptTemplate
+from typing import Optional, Dict, Any, List
+import monitoring
+from .base_agent import BaseAgent
 
-class BRDAnalystAgent:
-    def __init__(self, llm, memory):
-        self.llm = llm # Gemini GenerativeModel instance
-        self.memory = memory # SharedProjectMemory instance
+class BRDAnalystAgent(BaseAgent):
+    """Enhanced BRD Analyst Agent with comprehensive analysis capabilities,
+    risk assessment, gap detection, and advanced validation."""
     
-    def sanitize_json(self, raw_json):
-        """Apply multiple fixes to make sure JSON is valid."""
-        # 1. Remove markdown code block fences
-        if "```json" in raw_json:
-            raw_json = raw_json.replace("```json", "")
-        if "```" in raw_json:
-            raw_json = raw_json.replace("```", "")
-        raw_json = raw_json.strip()
+    def __init__(self, llm: BaseLanguageModel, memory, rag_retriever: Optional[BaseRetriever] = None):
+        super().__init__(
+            llm=llm,
+            memory=memory,
+            agent_name="BRD Analyst Agent",
+            temperature=0.3,  # Balanced analysis and extraction
+            rag_retriever=rag_retriever
+        )
         
-        # 2. Parse line by line to fix common issues (this is more robust than regex)
-        lines = raw_json.split('\n')
-        fixed_lines = []
-        in_array = False
-        array_field = None
-        
-        for i, line in enumerate(lines):
-            line = line.strip()
-            
-            # Skip empty lines
-            if not line:
-                continue
-            
-            # Check if we're entering an array
-            if '"' in line and ':' in line and '[' in line and not ']' in line:
-                field_name = line.split(':', 1)[0].strip().strip('"')
-                in_array = True
-                array_field = field_name
-                fixed_lines.append(line)
-                continue
-                
-            # Check if we're exiting an array incorrectly
-            if in_array and '"' in line and ':' in line and '[' in line:
-                # We found a new field without closing the previous array
-                in_array = False
-                # Insert closing bracket before this line
-                fixed_lines.append("],")
-                fixed_lines.append(line)
-                continue
-            
-            # Fix missing comma after array item with a quote
-            if in_array and line.endswith('"') and i < len(lines)-1 and '"' in lines[i+1] and not lines[i+1].strip().startswith(']'):
-                fixed_lines.append(f"{line},")
-                continue
-            
-            # Fix line that should end array but doesn't have closing bracket
-            if in_array and '"' in line and i < len(lines)-1 and ('"' in lines[i+1] and ':' in lines[i+1]):
-                in_array = False
-                fixed_lines.append(f"{line}")
-                fixed_lines.append("],")
-                continue
-                
-            # Normal line
-            fixed_lines.append(line)
-        
-        # Make sure we close any open arrays at the end
-        if in_array:
-            fixed_lines.append("]")
-            
-        fixed_json = '\n'.join(fixed_lines)
-        
-        # 3. Direct fixes for common patterns
-        # Fix the specific issue with functional_requirements missing closing bracket
-        patterns = [
-            # Fix missing array closing bracket before new field
-            (r'(\"\s*)",\s*"([a-zA-Z_]+)":', r'\1"],\n    "\2":'),
-            
-            # Fix double commas
-            (r',\s*,', r','),
-            
-            # Fix trailing comma in array
-            (r',\s*]', r']'),
-        ]
-        
-        for pattern, replacement in patterns:
-            fixed_json = re.sub(pattern, replacement, fixed_json)
-        
-        return fixed_json
+        # Initialize prompt template with enhanced analysis capabilities
+        self.prompt_template = PromptTemplate(
+            template="""
+            You are an expert Business Requirements Document (BRD) Analyst AI with extensive experience in software development projects.
+            Your task is to thoroughly analyze the provided BRD, extract all key information, identify gaps, assess risks, 
+            detect inconsistencies, and present it in a structured JSON format.
 
-    def run(self, raw_brd: str) -> dict:
+            **IMPORTANT**: Do NOT extract requirements to match the output structure examples below. 
+            You must analyze the actual BRD content and identify requirements that truly exist in the document.
+
+            **Deep Analysis Instructions:**
+            Analyze the BRD thoroughly using these steps:
+            1. Extract explicit requirements and categorize them appropriately
+            2. Identify implicit requirements that are suggested but not clearly stated
+            3. Detect potential gaps where requirements may be missing
+            4. Assess risks and dependencies between requirements
+            5. Identify inconsistencies or conflicts between requirements
+            6. Evaluate the quality and completeness of the BRD
+
+            Extract the following information:
+
+            1. **Project Overview**: Comprehensive summary of project goals, scope, and business context
+            2. **Functional Requirements**: All explicit and implicit features/capabilities needed
+            3. **Non-Functional Requirements**: All quality attributes across multiple dimensions
+            4. **User Roles & Permissions**: Complete user hierarchy and detailed access control needs
+            5. **Data Requirements**: All data entities, relationships, and governance requirements
+            6. **Integration Requirements**: All external systems and data exchange needs
+            7. **Business Rules**: All logic, constraints, and domain-specific rules
+            8. **Risks & Gaps**: Identify risks, ambiguities, and missing information
+            9. **Dependencies**: Capture relationships and dependencies between requirements
+
+            {format_instructions}
+
+            **Output Requirements:**
+            Generate ONLY a valid JSON object with the following structure:
+            {{
+                "project_overview": {{
+                    "project_name": "string",
+                    "description": "string",
+                    "objectives": ["array of main objectives"],
+                    "scope": "string",
+                    "business_context": "string",
+                    "stakeholders": ["array of key stakeholders"]
+                }},
+                "functional_requirements": [
+                    {{
+                        "id": "string",
+                        "category": "string",
+                        "description": "string",
+                        "priority": "High/Medium/Low",
+                        "source": "Explicit/Implicit", 
+                        "acceptance_criteria": ["array of criteria"],
+                        "dependencies": ["IDs of dependent requirements"]
+                    }}
+                ],
+                "non_functional_requirements": {{
+                    "performance": ["array of performance requirements"],
+                    "security": ["array of security requirements"],
+                    "scalability": ["array of scalability requirements"],
+                    "usability": ["array of usability requirements"],
+                    "reliability": ["array of reliability requirements"],
+                    "compliance": ["array of compliance requirements"],
+                    "compatibility": ["array of compatibility requirements"],
+                    "maintainability": ["array of maintainability requirements"]
+                }},
+                "user_roles": [
+                    {{
+                        "role_name": "string",
+                        "description": "string",
+                        "permissions": ["array of permissions"],
+                        "user_stories": ["array of key user stories/journeys"]
+                    }}
+                ],
+                "data_requirements": [
+                    {{
+                        "entity": "string",
+                        "description": "string",
+                        "attributes": ["array of key attributes with data types"],
+                        "relationships": ["array of relationships to other entities"],
+                        "volume_estimates": "string describing expected data volumes",
+                        "retention_policy": "string describing data retention needs"
+                    }}
+                ],
+                "integration_requirements": [
+                    {{
+                        "system": "string",
+                        "type": "API/Database/File/etc",
+                        "description": "string",
+                        "data_flow": "Inbound/Outbound/Bidirectional",
+                        "frequency": "Real-time/Batch/Daily/etc",
+                        "criticality": "High/Medium/Low"
+                    }}
+                ],
+                "business_rules": [
+                    {{
+                        "rule_id": "string",
+                        "description": "string",
+                        "condition": "string",
+                        "action": "string",
+                        "exceptions": ["array of exception cases"]
+                    }}
+                ],
+                "constraints": [
+                    {{
+                        "type": "Technical/Business/Legal/etc",
+                        "description": "string",
+                        "impact": "string"
+                    }}
+                ],
+                "risks_and_gaps": [
+                    {{
+                        "type": "Risk/Gap/Ambiguity/Inconsistency",
+                        "description": "string",
+                        "affected_areas": ["array of affected requirement IDs or areas"],
+                        "severity": "High/Medium/Low",
+                        "recommendation": "string with suggested mitigation or clarification"
+                    }}
+                ],
+                "quality_assessment": {{
+                    "completeness_score": "number between 1-10",
+                    "clarity_score": "number between 1-10", 
+                    "consistency_score": "number between 1-10",
+                    "testability_score": "number between 1-10",
+                    "overall_quality": "number between 1-10",
+                    "improvement_recommendations": ["array of recommendations to improve BRD quality"]
+                }}
+            }}
+
+            --- BRD ---
+            {brd_text}
+            --- END BRD ---
+            """,
+            input_variables=["brd_text"],
+            partial_variables={"format_instructions": self.json_parser.get_format_instructions()},
+        )
+    
+    def get_default_structure(self) -> Dict[str, Any]:
+        """Define enhanced default structure for BRD analysis response."""
+        return {
+            "project_overview": {
+                "project_name": "Unknown Project",
+                "description": "No description available",
+                "objectives": [],
+                "scope": "Not specified",
+                "business_context": "Not provided",
+                "stakeholders": []
+            },
+            "functional_requirements": [],
+            "non_functional_requirements": {
+                "performance": [],
+                "security": [],
+                "scalability": [],
+                "usability": [],
+                "reliability": [],
+                "compliance": [],
+                "compatibility": [],
+                "maintainability": []
+            },
+            "user_roles": [],
+            "data_requirements": [],
+            "integration_requirements": [],
+            "business_rules": [],
+            "constraints": [],
+            "risks_and_gaps": [],
+            "quality_assessment": {
+                "completeness_score": 0,
+                "clarity_score": 0,
+                "consistency_score": 0,
+                "testability_score": 0,
+                "overall_quality": 0,
+                "improvement_recommendations": [
+                    "Insufficient BRD data provided for analysis"
+                ]
+            }
+        }
+    
+    def get_default_response(self) -> Dict[str, Any]:
+        """Get enhanced default response when analysis fails completely."""
+        default_structure = self.get_default_structure()
+        default_structure["project_overview"]["project_name"] = "Analysis Failed"
+        default_structure["project_overview"]["description"] = "BRD analysis encountered errors"
+        default_structure["risks_and_gaps"].append({
+            "type": "Gap",
+            "description": "Analysis failure prevented complete extraction of requirements",
+            "affected_areas": ["All"],
+            "severity": "High",
+            "recommendation": "Review BRD manually or provide more complete information"
+        })
+        return default_structure
+    
+    def run(self, raw_brd: str) -> Dict[str, Any]:
         """
-        Analyzes the raw BRD and extracts structured requirements.
+        Analyze the BRD with comprehensive analysis, gap detection, and quality assessment.
         """
-        print("BRD Analyst Agent: Analyzing raw BRD...")
-
-        prompt = f"""
-        You are an expert Business Requirements Document (BRD) Analyst AI.
-        Your task is to thoroughly analyze the provided BRD, extract all key information, and present it in a structured JSON format.
-
-        Focus on:
-        1.  **High-Level Summary:** A concise overview of the project.
-        2.  **Functional Requirements (FRs):** List each distinct functional requirement. If not explicitly numbered, infer them.
-        3.  **Non-Functional Requirements (NFRs):** List all non-functional requirements (performance, security, scalability, usability, etc.).
-        4.  **User Stories:** Convert identified functional requirements into standard "As a [type of user], I want to [goal] so that [reason/benefit]" format.
-        5.  **Assumptions:** List any explicit or implicit assumptions made in the BRD.
-        6.  **Potential Ambiguities/Questions:** Identify any parts of the BRD that are unclear, missing information, or could lead to different interpretations. If found, list them as questions for clarification.
-
-        --- BRD ---
-        {raw_brd}
-        --- END BRD ---
-
-        Output your analysis in this exact JSON format, with no other text:
-
-        {{
-            "summary": "string", 
-            "functional_requirements": [
-                "FR1: string",
-                "FR2: string"
-            ],
-            "non_functional_requirements": [
-                "NFR1: string",
-                "NFR2: string"
-            ],
-            "user_stories": [
-                "As a user, I want to...",
-                "As a user, I want to..."
-            ],
-            "assumptions": [
-                "string",
-                "string"
-            ],
-            "ambiguities_or_questions": [
-                "Question 1: string", 
-                "Question 2: string"
-            ]
-        }}
-        """
-
-        try:
-            # Call Gemini API
-            response = self.llm.generate_content(
-                prompt,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0.1
-                },
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                }
-            )
-
-            raw_json_output = response.text
-            
-            # Apply our comprehensive sanitization
-            fixed_json = self.sanitize_json(raw_json_output)
-            
-            # Try to manually parse specific issue as a last resort
+        self.log_start("Starting enhanced BRD analysis")
+        self.log_info(f"Using temperature {self.temperature} for balanced analysis and extraction")
+        
+        # Validate input
+        if not raw_brd:
+            self.log_warning("Empty BRD provided")
+            default_response = self.get_default_response()
+            default_response["project_overview"]["description"] = "No BRD content provided"
+            return default_response
+        
+        if len(raw_brd.strip()) < 100:
+            self.log_warning("BRD content too short for meaningful analysis")
+            default_response = self.get_default_response()
+            default_response["project_overview"]["description"] = "BRD content insufficient for analysis"
+            return default_response
+        
+        # Use RAG if available to enhance domain knowledge
+        context = ""
+        if self.rag_retriever:
+            self.log_info("Retrieving relevant context from knowledge base")
             try:
-                parsed_data = json.loads(fixed_json)
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error after sanitization: {e}")
-                
-                # Direct replacement of the known problematic pattern at char 1067
-                if '"FR5:' in fixed_json and 'non_functional_requirements' in fixed_json:
-                    # Explicitly locate and fix the transition between functional_requirements and non_functional_requirements
-                    before = fixed_json.split('"non_functional_requirements"')[0]
-                    if before.endswith('",'):
-                        before = before[:-1] + '"],'
-                    after = '"non_functional_requirements"' + fixed_json.split('"non_functional_requirements"')[1]
-                    fixed_json = before + after
-                
-                try:
-                    parsed_data = json.loads(fixed_json)
-                except json.JSONDecodeError as e2:
-                    print(f"Still couldn't parse JSON after specific fixes: {e2}")
-                    print(f"Full problematic JSON:\n{fixed_json}")
-                    
-                    # Final fallback - let's manually construct a valid JSON
-                    try:
-                        manual_json = self._create_manual_json_fallback(raw_json_output)
-                        parsed_data = json.loads(manual_json)
-                    except Exception as e3:
-                        print(f"All JSON parsing attempts failed: {e3}")
-                        raise
-
-            print("BRD Analyst Agent: Analysis complete.")
-            return parsed_data
-
+                context = self.get_rag_context(raw_brd[:1000], max_docs=3)
+                self.log_info(f"Retrieved {len(context.split())} words of context")
+            except Exception as e:
+                self.log_warning(f"RAG retrieval failed: {e}")
+        
+        try:
+            # Execute LLM chain with inputs
+            self.log_info("Executing deep BRD analysis")
+            response = self.execute_with_monitoring(
+                self.execute_llm_chain,
+                {"brd_text": raw_brd}
+            )
+            
+            # Enhanced validation of response structure
+            required_keys = [
+                "project_overview", "functional_requirements", "non_functional_requirements",
+                "user_roles", "data_requirements", "integration_requirements", 
+                "business_rules", "constraints", "risks_and_gaps", "quality_assessment"
+            ]
+            
+            validated_response = self.validate_response_structure(response, required_keys)
+            
+            # Perform additional validation on response quality
+            validated_response = self.enhance_response_quality(validated_response, raw_brd)
+            
+            # Log execution summary
+            self.log_execution_summary(validated_response)
+            
+            return validated_response
+            
         except Exception as e:
-            print(f"Error in BRD Analyst Agent: {e}")
-            print(f"Problematic raw output (if any): {response.text if 'response' in locals() else 'No response object'}")
-            raise
+            self.log_error(f"BRD analysis failed completely: {e}")
+            return self.get_default_response()
     
-    def _create_manual_json_fallback(self, raw_text):
-        """Emergency fallback that manually extracts sections and builds valid JSON"""
-        # Define sections to look for
-        sections = ["summary", "functional_requirements", "non_functional_requirements", 
-                   "user_stories", "assumptions", "ambiguities_or_questions"]
+    def enhance_response_quality(self, response: Dict[str, Any], raw_brd: str) -> Dict[str, Any]:
+        """Add additional quality checks and enhancements to the response."""
+        # Ensure functional requirements have IDs
+        if "functional_requirements" in response:
+            for i, req in enumerate(response["functional_requirements"]):
+                if "id" not in req or not req["id"]:
+                    req["id"] = f"FR{i+1:03d}"
         
-        # Create a basic structure
-        result = {}
+        # Check for missing acceptance criteria
+        functional_reqs_without_criteria = 0
+        if "functional_requirements" in response:
+            for req in response["functional_requirements"]:
+                if "acceptance_criteria" not in req or not req["acceptance_criteria"]:
+                    functional_reqs_without_criteria += 1
+                    req["acceptance_criteria"] = ["Criteria needs to be defined"]
         
-        # Try to extract each section
-        for section in sections:
-            pattern = f'"{section}":\\s*\\[?\\s*"([^"]*)'
-            match = re.search(pattern, raw_text)
-            if match and section == "summary":
-                result[section] = match.group(1).strip()
+        # If many requirements lack acceptance criteria, note it as a risk
+        if functional_reqs_without_criteria > 0:
+            if "risks_and_gaps" not in response:
+                response["risks_and_gaps"] = []
+            
+            response["risks_and_gaps"].append({
+                "type": "Gap",
+                "description": f"{functional_reqs_without_criteria} functional requirements lack acceptance criteria",
+                "affected_areas": ["Testability", "Quality Assurance"],
+                "severity": "Medium",
+                "recommendation": "Define clear acceptance criteria for all requirements"
+            })
+        
+        # Ensure quality assessment has scores
+        if "quality_assessment" not in response:
+            response["quality_assessment"] = {
+                "completeness_score": 5,
+                "clarity_score": 5,
+                "consistency_score": 5,
+                "testability_score": 5,
+                "overall_quality": 5,
+                "improvement_recommendations": ["Auto-generated quality assessment"]
+            }
+        
+        # Calculate word count to estimate BRD comprehensiveness
+        word_count = len(raw_brd.split())
+        if word_count < 500 and "quality_assessment" in response:
+            if "improvement_recommendations" not in response["quality_assessment"]:
+                response["quality_assessment"]["improvement_recommendations"] = []
+            
+            response["quality_assessment"]["improvement_recommendations"].append(
+                "BRD appears brief. Consider expanding with more detailed requirements."
+            )
+        
+        return response
+    
+    def validate_response_structure(self, response: Dict[str, Any], required_keys: List[str]) -> Dict[str, Any]:
+        """Enhanced validation that maintains as much data as possible."""
+        default_structure = self.get_default_structure()
+        
+        # If response is empty or not a dict, return default
+        if not response or not isinstance(response, dict):
+            self.log_warning("LLM returned invalid response structure")
+            return default_structure
+        
+        # Create a validated response, merging with defaults for missing sections
+        validated_response = {}
+        
+        for key in required_keys:
+            if key not in response or not response[key]:
+                self.log_warning(f"Missing {key} in response, using default")
+                validated_response[key] = default_structure.get(key)
             else:
-                # For array sections, try to extract all items
-                items = []
-                pattern = f'"{section}":\\s*\\[(.*?)\\]'
-                match = re.search(pattern, raw_text, re.DOTALL)
-                if match:
-                    content = match.group(1)
-                    # Extract items between quotes
-                    item_pattern = r'"([^"]+)"'
-                    items = re.findall(item_pattern, content)
-                    
-                # If we couldn't extract items properly, add a placeholder
-                if not items and section != "summary":
-                    if "FR" in raw_text and section == "functional_requirements":
-                        fr_pattern = r'FR\d+:[^,"\]]*'
-                        items = re.findall(fr_pattern, raw_text)
-                    elif "NFR" in raw_text and section == "non_functional_requirements":
-                        nfr_pattern = r'NFR\d+:[^,"\]]*'
-                        items = re.findall(nfr_pattern, raw_text)
-                    elif "As a" in raw_text and section == "user_stories":
-                        story_pattern = r'As a [^,"\]]*'
-                        items = re.findall(story_pattern, raw_text)
-                
-                # Default empty array if we couldn't extract anything
-                result[section] = items if items else []
-                
-        # Convert to JSON
-        return json.dumps(result)
+                validated_response[key] = response[key]
+        
+        # Include any extra keys that weren't in required_keys but were in response
+        for key in response:
+            if key not in required_keys:
+                validated_response[key] = response[key]
+        
+        return validated_response
+    
+    def log_execution_summary(self, response: Dict[str, Any]):
+        """Enhanced execution summary with quality metrics."""
+        func_reqs = len(response.get("functional_requirements", []))
+        user_roles = len(response.get("user_roles", []))
+        data_entities = len(response.get("data_requirements", []))
+        integrations = len(response.get("integration_requirements", []))
+        business_rules = len(response.get("business_rules", []))
+        risks = len(response.get("risks_and_gaps", []))
+        
+        project_name = response.get("project_overview", {}).get("project_name", "Unknown")
+        
+        # Quality assessment values
+        quality = response.get("quality_assessment", {})
+        completeness = quality.get("completeness_score", "N/A")
+        clarity = quality.get("clarity_score", "N/A")
+        overall = quality.get("overall_quality", "N/A")
+        
+        summary = (f"Analysis complete for '{project_name}' - {func_reqs} functional requirements, "
+                 f"{user_roles} user roles, {data_entities} data entities, "
+                 f"{integrations} integrations, {business_rules} business rules, "
+                 f"{risks} risks/gaps identified")
+        
+        self.log_success(summary)
+        
+        quality_summary = f"BRD Quality Assessment - Completeness: {completeness}/10, " + \
+                          f"Clarity: {clarity}/10, Overall: {overall}/10"
+        
+        self.log_info(quality_summary)
+        
+        # Detailed breakdown
+        self.log_info(f"   Project: {project_name}")
+        self.log_info(f"   Functional Requirements: {func_reqs}")
+        self.log_info(f"   User Roles: {user_roles}")
+        self.log_info(f"   Data Entities: {data_entities}")
+        self.log_info(f"   Integrations: {integrations}")
+        self.log_info(f"   Business Rules: {business_rules}")
+        self.log_info(f"   Risks & Gaps: {risks}")
+        
+        # Log high severity risks for immediate attention
+        high_severity_risks = [r for r in response.get("risks_and_gaps", []) 
+                              if r.get("severity") == "High"]
+        
+        if high_severity_risks:
+            self.log_warning(f"Found {len(high_severity_risks)} high-severity risks that need attention")
+            for risk in high_severity_risks:
+                self.log_warning(f"   HIGH RISK: {risk.get('description')}")

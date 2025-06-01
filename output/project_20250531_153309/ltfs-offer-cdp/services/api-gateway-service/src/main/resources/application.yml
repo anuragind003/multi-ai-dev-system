@@ -1,0 +1,131 @@
+server:
+  port: 8080 # Default port for the API Gateway service
+
+spring:
+  application:
+    name: api-gateway-service # Name of this service for Eureka registration
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false # Disable discovery locator as we define explicit routes with specific filters below.
+                         # Setting this to 'true' would automatically create routes for all registered services,
+                         # but explicit routes offer more control over predicates and filters.
+      routes:
+        # Route for Customer Profile Service
+        # This service is responsible for providing a single profile view of the customer and deduplication.
+        - id: customer-profile-service
+          uri: lb://CUSTOMER-PROFILE-SERVICE # 'lb://' indicates load balancing across instances registered in Eureka
+          predicates:
+            - Path=/api/v1/customers/** # Routes all requests starting with /api/v1/customers to this service
+          filters:
+            - StripPrefix=1 # Strips the first path segment (/api/v1) from the request URL before forwarding to the target service.
+                            # Example: /api/v1/customers/123 becomes /customers/123
+            - name: CircuitBreaker # Applies a Circuit Breaker pattern for resilience
+              args:
+                name: customer-profile-service-cb # Unique name for this circuit breaker instance
+                fallbackUri: forward:/fallback/customer-profile # URI to forward to if the circuit opens or a timeout occurs
+
+        # Route for Offer Management Service
+        # This service handles offer finalization, top-up offers, and related logic.
+        - id: offer-management-service
+          uri: lb://OFFER-MANAGEMENT-SERVICE
+          predicates:
+            - Path=/api/v1/offers/** # Routes for general offers
+            - Path=/api/v1/topup-offers/** # Routes specifically for top-up offers
+          filters:
+            - StripPrefix=1
+            - name: CircuitBreaker
+              args:
+                name: offer-management-service-cb
+                fallbackUri: forward:/fallback/offer-management
+
+        # Route for Campaign Service
+        # This service manages campaign data and related operations.
+        - id: campaign-service
+          uri: lb://CAMPAIGN-SERVICE
+          predicates:
+            - Path=/api/v1/campaigns/**
+          filters:
+            - StripPrefix=1
+            - name: CircuitBreaker
+              args:
+                name: campaign-service-cb
+                fallbackUri: forward:/fallback/campaign
+
+        # Route for Data Validation Service
+        # This service performs basic column-level validation on data.
+        - id: data-validation-service
+          uri: lb://DATA-VALIDATION-SERVICE
+          predicates:
+            - Path=/api/v1/validation/**
+          filters:
+            - StripPrefix=1
+            - name: CircuitBreaker
+              args:
+                name: data-validation-service-cb
+                fallbackUri: forward:/fallback/data-validation
+
+  # Eureka Client Configuration for Service Discovery
+  eureka:
+    client:
+      serviceUrl:
+        defaultZone: http://localhost:8761/eureka # URL of the Eureka Server where services register and discover each other.
+                                                  # In a production environment, this would typically be a highly available cluster.
+      fetch-registry: true # Indicates whether this client should fetch the registry information from the Eureka server.
+      register-with-eureka: true # Indicates whether this client should register itself with the Eureka server.
+    instance:
+      hostname: localhost # Hostname to register with Eureka. For local development.
+      prefer-ip-address: true # Prefer IP address over hostname for Eureka registration, useful in containerized environments.
+
+# Management endpoints for Spring Boot Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*" # Expose all actuator endpoints via web (e.g., /actuator/health, /actuator/info, /actuator/gateway).
+                     # In production, consider exposing only necessary endpoints for security.
+  endpoint:
+    health:
+      show-details: always # Show full health details, including details about components like disk space, database, etc.
+    gateway:
+      enabled: true # Enable the gateway-specific actuator endpoint (/actuator/gateway) to view routes, filters, etc.
+
+# Resilience4j Circuit Breaker Configuration
+# These configurations define the behavior of the circuit breakers used in the gateway routes.
+resilience4j:
+  circuitbreaker:
+    instances:
+      customer-profile-service-cb:
+        registerHealthIndicator: true # Register a health indicator for this circuit breaker in Actuator.
+        slidingWindowSize: 10 # Number of calls to consider for calculating the failure rate.
+        failureRateThreshold: 50 # Percentage of failed calls (0-100) that will open the circuit.
+        waitDurationInOpenState: 60s # Time the circuit will remain in the OPEN state before transitioning to HALF_OPEN.
+        permittedNumberOfCallsInHalfOpenState: 3 # Number of calls allowed in the HALF_OPEN state to determine if the service has recovered.
+      offer-management-service-cb:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 3
+      campaign-service-cb:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 3
+      data-validation-service-cb:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 60s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+# Logging configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    org.springframework.cloud.gateway: DEBUG # Enable detailed logging for Spring Cloud Gateway components.
+    reactor.netty: DEBUG # Enable detailed logging for Reactor Netty, the underlying network engine for Spring WebFlux and Gateway.
+    com.ltfs.cdp: DEBUG # Set logging level for custom application packages to DEBUG for more detailed output during development.

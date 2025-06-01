@@ -1,0 +1,214 @@
+package com.ltfs.cdp.offer.rules
+
+// Imports for fact classes used in the rules.
+// These classes are expected to be part of the Java project's model layer,
+// typically found in a shared module or within the business-rule-engine-service itself.
+import com.ltfs.cdp.offer.model.Customer;
+import com.ltfs.cdp.offer.model.Offer;
+import com.ltfs.cdp.offer.model.EligibilityResult;
+import com.ltfs.cdp.offer.model.OfferType; // Assuming an enum for different offer types (e.g., LOYALTY, PREAPPROVED, TOP_UP)
+
+// Global variables can be declared here if needed, e.g., for injecting a logger instance
+// or a service for external lookups. For this example, System.out is used for simplicity.
+// global org.slf4j.Logger logger; // Example: If a logger instance is passed from Java
+
+/**
+ * Rule: Initialize Eligibility Result
+ * Purpose: This rule ensures that for every 'Offer' fact inserted into the Drools working memory,
+ *          an 'EligibilityResult' fact is created and associated with it.
+ *          It initializes the offer as 'eligible' by default. Subsequent rules will then
+ *          modify this 'EligibilityResult' if any rejection criteria are met.
+ * Salience: High salience (100) ensures this rule runs early, typically before other
+ *           eligibility assessment rules, guaranteeing an 'EligibilityResult' is always present.
+ */
+rule "Initialize Eligibility Result"
+    salience 100
+    when
+        // Pattern: Find an 'Offer' fact ($offer) for which no 'EligibilityResult' fact
+        //          currently exists in the working memory (identified by offerId).
+        $offer : Offer()
+        not EligibilityResult(offerId == $offer.offerId)
+    then
+        // Action: Create a new 'EligibilityResult' object.
+        EligibilityResult result = new EligibilityResult();
+        // Set the offerId to link it to the current offer.
+        result.setOfferId($offer.getOfferId());
+        // Mark the offer as eligible by default.
+        result.setEligible(true);
+        // Provide a default message indicating no rejection reasons yet.
+        result.setRejectionReason("No rejection reasons found.");
+        // Insert the new 'EligibilityResult' fact into the working memory,
+        // making it available for other rules to modify.
+        insert(result);
+        System.out.println("DEBUG: Initialized EligibilityResult for offer: " + $offer.getOfferId());
+end
+
+/**
+ * Rule: CIBIL Score Eligibility
+ * Purpose: Rejects an offer if the customer's CIBIL score is below a predefined minimum threshold.
+ *          This is a fundamental creditworthiness check.
+ */
+rule "CIBIL Score Eligibility"
+    when
+        // Pattern: Match an 'Offer' fact ($offer).
+        $offer : Offer()
+        // Pattern: Match the 'Customer' fact ($customer) associated with the offer's customerId.
+        // Condition: The customer's CIBIL score is less than 650 (example threshold).
+        $customer : Customer(customerId == $offer.customerId, cibilScore < 650)
+        // Pattern: Match the 'EligibilityResult' fact ($result) for the current offer.
+        // Condition: The offer is currently marked as eligible. This prevents re-evaluating
+        //            already rejected offers and ensures the first rejection reason is kept
+        //            or a specific order of rejections is followed.
+        $result : EligibilityResult(offerId == $offer.offerId, eligible == true)
+    then
+        // Action: Mark the offer as ineligible.
+        $result.setEligible(false);
+        // Set the specific rejection reason.
+        $result.setRejectionReason("Customer CIBIL score is too low (below 650).");
+        // Update the 'EligibilityResult' fact in working memory to reflect the change.
+        update($result);
+        System.out.println("DEBUG: Offer " + $offer.getOfferId() + " rejected due to low CIBIL score.");
+end
+
+/**
+ * Rule: Existing Loan Count Limit
+ * Purpose: Rejects an offer if the customer already has a number of active loans
+ *          exceeding a predefined limit, indicating potential over-leveraging or increased risk.
+ */
+rule "Existing Loan Count Limit"
+    when
+        // Pattern: Match an 'Offer' fact ($offer).
+        $offer : Offer()
+        // Pattern: Match the 'Customer' fact ($customer) associated with the offer.
+        // Condition: The customer has 3 or more existing loans (example threshold).
+        $customer : Customer(customerId == $offer.customerId, existingLoanCount >= 3)
+        // Pattern: Match the 'EligibilityResult' fact ($result) for the current offer,
+        //          ensuring it's currently eligible.
+        $result : EligibilityResult(offerId == $offer.offerId, eligible == true)
+    then
+        // Action: Mark the offer as ineligible and set the rejection reason.
+        $result.setEligible(false);
+        $result.setRejectionReason("Customer has too many existing loans (3 or more).");
+        // Update the 'EligibilityResult' fact.
+        update($result);
+        System.out.println("DEBUG: Offer " + $offer.getOfferId() + " rejected due to too many existing loans.");
+end
+
+/**
+ * Rule: Income Eligibility for Loan Amount
+ * Purpose: Ensures that the customer's annual income is sufficient for the requested loan amount.
+ *          This rule applies a specific income threshold for higher loan amounts.
+ */
+rule "Income Eligibility for Loan Amount"
+    when
+        // Pattern: Match an 'Offer' fact ($offer) where the loan amount is greater than 500,000.
+        $offer : Offer(loanAmount > 500000)
+        // Pattern: Match the 'Customer' fact ($customer) associated with the offer.
+        // Condition: The customer's annual income is less than 600,000 (example threshold for this loan amount).
+        $customer : Customer(customerId == $offer.customerId, annualIncome < 600000)
+        // Pattern: Match the 'EligibilityResult' fact ($result) for the current offer,
+        //          ensuring it's currently eligible.
+        $result : EligibilityResult(offerId == $offer.offerId, eligible == true)
+    then
+        // Action: Mark the offer as ineligible and set the rejection reason.
+        $result.setEligible(false);
+        $result.setRejectionReason("Customer income is insufficient for the requested loan amount (>5L).");
+        // Update the 'EligibilityResult' fact.
+        update($result);
+        System.out.println("DEBUG: Offer " + $offer.getOfferId() + " rejected due to insufficient income for loan amount.");
+end
+
+/**
+ * Rule: Deduplicate Active Offers of Same Type (General)
+ * Purpose: Implements deduplication logic for general consumer loan products.
+ *          An offer is rejected if the customer already has an active, finalized offer
+ *          of the same type. This rule specifically excludes 'TOP_UP' offers,
+ *          as they have their own dedicated deduplication rule.
+ * Context: "Perform deduplication against the 'live book' (Customer 360) before offers are finalized."
+ */
+rule "Deduplicate Active Offers of Same Type (General)"
+    when
+        // Pattern: Match the current offer being evaluated ($currentOffer).
+        // Condition: The current offer's status is "PENDING" (meaning it's not yet finalized/live).
+        // Condition: The current offer's type is NOT 'TOP_UP'.
+        $currentOffer : Offer(status == "PENDING", offerType != OfferType.TOP_UP)
+
+        // Pattern: Find another 'Offer' fact ($existingOffer) that represents an active offer
+        //          for the same customer and of the same type.
+        // Condition: The existing offer belongs to the same customer as the current offer.
+        // Condition: The existing offer is of the same type as the current offer.
+        // Condition: The existing offer's status is "ACTIVE" (meaning it's finalized/live in the 'live book').
+        // Condition: Ensure it's not the same offer being evaluated (different offerId).
+        $existingOffer : Offer(
+            customerId == $currentOffer.customerId,
+            offerType == $currentOffer.offerType,
+            status == "ACTIVE",
+            offerId != $currentOffer.offerId
+        )
+        // Pattern: Match the 'EligibilityResult' fact ($result) for the current offer,
+        //          ensuring it's currently eligible.
+        $result : EligibilityResult(offerId == $currentOffer.offerId, eligible == true)
+    then
+        // Action: Mark the current offer as ineligible due to deduplication.
+        $result.setEligible(false);
+        $result.setRejectionReason("Customer already has an active offer of the same type (" + $currentOffer.getOfferType() + ").");
+        // Update the 'EligibilityResult' fact.
+        update($result);
+        System.out.println("DEBUG: Offer " + $currentOffer.getOfferId() + " rejected due to existing active offer of same type.");
+end
+
+/**
+ * Rule: Deduplicate Top-up Offers
+ * Purpose: Implements specific deduplication logic for 'TOP_UP' loan offers.
+ *          As per requirements: "Top-up loan offers must be deduped only within other Top-up offers".
+ *          An offer is rejected if the customer already has an active 'TOP_UP' offer.
+ */
+rule "Deduplicate Top-up Offers"
+    when
+        // Pattern: Match the current offer being evaluated ($currentOffer).
+        // Condition: The current offer's status is "PENDING".
+        // Condition: The current offer's type IS 'TOP_UP'.
+        $currentOffer : Offer(status == "PENDING", offerType == OfferType.TOP_UP)
+
+        // Pattern: Find another 'Offer' fact ($existingTopUpOffer) that represents an active 'TOP_UP' offer
+        //          for the same customer.
+        // Condition: The existing offer belongs to the same customer.
+        // Condition: The existing offer's type IS 'TOP_UP'.
+        // Condition: The existing offer's status is "ACTIVE".
+        // Condition: Ensure it's not the same offer being evaluated.
+        $existingTopUpOffer : Offer(
+            customerId == $currentOffer.customerId,
+            offerType == OfferType.TOP_UP,
+            status == "ACTIVE",
+            offerId != $currentOffer.offerId
+        )
+        // Pattern: Match the 'EligibilityResult' fact ($result) for the current offer,
+        //          ensuring it's currently eligible.
+        $result : EligibilityResult(offerId == $currentOffer.offerId, eligible == true)
+    then
+        // Action: Mark the current offer as ineligible due to deduplication.
+        $result.setEligible(false);
+        $result.setRejectionReason("Customer already has an active Top-up offer.");
+        // Update the 'EligibilityResult' fact.
+        update($result);
+        System.out.println("DEBUG: Offer " + $currentOffer.getOfferId() + " rejected due to existing active Top-up offer.");
+end
+
+/**
+ * Rule: Final Offer Eligibility Status
+ * Purpose: This rule serves as a final logging step to output the determined eligibility
+ *          status for each offer after all other rules have had a chance to fire.
+ * Salience: Low salience (-100) ensures this rule runs last, after all eligibility
+ *           and rejection criteria have been evaluated and the 'EligibilityResult'
+ *           fact has reached its final state.
+ */
+rule "Final Offer Eligibility Status"
+    salience -100
+    when
+        // Pattern: Match any 'Offer' fact ($offer) and its associated 'EligibilityResult' fact ($result).
+        $offer : Offer()
+        $result : EligibilityResult(offerId == $offer.offerId)
+    then
+        // Action: Print the final eligibility status and the corresponding reason.
+        System.out.println("INFO: Final eligibility for Offer " + $offer.getOfferId() + ": " + ($result.isEligible() ? "Eligible" : "Not Eligible") + ". Reason: " + $result.getRejectionReason());
+end

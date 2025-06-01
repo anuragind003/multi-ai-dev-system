@@ -1,0 +1,223 @@
+{
+  "customer": [
+    {
+      "field": "customerId",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Customer ID is required."},
+        {"type": "REGEX", "pattern": "^CUST\\d{8}$", "message": "Customer ID must start with 'CUST' followed by 8 digits."},
+        {"type": "MAX_LENGTH", "value": 12, "message": "Customer ID cannot exceed 12 characters."}
+      ]
+    },
+    {
+      "field": "firstName",
+      "validations": [
+        {"type": "NOT_NULL", "message": "First name is required."},
+        {"type": "MAX_LENGTH", "value": 50, "message": "First name cannot exceed 50 characters."},
+        {"type": "REGEX", "pattern": "^[a-zA-Z\\s.'-]+$", "message": "First name contains invalid characters."}
+      ]
+    },
+    {
+      "field": "lastName",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Last name is required."},
+        {"type": "MAX_LENGTH", "value": 50, "message": "Last name cannot exceed 50 characters."},
+        {"type": "REGEX", "pattern": "^[a-zA-Z\\s.'-]+$", "message": "Last name contains invalid characters."}
+      ]
+    },
+    {
+      "field": "mobileNumber",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Mobile number is required."},
+        {"type": "REGEX", "pattern": "^[6-9]\\d{9}$", "message": "Invalid Indian mobile number format. Must be 10 digits starting with 6-9."},
+        {"type": "EXACT_LENGTH", "value": 10, "message": "Mobile number must be exactly 10 digits long."}
+      ]
+    },
+    {
+      "field": "emailId",
+      "validations": [
+        {"type": "REGEX", "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$", "message": "Invalid email format."},
+        {"type": "MAX_LENGTH", "value": 100, "message": "Email ID cannot exceed 100 characters."}
+      ]
+    },
+    {
+      "field": "panNumber",
+      "validations": [
+        {"type": "REGEX", "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]{1}$", "message": "Invalid PAN number format. Must be 5 uppercase letters, 4 digits, 1 uppercase letter."},
+        {"type": "EXACT_LENGTH", "value": 10, "message": "PAN number must be exactly 10 characters long."}
+      ]
+    },
+    {
+      "field": "dob",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Date of Birth is required."},
+        {"type": "DATE_FORMAT", "format": "yyyy-MM-dd", "message": "Date of Birth must be in YYYY-MM-DD format."},
+        {"type": "PAST_DATE", "message": "Date of Birth cannot be in the future."}
+      ]
+    },
+    {
+      "field": "gender",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Gender is required."},
+        {"type": "ENUM", "allowedValues": ["MALE", "FEMALE", "OTHER"], "message": "Gender must be MALE, FEMALE, or OTHER."}
+      ]
+    },
+    {
+      "field": "addressLine1",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Address Line 1 is required."},
+        {"type": "MAX_LENGTH", "value": 100, "message": "Address Line 1 cannot exceed 100 characters."}
+      ]
+    },
+    {
+      "field": "city",
+      "validations": [
+        {"type": "NOT_NULL", "message": "City is required."},
+        {"type": "MAX_LENGTH", "value": 50, "message": "City cannot exceed 50 characters."}
+      ]
+    },
+    {
+      "field": "state",
+      "validations": [
+        {"type": "NOT_NULL", "message": "State is required."},
+        {"type": "MAX_LENGTH", "value": 50, "message": "State cannot exceed 50 characters."}
+      ]
+    },
+    {
+      "field": "pincode",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Pincode is required."},
+        {"type": "REGEX", "pattern": "^[1-9]{1}[0-9]{5}$", "message": "Invalid Indian pincode format. Must be 6 digits, not starting with 0."},
+        {"type": "EXACT_LENGTH", "value": 6, "message": "Pincode must be exactly 6 digits long."}
+      ]
+    }
+  ],
+  "offer": [
+    {
+      "field": "offerId",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Offer ID is required."},
+        {"type": "REGEX", "pattern": "^OFF\\d{10}$", "message": "Offer ID must start with 'OFF' followed by 10 digits."},
+        {"type": "MAX_LENGTH", "value": 13, "message": "Offer ID cannot exceed 13 characters."}
+      ]
+    },
+    {
+      "field": "customerId",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Customer ID for offer is required."},
+        {"type": "REGEX", "pattern": "^CUST\\d{8}$", "message": "Customer ID must start with 'CUST' followed by 8 digits."}
+      ]
+    },
+    {
+      "field": "campaignId",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign ID for offer is required."},
+        {"type": "REGEX", "pattern": "^CAMP\\d{6}$", "message": "Campaign ID must start with 'CAMP' followed by 6 digits."}
+      ]
+    },
+    {
+      "field": "offerType",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Offer type is required."},
+        {"type": "ENUM", "allowedValues": ["LOYALTY", "PREAPPROVED", "E_AGGREGATOR", "TOP_UP", "PERSONAL_LOAN", "HOME_LOAN", "AUTO_LOAN"], "message": "Invalid offer type."}
+      ]
+    },
+    {
+      "field": "loanAmount",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Loan amount is required."},
+        {"type": "MIN_VALUE", "value": 10000.0, "message": "Loan amount must be at least 10,000."},
+        {"type": "MAX_VALUE", "value": 50000000.0, "message": "Loan amount cannot exceed 50,000,000."}
+      ]
+    },
+    {
+      "field": "interestRate",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Interest rate is required."},
+        {"type": "MIN_VALUE", "value": 5.0, "message": "Interest rate must be at least 5.0%."},
+        {"type": "MAX_VALUE", "value": 30.0, "message": "Interest rate cannot exceed 30.0%."}
+      ]
+    },
+    {
+      "field": "tenureMonths",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Loan tenure in months is required."},
+        {"type": "MIN_VALUE", "value": 6, "message": "Loan tenure must be at least 6 months."},
+        {"type": "MAX_VALUE", "value": 120, "message": "Loan tenure cannot exceed 120 months (10 years)."}
+      ]
+    },
+    {
+      "field": "offerStartDate",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Offer start date is required."},
+        {"type": "DATE_FORMAT", "format": "yyyy-MM-dd", "message": "Offer start date must be in YYYY-MM-DD format."}
+      ]
+    },
+    {
+      "field": "offerEndDate",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Offer end date is required."},
+        {"type": "DATE_FORMAT", "format": "yyyy-MM-dd", "message": "Offer end date must be in YYYY-MM-DD format."},
+        {"type": "AFTER_FIELD_DATE", "field": "offerStartDate", "message": "Offer end date must be after offer start date."}
+      ]
+    },
+    {
+      "field": "offerStatus",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Offer status is required."},
+        {"type": "ENUM", "allowedValues": ["ACTIVE", "INACTIVE", "EXPIRED", "ACCEPTED", "REJECTED"], "message": "Invalid offer status."}
+      ]
+    }
+  ],
+  "campaign": [
+    {
+      "field": "campaignId",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign ID is required."},
+        {"type": "REGEX", "pattern": "^CAMP\\d{6}$", "message": "Campaign ID must start with 'CAMP' followed by 6 digits."},
+        {"type": "MAX_LENGTH", "value": 10, "message": "Campaign ID cannot exceed 10 characters."}
+      ]
+    },
+    {
+      "field": "campaignName",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign name is required."},
+        {"type": "MAX_LENGTH", "value": 100, "message": "Campaign name cannot exceed 100 characters."}
+      ]
+    },
+    {
+      "field": "campaignType",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign type is required."},
+        {"type": "ENUM", "allowedValues": ["SMS", "EMAIL", "APP_NOTIFICATION", "CALL", "PUSH_NOTIFICATION", "WEB"], "message": "Invalid campaign type."}
+      ]
+    },
+    {
+      "field": "startDate",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign start date is required."},
+        {"type": "DATE_FORMAT", "format": "yyyy-MM-dd", "message": "Campaign start date must be in YYYY-MM-DD format."}
+      ]
+    },
+    {
+      "field": "endDate",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign end date is required."},
+        {"type": "DATE_FORMAT", "format": "yyyy-MM-dd", "message": "Campaign end date must be in YYYY-MM-DD format."},
+        {"type": "AFTER_FIELD_DATE", "field": "startDate", "message": "Campaign end date must be after campaign start date."}
+      ]
+    },
+    {
+      "field": "status",
+      "validations": [
+        {"type": "NOT_NULL", "message": "Campaign status is required."},
+        {"type": "ENUM", "allowedValues": ["ACTIVE", "INACTIVE", "COMPLETED", "SCHEDULED", "CANCELLED"], "message": "Invalid campaign status."}
+      ]
+    },
+    {
+      "field": "targetAudience",
+      "validations": [
+        {"type": "MAX_LENGTH", "value": 255, "message": "Target audience description cannot exceed 255 characters."}
+      ]
+    }
+  ]
+}

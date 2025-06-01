@@ -1,0 +1,100 @@
+# Core Spring Boot Application Properties
+server:
+  port: 8081 # Port for the Integration Service. Choose a unique port for each microservice.
+
+spring:
+  application:
+    name: integration-service # Name of the Spring Boot application, used for service discovery and logging.
+
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_integration_db # JDBC URL for the PostgreSQL database.
+    username: cdp_user # Database username. In production, use environment variables or a secrets management system.
+    password: cdp_password # Database password. In production, use environment variables or a secrets management system.
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL.
+    hikari: # HikariCP connection pool configuration (default in Spring Boot).
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 2 # Minimum number of idle connections to maintain.
+      connection-timeout: 30000 # Maximum time (ms) that a client will wait for a connection from the pool.
+      idle-timeout: 600000 # Maximum idle time (ms) for a connection before it's removed from the pool.
+      max-lifetime: 1800000 # Maximum lifetime (ms) of a connection in the pool.
+
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: none # 'none' is recommended for production; schema migrations should be handled by tools like Flyway or Liquibase.
+                     # Use 'update' for development if you want Hibernate to manage schema changes.
+    show-sql: false # Set to 'true' to log SQL queries (useful for debugging, but disable in production).
+    properties:
+      hibernate:
+        format_sql: false # Set to 'true' to format SQL queries in logs (only effective if show-sql is true).
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specify the Hibernate dialect for PostgreSQL.
+    open-in-view: false # Prevents the "Open Session In View" anti-pattern, which can lead to performance issues.
+
+  # Kafka Configuration (for Event-Driven Components)
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses.
+    consumer:
+      group-id: integration-service-group # Consumer group ID for this service.
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist any more on the server.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payload).
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.integrationservice.model.*, com.ltfs.cdp.integrationservice.dto.*" # Specify trusted packages for JSON deserialization to prevent security vulnerabilities. Use '*' for development, but be specific in production.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON payload).
+      acks: all # The number of acknowledgments the producer requires the leader to have received before considering a request complete. 'all' ensures highest durability.
+      retries: 3 # Setting a value greater than zero will cause the client to resend any record that fails to be sent.
+      properties:
+        spring.json.add.type.headers: false # Do not add type headers to JSON messages, making them more interoperable.
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    com.ltfs.cdp.integrationservice: DEBUG # Specific logging level for application packages to get more detailed logs.
+    org.springframework.web: INFO # Logging level for Spring Web components.
+    org.hibernate: INFO # Logging level for Hibernate.
+  file:
+    name: logs/integration-service.log # Path to the log file. Logs will be written to this file.
+
+# Custom Application Properties for Integration Service Logic
+integration:
+  # Configuration for data validation
+  validation:
+    enabled: true # Flag to enable or disable basic column-level validation on incoming data.
+    # Example: Define specific validation rules or thresholds here.
+    # min-customer-id-length: 10
+    # allowed-offer-types: LOYALTY, PREAPPROVED, E_AGGREGATOR
+
+  # Configuration for deduplication logic
+  deduplication:
+    enabled: true # Flag to enable or disable the deduplication process.
+    # Kafka topic for consuming raw offer data from Offermart.
+    offermart-input-topic: offermart.raw.data.v1 # Topic where raw offer data from Offermart is published.
+    # Kafka topic for publishing processed and deduped offer data to CDP.
+    cdp-output-topic: cdp.processed.offers.v1 # Topic where validated and deduped offers are published for CDP.
+    # Kafka topic specifically for top-up loan offers, which have distinct deduplication rules.
+    topup-loan-topic: offermart.topup.loans.v1 # Topic for top-up loan offers requiring specific deduplication.
+    # Deduplication strategy (e.g., 'exact', 'fuzzy', 'hybrid').
+    strategy: hybrid # Defines the overall deduplication strategy to be applied.
+    # Threshold for fuzzy matching, if the strategy involves it (e.g., 0.8 for 80% similarity).
+    fuzzy-match-threshold: 0.8 # Used for similarity-based deduplication.
+
+  # External Service Configuration (e.g., Customer 360 for live book deduplication)
+  customer360:
+    api-base-url: http://customer360-service:8080/api/v1/customers # Base URL for the Customer 360 service API.
+    timeout-ms: 5000 # Timeout in milliseconds for API calls to the Customer 360 service.
+
+# Actuator Endpoints for Monitoring and Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose common Actuator endpoints via HTTP.
+  endpoint:
+    health:
+      show-details: always # Always show full health details, including database and Kafka status.
+    prometheus:
+      enabled: true # Enable the Prometheus endpoint for metrics scraping.

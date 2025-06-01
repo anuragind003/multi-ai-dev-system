@@ -1,0 +1,193 @@
+# Default values for ltfs-cdp Helm chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ltfs-cdp-service
+  tag: latest # It is highly recommended to use a specific image tag in production environments.
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080 # Default port for Spring Boot applications
+  targetPort: 8080
+
+ingress:
+  enabled: false # Set to true to enable Ingress for external access
+  className: "" # Specify an IngressClass name if required (e.g., nginx)
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: cdp.example.com # Replace with your actual domain
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: cdp-tls-secret # Name of the Kubernetes Secret containing TLS certificate
+  #    hosts:
+  #      - cdp.example.com
+
+resources:
+  # Resource requests and limits for the container.
+  # It's recommended to set these based on actual application performance testing.
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false # Set to true to enable Horizontal Pod Autoscaler (HPA)
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80 # Uncomment to enable memory-based autoscaling
+
+nodeSelector: {} # Node labels for pod assignment
+tolerations: [] # Taints and tolerations for pod scheduling
+affinity: {} # Advanced pod scheduling rules
+
+podSecurityContext: {}
+  # fsGroup: 1000 # Group ID for the pod's volumes
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL # Drop all Linux capabilities for enhanced security
+  # readOnlyRootFilesystem: true # Mount the root filesystem as read-only
+  # runAsNonRoot: true # Ensure the container runs as a non-root user
+  # runAsUser: 1000 # User ID for the container process
+
+serviceAccount:
+  create: true # Specifies whether a service account should be created
+  name: "" # The name of the service account to use. If not set and create is true, a name is generated.
+
+# Environment variables for the Spring Boot application.
+# These are typically used for runtime configuration that might change across environments.
+env:
+  SPRING_PROFILES_ACTIVE: "kubernetes" # Activates Spring profiles (e.g., 'dev', 'prod', 'kubernetes')
+  LOGGING_LEVEL_ROOT: "INFO" # Sets the root logging level (e.g., 'DEBUG', 'INFO', 'WARN', 'ERROR')
+  JAVA_OPTS: "-Xmx768m -Xms256m" # JVM memory settings and other options
+
+# Database configuration for PostgreSQL.
+# These values are typically used to construct the JDBC URL.
+database:
+  host: "ltfs-cdp-postgresql" # Hostname of the PostgreSQL service
+  port: "5432" # Port of the PostgreSQL service
+  name: "ltfscdpdb" # Database name
+  username: "ltfscdpuser" # Database username
+  # password: "" # Database password should be managed via Kubernetes Secret, not directly here.
+
+# Kubernetes Secret configuration for sensitive data.
+# The secret containing the database password should be created separately.
+# Example Secret:
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: ltfs-cdp-db-secret
+# type: Opaque
+# stringData:
+#   DB_PASSWORD: "your_secure_db_password"
+secrets:
+  dbPasswordSecretName: "ltfs-cdp-db-secret" # Name of the Kubernetes Secret holding the DB password
+  dbPasswordSecretKey: "DB_PASSWORD" # Key within the secret that holds the DB password
+
+# Application properties for Spring Boot, injected via a ConfigMap.
+# This allows for externalizing application-specific configurations.
+config:
+  applicationProperties: |
+    # Spring Boot application properties
+    # Database connection properties (using environment variables for sensitive parts)
+    spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    spring.datasource.username=${DB_USERNAME}
+    spring.datasource.password=${DB_PASSWORD}
+    spring.jpa.hibernate.ddl-auto=none # Recommended for production to prevent schema changes
+    spring.jpa.show-sql=false
+    spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+    # Actuator endpoints for health checks and monitoring
+    management.endpoints.web.exposure.include=*
+    management.endpoint.health.show-details=always
+    management.health.livenessstate.enabled=true
+    management.health.readinessstate.enabled=true
+
+    # Project-specific configurations for LTFS Offer CDP
+    # Deduplication logic configuration
+    cdp.deduplication.strategy=fuzzy # Example: 'exact', 'fuzzy', 'hybrid'
+    cdp.deduplication.threshold=0.8 # Example: Matching threshold for fuzzy deduplication
+    cdp.deduplication.exclude-topup-from-cl=true # Rule for Top-up loan offers
+
+    # Offer validation rules
+    cdp.offer.validation.rules=basic,format,business # Example: 'basic', 'format', 'business'
+
+    # Event-driven architecture configurations
+    cdp.event.producer.enabled=true
+    cdp.event.consumer.enabled=true
+    cdp.event.kafka.bootstrap-servers=kafka-broker:9092 # Example Kafka broker address
+    cdp.event.kafka.topic.customer-updates=customer.updates.topic
+    cdp.event.kafka.topic.offer-dedupe-requests=offer.dedupe.requests.topic
+
+    # Performance tuning parameters
+    cdp.processing.batch-size=1000
+    cdp.processing.thread-pool-size=10
+
+    # Security configurations
+    cdp.security.jwt.secret=your_jwt_secret_key # Should be managed via Kubernetes Secret in production
+    cdp.security.api-key.enabled=false
+
+# Liveness probe configuration for health checks.
+# Determines if the container is running and healthy.
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 60 # Initial delay before liveness probe starts
+  periodSeconds: 10 # How often to perform the probe
+  timeoutSeconds: 5 # When the probe times out
+  failureThreshold: 3 # Number of consecutive failures for the probe to be considered failed
+  path: "/actuator/health/liveness" # Spring Boot Actuator Liveness endpoint
+  port: 8080
+
+# Readiness probe configuration for health checks.
+# Determines if the container is ready to serve traffic.
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30 # Initial delay before readiness probe starts
+  periodSeconds: 10 # How often to perform the probe
+  timeoutSeconds: 5 # When the probe times out
+  failureThreshold: 3 # Number of consecutive failures for the probe to be considered unready
+  path: "/actuator/health/readiness" # Spring Boot Actuator Readiness endpoint
+  port: 8080
+
+# Pod Disruption Budget (PDB) configuration.
+# Ensures a minimum number of pods are available during voluntary disruptions.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1 # Minimum number of pods that must be available
+  # maxUnavailable: 1 # Maximum number of pods that can be unavailable
+
+# Image pull secrets for private Docker registries.
+imagePullSecrets: []
+  # - name: regcred
+
+# Custom annotations for the pod.
+podAnnotations: {}
+
+# Custom labels for the pod.
+podLabels: {}
+
+# Network Policy configuration.
+# Defines how groups of pods are allowed to communicate with each other and other network endpoints.
+networkPolicy:
+  enabled: false
+  # Example:
+  # allowEgress: true
+  # allowIngress: true
+  # ingressFrom:
+  #   - podSelector:
+  #       matchLabels:
+  #         app.kubernetes.io/name: some-other-service
+  #   - ipBlock:
+  #       cidr: 10.0.0.0/8

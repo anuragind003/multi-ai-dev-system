@@ -1,0 +1,106 @@
+server:
+  port: 8082 # Unique port for the Data Validation Service microservice
+
+spring:
+  application:
+    name: data-validation-service # Application name for service discovery (e.g., Eureka) and logging
+
+  # Database configuration for storing validation rules, audit logs, or metadata
+  # This service might not directly store customer data, but could manage its own configuration.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_validation_db # Example: PostgreSQL database URL
+    username: cdp_user # Database username
+    password: cdp_password # Database password
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL
+    hikari: # HikariCP connection pool properties
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool
+      maximum-pool-size: 10 # Maximum number of connections in the pool
+      minimum-idle: 2 # Minimum number of idle connections to maintain in the pool
+
+  jpa: # JPA (Java Persistence API) properties, typically used with Hibernate
+    hibernate:
+      ddl-auto: none # 'none' for production environments to prevent schema changes; use 'update' or 'create-drop' for development
+    show-sql: false # Set to true to log SQL statements to the console (useful for debugging)
+    properties:
+      hibernate:
+        format_sql: false # Set to true to format SQL statements in logs (if show-sql is true)
+
+  # Kafka configuration for event-driven communication
+  kafka:
+    bootstrap-servers: localhost:9092 # Kafka broker address (can be a comma-separated list for multiple brokers)
+    consumer:
+      group-id: data-validation-service-group # Consumer group ID for this service
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist anymore on the server
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON payload)
+      properties:
+        spring.json.trusted.packages: "com.ltfs.cdp.offermart.model.*, com.ltfs.cdp.model.*" # Specify trusted packages for JSON deserialization to prevent security issues
+        # Add more specific consumer properties if needed, e.g., max.poll.records, session.timeout.ms
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON payload)
+      # Add more specific producer properties if needed, e.g., acks, retries, batch.size
+
+# Custom properties for data validation logic specific to the LTFS Offer CDP project
+validation:
+  offermart-data: # Configuration specific to data ingested from the Offermart system
+    input-topic: cdp.offermart.data.raw # Kafka topic from which raw Offermart data will be consumed
+    output-topic-valid: cdp.offermart.data.validated # Kafka topic to which successfully validated data will be published
+    output-topic-invalid: cdp.offermart.data.invalid # Kafka topic to which invalid or rejected data will be published for further handling/auditing
+    rules:
+      enabled: true # Master switch to enable/disable Offermart data validation
+      min-columns: 5 # Example: Minimum expected number of columns or fields in the incoming data record
+      required-fields: # List of fields that must be present and non-empty in the incoming data
+        - customerId
+        - offerId
+        - loanAmount
+        - tenure
+        - productType
+      field-definitions: # Detailed validation rules for specific fields
+        customerId:
+          type: STRING # Expected data type
+          maxLength: 50 # Maximum allowed length
+          pattern: "^CUST\\d{8}$" # Example: Regular expression pattern for customer ID format
+        offerId:
+          type: STRING
+          maxLength: 60
+          pattern: "^OFF\\d{6,10}$" # Example: Regular expression pattern for offer ID format
+        loanAmount:
+          type: DECIMAL # Expected data type for numerical values with decimal points
+          min: 10000.00 # Minimum allowed value
+          max: 5000000.00 # Maximum allowed value
+        tenure:
+          type: INTEGER # Expected data type for integer values
+          min: 12 # Minimum allowed value
+          max: 84 # Maximum allowed value
+        productType:
+          type: STRING
+          allowedValues: ["LOYALTY", "PREAPPROVED", "E_AGGREGATOR", "TOP_UP"] # Example: List of allowed enum values
+        # Add more field definitions as per the Offermart data structure and validation requirements
+      max-validation-errors-per-record: 3 # If a single record accumulates more than this many validation errors, it will be considered entirely invalid and moved to the invalid topic.
+
+# Spring Boot Actuator for monitoring and management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, loggers # Expose common endpoints for health checks, application info, metrics (Prometheus), and logger management
+  metrics:
+    tags:
+      application: data-validation-service # Custom tag for Prometheus metrics, useful for filtering and querying
+
+# Logging configuration for the application
+logging:
+  level:
+    root: INFO # Default logging level for all loggers
+    com.ltfs.cdp.datavalidation: DEBUG # Set specific package to DEBUG for more detailed logs from this service
+    org.springframework.web: INFO # Spring Web framework logging level
+    org.hibernate: INFO # Hibernate ORM framework logging level
+    org.apache.kafka: WARN # Suppress verbose Kafka client logs to WARN level
+  file:
+    name: logs/data-validation-service.log # Path and name of the log file
+    max-size: 10MB # Maximum size of the log file before it's rolled over
+    max-history: 7 # Number of archived log files to keep
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # Log pattern for console output
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" # Log pattern for file output

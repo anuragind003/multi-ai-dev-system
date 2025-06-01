@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: admin-portal-service # Defines the application name, used for service discovery and Spring Cloud Config.
+  cloud:
+    config:
+      uri: http://localhost:8888 # URI of the Spring Cloud Config Server. In a production environment, this would be a more robust URL or managed via environment variables.
+      enabled: true # Enables the Spring Cloud Config client.
+      fail-fast: true # If true, the application will fail to start if it cannot connect to the Config Server. Recommended for production.
+      # profile: dev # Optional: Specifies the profile to fetch from the Config Server. If not specified, 'default' is used.
+      # label: main # Optional: Specifies the Git branch/label to fetch configuration from. If not specified, 'main' or 'master' is used.
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka # URI of the Eureka Discovery Server. This is where the service will register itself.
+    enabled: true # Enables the Eureka client for service registration and discovery.
+    fetch-registry: true # Indicates whether the Eureka client should fetch the registry from the Eureka server.
+    register-with-eureka: true # Indicates whether the Eureka client should register itself with the Eureka server.
+  instance:
+    hostname: localhost # Hostname to register with Eureka. For local development, 'localhost' is common.
+    preferIpAddress: true # If true, the IP address will be registered with Eureka instead of the hostname. Often preferred in containerized environments.
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}} # Unique ID for this instance, useful when running multiple instances of the same service.

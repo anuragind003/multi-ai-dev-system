@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-service-deployment
+  labels:
+    app: customer-service
+    project: ltfs-offer-cdp
+spec:
+  replicas: 2 # Number of desired replicas for high availability
+  selector:
+    matchLabels:
+      app: customer-service
+  template:
+    metadata:
+      labels:
+        app: customer-service
+        project: ltfs-offer-cdp
+    spec:
+      containers:
+        - name: customer-service
+          image: ltfs-offer-cdp/customer-service:latest # Replace with your actual image name and tag
+          imagePullPolicy: Always # Ensures the latest image is pulled
+          ports:
+            - containerPort: 8080 # Default Spring Boot port
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: kubernetes # Activates a specific Spring profile for Kubernetes environment
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql-service:5432/customer_db # Connects to the PostgreSQL service
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials # Name of the Kubernetes Secret holding DB credentials
+                  key: username # Key within the secret for the username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials # Name of the Kubernetes Secret holding DB credentials
+                  key: password # Key within the secret for the password
+            - name: JAVA_OPTS # JVM options for memory tuning
+              value: "-Xmx512m -Xms256m"
+          resources:
+            requests:
+              memory: "512Mi" # Request 512 MiB of memory
+              cpu: "500m"    # Request 0.5 CPU core
+            limits:
+              memory: "768Mi" # Limit to 768 MiB of memory
+              cpu: "750m"    # Limit to 0.75 CPU core
+          livenessProbe: # Checks if the application is running and healthy
+            httpGet:
+              path: /actuator/health/liveness # Spring Boot Actuator liveness endpoint
+              port: 8080
+            initialDelaySeconds: 60 # Initial delay before liveness probes start
+            periodSeconds: 10     # How often (in seconds) to perform the probe
+            timeoutSeconds: 5     # When the probe times out
+            failureThreshold: 3   # Number of consecutive failures before Kubernetes restarts the container
+          readinessProbe: # Checks if the application is ready to serve traffic
+            httpGet:
+              path: /actuator/health/readiness # Spring Boot Actuator readiness endpoint
+              port: 8080
+            initialDelaySeconds: 45 # Initial delay before readiness probes start
+            periodSeconds: 10     # How often (in seconds) to perform the probe
+            timeoutSeconds: 5     # When the probe times out
+            failureThreshold: 3   # Number of consecutive failures before Kubernetes marks the pod as Not Ready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-service # Name of the Kubernetes Service
+  labels:
+    app: customer-service
+    project: ltfs-offer-cdp
+spec:
+  selector:
+    app: customer-service # Selects pods with the label 'app: customer-service'
+  ports:
+    - protocol: TCP
+      port: 8080       # Port on which the service will be exposed
+      targetPort: 8080 # Port on the pod to which the service will forward traffic
+  type: ClusterIP     # Exposes the service on an internal IP in the cluster.
+                      # This service is only reachable from within the cluster.
+                      # Use LoadBalancer for external access if required.

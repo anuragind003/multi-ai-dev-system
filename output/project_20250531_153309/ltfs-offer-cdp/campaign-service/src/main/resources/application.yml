@@ -1,0 +1,65 @@
+server:
+  port: 8082 # Port for the Campaign Service. This service will listen on this port.
+
+spring:
+  application:
+    name: campaign-service # Name of the Spring Boot application, used for logging and monitoring.
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cdp_campaign_db # JDBC URL for the PostgreSQL database.
+    username: cdp_user # Database username for connecting to PostgreSQL.
+    password: cdp_password # Database password for the specified user.
+    driver-class-name: org.postgresql.Driver # Fully qualified name of the JDBC driver for PostgreSQL.
+    hikari: # HikariCP connection pool configuration, providing high-performance database connections.
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+      maximum-pool-size: 10 # Maximum number of connections in the pool, including both idle and in-use connections.
+      minimum-idle: 2 # Minimum number of idle connections maintained in the pool.
+      idle-timeout: 600000 # Maximum amount of time (in milliseconds) that a connection is allowed to sit idle in the pool.
+      max-lifetime: 1800000 # Maximum lifetime (in milliseconds) of a connection in the pool.
+      pool-name: CampaignServiceHikariCP # Custom name for the HikariCP connection pool.
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Hibernate DDL (Data Definition Language) auto-creation strategy.
+                        # 'validate' checks the schema against the entity mappings on startup.
+                        # Recommended for production to prevent accidental schema changes.
+    show-sql: false # Disables logging of SQL statements to the console. Set to 'true' for debugging.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL.
+        format_sql: false # Disables formatting of SQL statements in logs.
+
+  profiles:
+    active: dev # Sets the default active Spring profile. Can be overridden by environment variables (e.g., --spring.profiles.active=prod).
+
+# Custom properties for Moengage file generation, used by the Campaign Service to output campaign data.
+moengage:
+  file-generation:
+    base-path: /app/data/moengage/campaigns # Base directory where Moengage-specific campaign data files will be generated.
+                                           # This path should be accessible and writable by the service.
+    filename-prefix: campaign_data_ # Prefix for the generated Moengage filenames (e.g., campaign_data_20240101_123456.csv).
+
+# Logging configuration for the application.
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    org.springframework.web: INFO # Logging level for Spring web components.
+    org.hibernate: INFO # Logging level for Hibernate (JPA provider).
+    com.ltfs.cdp.campaign: DEBUG # Specific logging level for the application's own packages.
+                                 # Set to DEBUG for more detailed logs during development, INFO or WARN for production.
+  file:
+    name: /var/log/campaign-service/campaign-service.log # Path to the log file where application logs will be written.
+    max-size: 10MB # Maximum size of the log file before it is rolled over.
+    max-history: 7 # Maximum number of archived log files to keep.
+
+# Spring Boot Actuator configuration for monitoring and management endpoints.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Exposes specific Actuator endpoints over HTTP.
+                                                # 'health' for application health, 'info' for application info,
+                                                # 'metrics' for various application metrics, 'prometheus' for Prometheus scraping.
+  endpoint:
+    health:
+      show-details: always # Configures the health endpoint to always show full details, regardless of authentication.

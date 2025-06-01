@@ -1,0 +1,59 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: customer-service-hpa
+  namespace: ltfs-cdp # Namespace for the LTFS Offer CDP services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: customer-service # Refers to the Kubernetes Deployment named 'customer-service'
+  minReplicas: 2 # Minimum number of pods to maintain for high availability
+  maxReplicas: 10 # Maximum number of pods the service can scale up to
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu # Metric based on CPU utilization
+      target:
+        type: Utilization
+        averageUtilization: 70 # Target average CPU utilization across all pods at 70%
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: offer-service-hpa
+  namespace: ltfs-cdp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: offer-service # Refers to the Kubernetes Deployment named 'offer-service'
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: campaign-service-hpa
+  namespace: ltfs-cdp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: campaign-service # Refers to the Kubernetes Deployment named 'campaign-service'
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

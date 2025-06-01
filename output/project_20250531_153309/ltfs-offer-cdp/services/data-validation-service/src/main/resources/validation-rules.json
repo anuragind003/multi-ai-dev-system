@@ -1,0 +1,348 @@
+[
+  {
+    "entity": "Customer",
+    "field": "customerId",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Customer ID is required."
+      },
+      {
+        "type": "regex",
+        "value": "^[A-Z0-9]{10,20}$",
+        "errorMessage": "Customer ID must be alphanumeric and 10-20 characters long."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "firstName",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "First Name is required."
+      },
+      {
+        "type": "maxLength",
+        "value": 50,
+        "errorMessage": "First Name cannot exceed 50 characters."
+      },
+      {
+        "type": "regex",
+        "value": "^[a-zA-Z\\s.'-]+$",
+        "errorMessage": "First Name contains invalid characters."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "lastName",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Last Name is required."
+      },
+      {
+        "type": "maxLength",
+        "value": 50,
+        "errorMessage": "Last Name cannot exceed 50 characters."
+      },
+      {
+        "type": "regex",
+        "value": "^[a-zA-Z\\s.'-]+$",
+        "errorMessage": "Last Name contains invalid characters."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "mobileNumber",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Mobile Number is required."
+      },
+      {
+        "type": "regex",
+        "value": "^[6-9]\\d{9}$",
+        "errorMessage": "Mobile Number must be a 10-digit number starting with 6, 7, 8, or 9."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "email",
+    "rules": [
+      {
+        "type": "optional"
+      },
+      {
+        "type": "regex",
+        "value": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$",
+        "errorMessage": "Email must be a valid email address format."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "panNumber",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "PAN Number is required."
+      },
+      {
+        "type": "regex",
+        "value": "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
+        "errorMessage": "PAN Number must be in the format ABCDE1234F."
+      }
+    ]
+  },
+  {
+    "entity": "Customer",
+    "field": "dateOfBirth",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Date of Birth is required."
+      },
+      {
+        "type": "dataType",
+        "value": "date",
+        "errorMessage": "Date of Birth must be a valid date (YYYY-MM-DD)."
+      },
+      {
+        "type": "past",
+        "errorMessage": "Date of Birth cannot be in the future."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "offerId",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Offer ID is required."
+      },
+      {
+        "type": "regex",
+        "value": "^OFF\\d{7}$",
+        "errorMessage": "Offer ID must start with 'OFF' followed by 7 digits."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "offerType",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Offer Type is required."
+      },
+      {
+        "type": "enum",
+        "value": ["Loyalty", "Preapproved", "E-aggregator", "Top-up"],
+        "errorMessage": "Invalid Offer Type. Must be one of: Loyalty, Preapproved, E-aggregator, Top-up."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "loanAmount",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Loan Amount is required."
+      },
+      {
+        "type": "dataType",
+        "value": "decimal",
+        "errorMessage": "Loan Amount must be a valid number."
+      },
+      {
+        "type": "min",
+        "value": 10000.00,
+        "errorMessage": "Loan Amount must be at least 10,000."
+      },
+      {
+        "type": "max",
+        "value": 5000000.00,
+        "errorMessage": "Loan Amount cannot exceed 5,000,000."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "interestRate",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Interest Rate is required."
+      },
+      {
+        "type": "dataType",
+        "value": "decimal",
+        "errorMessage": "Interest Rate must be a valid number."
+      },
+      {
+        "type": "min",
+        "value": 0.01,
+        "errorMessage": "Interest Rate must be greater than 0."
+      },
+      {
+        "type": "max",
+        "value": 30.00,
+        "errorMessage": "Interest Rate cannot exceed 30%."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "tenureMonths",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Tenure (Months) is required."
+      },
+      {
+        "type": "dataType",
+        "value": "integer",
+        "errorMessage": "Tenure (Months) must be an integer."
+      },
+      {
+        "type": "min",
+        "value": 6,
+        "errorMessage": "Tenure (Months) must be at least 6."
+      },
+      {
+        "type": "max",
+        "value": 60,
+        "errorMessage": "Tenure (Months) cannot exceed 60."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "offerStartDate",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Offer Start Date is required."
+      },
+      {
+        "type": "dataType",
+        "value": "date",
+        "errorMessage": "Offer Start Date must be a valid date (YYYY-MM-DD)."
+      },
+      {
+        "type": "pastOrPresent",
+        "errorMessage": "Offer Start Date cannot be in the future."
+      }
+    ]
+  },
+  {
+    "entity": "Offer",
+    "field": "offerEndDate",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Offer End Date is required."
+      },
+      {
+        "type": "dataType",
+        "value": "date",
+        "errorMessage": "Offer End Date must be a valid date (YYYY-MM-DD)."
+      },
+      {
+        "type": "afterField",
+        "value": "offerStartDate",
+        "errorMessage": "Offer End Date must be after Offer Start Date."
+      }
+    ]
+  },
+  {
+    "entity": "Campaign",
+    "field": "campaignId",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Campaign ID is required."
+      },
+      {
+        "type": "regex",
+        "value": "^CAMP\\d{6}$",
+        "errorMessage": "Campaign ID must start with 'CAMP' followed by 6 digits."
+      }
+    ]
+  },
+  {
+    "entity": "Campaign",
+    "field": "campaignName",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Campaign Name is required."
+      },
+      {
+        "type": "maxLength",
+        "value": 100,
+        "errorMessage": "Campaign Name cannot exceed 100 characters."
+      }
+    ]
+  },
+  {
+    "entity": "Campaign",
+    "field": "campaignType",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Campaign Type is required."
+      },
+      {
+        "type": "enum",
+        "value": ["SMS", "Email", "Push Notification", "Direct Mail"],
+        "errorMessage": "Invalid Campaign Type. Must be one of: SMS, Email, Push Notification, Direct Mail."
+      }
+    ]
+  },
+  {
+    "entity": "Campaign",
+    "field": "campaignStartDate",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Campaign Start Date is required."
+      },
+      {
+        "type": "dataType",
+        "value": "date",
+        "errorMessage": "Campaign Start Date must be a valid date (YYYY-MM-DD)."
+      },
+      {
+        "type": "pastOrPresent",
+        "errorMessage": "Campaign Start Date cannot be in the future."
+      }
+    ]
+  },
+  {
+    "entity": "Campaign",
+    "field": "campaignEndDate",
+    "rules": [
+      {
+        "type": "required",
+        "errorMessage": "Campaign End Date is required."
+      },
+      {
+        "type": "dataType",
+        "value": "date",
+        "errorMessage": "Campaign End Date must be a valid date (YYYY-MM-DD)."
+      },
+      {
+        "type": "afterField",
+        "value": "campaignStartDate",
+        "errorMessage": "Campaign End Date must be after Campaign Start Date."
+      }
+    ]
+  }
+]

@@ -1,0 +1,82 @@
+# Main application configuration for the Campaign Service.
+# This file defines server settings, database connections,
+# messaging configurations, and monitoring endpoints.
+
+# Server configuration
+server:
+  port: 8082 # Port on which the Campaign Service will run.
+
+# Spring application details
+spring:
+  application:
+    name: campaign-service # Name of the Spring Boot application.
+
+  # Datasource configuration for PostgreSQL database
+  datasource:
+    url: jdbc:postgresql://localhost:5432/campaign_db # Database connection URL.
+    username: campaign_user # Database username.
+    password: campaign_password # Database password.
+    driver-class-name: org.postgresql.Driver # JDBC driver class for PostgreSQL.
+    hikari: # HikariCP connection pool properties
+      connection-timeout: 30000 # Maximum number of milliseconds that a client will wait for a connection from the pool.
+      maximum-pool-size: 10 # Maximum number of connections in the pool.
+      minimum-idle: 2 # Minimum number of idle connections maintained in the pool.
+      idle-timeout: 600000 # Maximum amount of time that a connection can sit idle in the pool.
+      pool-name: CampaignServiceHikariCP # Name of the connection pool.
+
+  # JPA (Java Persistence API) and Hibernate configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'validate' checks the schema against the entities. Use 'none' for production if schema is managed externally.
+                         # Other options: 'update' (for development), 'create', 'create-drop'.
+    show-sql: false # Set to true to log SQL statements (useful for debugging, but disable in production).
+    properties:
+      hibernate:
+        format_sql: false # Set to true to format SQL statements (improves readability in logs).
+        dialect: org.hibernate.dialect.PostgreSQLDialect # Specifies the SQL dialect for PostgreSQL.
+        jdbc:
+          lob:
+            non_contextual_creation: true # Fix for issues with LOB handling in some JDBC drivers.
+
+  # Kafka configuration for event-driven communication
+  kafka:
+    bootstrap-servers: localhost:9092 # Comma-separated list of Kafka broker addresses.
+    consumer:
+      group-id: campaign-service-group # Consumer group ID for this service.
+      auto-offset-reset: earliest # What to do when there is no initial offset in Kafka or if the current offset does not exist any more on the server.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Deserializer for message keys.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer # Deserializer for message values (assuming JSON).
+      properties:
+        spring.json.trusted.packages: "*" # Trust all packages for JSON deserialization. In production, specify exact packages for security.
+        spring.json.value.default.type: com.ltfs.cdp.campaign.event.CampaignEvent # Default type for JSON deserialization if no type header is present.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer # Serializer for message keys.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer # Serializer for message values (assuming JSON).
+      acks: all # The number of acknowledgments the producer requires the leader to have received before considering a request complete.
+      retries: 0 # Setting a value greater than zero will cause the client to resend any record that fails to be sent.
+      batch-size: 16384 # The batch size in bytes.
+      linger-ms: 1 # The producer will attempt to batch records together until `batch-size` is reached or `linger-ms` has passed.
+
+# Actuator configuration for monitoring and management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus # Expose health, info, and Prometheus metrics endpoints.
+  endpoint:
+    health:
+      show-details: always # Show full health details (useful for debugging, consider 'never' or 'when_authorized' in production).
+    shutdown:
+      enabled: false # Disable shutdown endpoint for security reasons in production.
+
+# Logging configuration
+logging:
+  level:
+    root: INFO # Default logging level for all loggers.
+    com.ltfs.cdp.campaign: DEBUG # Specific logging level for the application's packages.
+    org.springframework.web: INFO # Spring web logging level.
+    org.hibernate: INFO # Hibernate logging level.
+  file:
+    name: logs/campaign-service.log # Path to the log file.
+    max-size: 10MB # Maximum size of the log file before it is rolled.
+    max-history: 7 # Maximum number of archived log files to keep.
