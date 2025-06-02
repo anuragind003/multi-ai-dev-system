@@ -968,3 +968,59 @@ class ProjectRAGManager(RAGManager):
                 "ERROR"
             )
             return None
+    
+    def initialize_index_from_project(self, project_dir: str = None) -> bool:
+        """Initialize vector index from project code files."""
+        try:
+            # Use the provided project directory or fall back to a sensible default
+            if not project_dir:
+                # Use the current working directory instead of module directory
+                project_dir = os.getcwd()
+            
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Creating new RAG index from project code in: {project_dir}",
+                "INFO"
+            )
+            
+            # Check if directory exists
+            if not os.path.exists(project_dir):
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    f"Project directory does not exist: {project_dir}",
+                    "ERROR"
+                )
+                return False
+                
+            # Define file patterns to include in indexing
+            file_patterns = ['*.py', '*.js', '*.html', '*.css', '*.md', '*.txt', 
+                             '*.json', '*.yaml', '*.yml']
+            
+            # Add documents from the project directory
+            documents_added = self.add_documents_from_directory(
+                project_dir, 
+                file_patterns=file_patterns
+            )
+            
+            if documents_added > 0:
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    f"Successfully indexed {documents_added} files from project",
+                    "SUCCESS"
+                )
+                return True
+            else:
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    "No documents found to index in project directory",
+                    "WARNING"
+                )
+                return False
+                
+        except Exception as e:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"RAG indexing failed: {e}",
+                "ERROR"
+            )
+            return False

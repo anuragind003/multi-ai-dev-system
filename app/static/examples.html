@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi-AI Development System - API Examples</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        color: #333;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      h1 {
+        color: #2c3e50;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #3498db;
+        margin-top: 30px;
+      }
+      h3 {
+        color: #2c3e50;
+      }
+      pre {
+        background-color: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 10px;
+        overflow: auto;
+      }
+      code {
+        font-family: Consolas, Monaco, "Andale Mono", monospace;
+        color: #16a085;
+      }
+      .note {
+        background-color: #f9f9f9;
+        border-left: 4px solid #3498db;
+        padding: 10px 15px;
+        margin: 15px 0;
+      }
+      .temperature-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+      }
+      .temperature-table th,
+      .temperature-table td {
+        border: 1px solid #ddd;
+        padding: 8px 12px;
+        text-align: left;
+      }
+      .temperature-table th {
+        background-color: #f2f2f2;
+      }
+      .temperature-value {
+        font-weight: bold;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .workflow-diagram {
+        width: 100%;
+        max-width: 800px;
+        margin: 20px auto;
+        display: block;
+      }
+      .endpoint {
+        background-color: #f1f8ff;
+        border-left: 4px solid #0366d6;
+        padding: 12px 15px;
+        margin: 15px 0;
+      }
+      .response-preview {
+        background-color: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 10px;
+        margin: 10px 0;
+      }
+      .tabs {
+        display: flex;
+        margin-bottom: -1px;
+      }
+      .tab {
+        padding: 8px 16px;
+        background-color: #f2f2f2;
+        border: 1px solid #ddd;
+        border-radius: 3px 3px 0 0;
+        cursor: pointer;
+        margin-right: 5px;
+      }
+      .tab.active {
+        background-color: #fff;
+        border-bottom: 1px solid #fff;
+      }
+      .tab-content {
+        border: 1px solid #ddd;
+        padding: 15px;
+        border-radius: 0 0 3px 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Multi-AI Development System API Examples</h1>
+
+      <div class="note">
+        This document demonstrates how to use the Multi-AI Development System
+        API, including how to customize the temperature settings for specialized
+        AI agents.
+      </div>
+
+      <h2>System Overview</h2>
+      <p>
+        The Multi-AI Development System is a Python-based agent system that
+        automates the entire software development process using specialized
+        agents. The system takes a Business Requirements Document (BRD) as input
+        and produces a complete software project as output.
+      </p>
+
+      <h2>Temperature-Optimized Agent Strategy</h2>
+      <p>
+        The system uses specialized agents with optimized temperature settings:
+      </p>
+
+      <table class="temperature-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Temperature</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BRD Analyst</td>
+            <td class="temperature-value">0.3</td>
+            <td>Creative analysis of business requirements</td>
+          </tr>
+          <tr>
+            <td>Tech Stack Advisor</td>
+            <td class="temperature-value">0.2</td>
+            <td>Analytical technology recommendations</td>
+          </tr>
+          <tr>
+            <td>System Designer</td>
+            <td class="temperature-value">0.2</td>
+            <td>Analytical system architecture design</td>
+          </tr>
+          <tr>
+            <td>Planning Agent</td>
+            <td class="temperature-value">0.4</td>
+            <td>Creative implementation planning</td>
+          </tr>
+          <tr>
+            <td>Code Generation Agent</td>
+            <td class="temperature-value">0.1</td>
+            <td>Deterministic code production</td>
+          </tr>
+          <tr>
+            <td>Test Case Generator</td>
+            <td class="temperature-value">0.2</td>
+            <td>Analytical test design</td>
+          </tr>
+          <tr>
+            <td>Code Quality Agent</td>
+            <td class="temperature-value">0.1</td>
+            <td>Deterministic code analysis</td>
+          </tr>
+          <tr>
+            <td>Test Validation Agent</td>
+            <td class="temperature-value">0.1</td>
+            <td>Deterministic test validation</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <strong>Temperature Strategy:</strong>
+        <ul>
+          <li>
+            <strong>Analytical tasks (0.1-0.2):</strong> Code quality, test
+            validation, tech recommendations
+          </li>
+          <li>
+            <strong>Creative tasks (0.3-0.4):</strong> BRD analysis, planning,
+            test case generation
+          </li>
+          <li>
+            <strong>Code generation (0.1):</strong> Deterministic, consistent
+            code output
+          </li>
+        </ul>
+      </div>
+
+      <h2>Workflow Types</h2>
+      <p>The system supports two types of workflows:</p>
+      <ul>
+        <li>
+          <strong>Phased Workflow:</strong> Sequential processing through all
+          specialized agents
+        </li>
+        <li>
+          <strong>Iterative Workflow:</strong> Iterative refinement with
+          feedback loops between agents
+        </li>
+      </ul>
+
+      <h2>API Endpoints</h2>
+
+      <div class="endpoint">
+        <h3>POST /api/workflow</h3>
+        <p>
+          Process a Business Requirements Document through the complete agent
+          workflow
+        </p>
+
+        <h4>Request Parameters:</h4>
+        <ul>
+          <li>
+            <code>brd_content</code> (string, required): Content of the Business
+            Requirements Document
+          </li>
+          <li>
+            <code>workflow_type</code> (string, optional, default="phased"):
+            Type of workflow to use (phased or iterative)
+          </li>
+          <li>
+            <code>temperature_strategy</code> (object, optional): Custom
+            temperatures for specific agents
+          </li>
+        </ul>
+      </div>
+
+      <div class="endpoint">
+        <h3>POST /api/llm</h3>
+        <p>Direct access to the underlying LLM for testing</p>
+
+        <h4>Request Parameters:</h4>
+        <ul>
+          <li>
+            <code>question</code> (string, required): Prompt to send to the LLM
+          </li>
+        </ul>
+      </div>
+
+      <div class="endpoint">
+        <h3>GET /api/temperature-strategy</h3>
+        <p>Get information about the current temperature strategy</p>
+      </div>
+
+      <div class="endpoint">
+        <h3>GET /health</h3>
+        <p>Check the health status of the API</p>
+      </div>
+
+      <h2>API Usage Examples</h2>
+
+      <h3>Process a Single BRD</h3>
+      <pre><code>
+curl -X POST http://localhost:8001/api/workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "brd_content": "Project Title: Task Manager\\nThe Task Manager is a web application that helps users track their tasks...",
+    "workflow_type": "phased"
+  }'
+      </code></pre>
+
+      <h3>Custom Temperature Strategy</h3>
+      <pre><code>
+curl -X POST http://localhost:8001/api/workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "brd_content": "Project Title: Task Manager\\nThe Task Manager is a web application...",
+    "workflow_type": "phased",
+    "temperature_strategy": {
+      "brd_analyst": 0.35,
+      "planning_agent": 0.45,
+      "code_generation": 0.05
+    }
+  }'
+      </code></pre>
+
+      <h3>Batch Processing Multiple BRDs</h3>
+      <pre><code>
+curl -X POST http://localhost:8001/api/workflow \
+  -H "Content-Type: application/json" \
+  -d '{
+    "batch": [
+      {
+        "brd_content": "Project Title: Task Manager\\nThe Task Manager is a web application...",
+        "workflow_type": "phased"
+      },
+      {
+        "brd_content": "Project Title: Contact Book\\nA simple application to store contacts...",
+        "workflow_type": "iterative",
+        "temperature_strategy": {
+          "brd_analyst": 0.4
+        }
+      }
+    ]
+  }'
+      </code></pre>
+
+      <h2>Python Client Example</h2>
+
+      <pre><code>
+import requests
+import json
+
+API_URL = "http://localhost:8001/api/workflow"
+
+def process_brd(brd_content, temperature_strategy=None):
+    """
+    Process a BRD using the Multi-AI Development System API.
+    
+    Args:
+        brd_content: String content of the BRD
+        temperature_strategy: Optional dict of agent temperatures to customize
+    
+    Returns:
+        JSON response from the API
+    """
+    payload = {
+        "brd_content": brd_content,
+        "workflow_type": "phased"
+    }
+    
+    if temperature_strategy:
+        payload["temperature_strategy"] = temperature_strategy
+    
+    response = requests.post(API_URL, json=payload)
+    return response.json()
+
+# Example usage
+brd = open("my_project_brd.txt", "r").read()
+
+# Use default temperatures
+result = process_brd(brd)
+
+# Use custom temperatures for more creative analysis but deterministic code
+result = process_brd(
+    brd,
+    temperature_strategy={
+        "brd_analyst": 0.4,      # More creative
+        "planning_agent": 0.5,   # More creative
+        "code_generation": 0.05  # More deterministic
+    }
+)
+
+print(json.dumps(result, indent=2))
+      </code></pre>
+
+      <h2>Response Format</h2>
+      <p>The API returns a JSON response with the following structure:</p>
+      <div class="response-preview">
+        <pre><code>
+{
+  "requirements_analysis": {
+    // Output from BRD Analyst (temp: 0.3)
+    "functional_requirements": [...],
+    "non_functional_requirements": [...],
+    "data_entities": [...]
+  },
+  "tech_stack": {
+    // Output from Tech Stack Advisor (temp: 0.2)
+    "frontend": [...],
+    "backend": [...],
+    "database": [...],
+    "deployment": [...]
+  },
+  "system_design": {
+    // Output from System Designer (temp: 0.2)
+    "architecture": {...},
+    "data_model": {...},
+    "api_endpoints": [...]
+  },
+  "code_generation_result": {
+    // Output from Code Generator (temp: 0.1)
+    "files": {...},
+    "directory_structure": [...]
+  },
+  "quality_analysis": {
+    // Output from Code Quality Agent (temp: 0.1)
+    "code_quality_score": 8.5,
+    "issues": [...],
+    "recommendations": [...]
+  },
+  "test_validation": {
+    // Output from Test Validation Agent (temp: 0.1)
+    "test_results": {...},
+    "coverage_report": {...}
+  },
+  "execution_metrics": {
+    "total_time": {...},
+    "quality_score": 8.5,
+    "test_success_rate": 0.95,
+    "code_coverage": 87.2
+  }
+}
+      </code></pre>
+      </div>
+
+      <h2>Error Handling</h2>
+      <pre><code>
+try:
+    response = requests.post(API_URL, json=payload)
+    response.raise_for_status()  # Raises exception for 4xx/5xx responses
+    result = response.json()
+except requests.exceptions.HTTPError as e:
+    print(f"HTTP Error: {e}")
+except requests.exceptions.ConnectionError as e:
+    print(f"Connection Error: {e}")
+except requests.exceptions.Timeout as e:
+    print(f"Timeout Error: {e}")
+except requests.exceptions.RequestException as e:
+    print(f"Request Error: {e}")
+except ValueError as e:
+    print(f"JSON Parsing Error: {e}")
+      </code></pre>
+
+      <h2>Local Development Setup</h2>
+      <pre><code>
+# Clone repository
+git clone https://github.com/your-username/multi-ai-dev-system.git
+cd multi-ai-dev-system
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the LangServe API server
+python serve.py
+      </code></pre>
+
+      <h2>Running with Different Methods</h2>
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('tab-cli')">CLI Mode</div>
+        <div class="tab" onclick="showTab('tab-api')">API Server</div>
+        <div class="tab" onclick="showTab('tab-langgraph')">LangGraph Dev</div>
+      </div>
+      <div id="tab-cli" class="tab-content">
+        <p>Run from the command line to process a single BRD:</p>
+        <pre><code>
+# Basic usage
+python main.py --workflow phased --platform brds\your_brd.txt
+
+# With advanced options
+python main.py --workflow phased --platform brds\your_brd.txt --output-dir custom_output
+        </code></pre>
+      </div>
+      <div id="tab-api" class="tab-content" style="display: none">
+        <p>Run as an API server using LangServe:</p>
+        <pre><code>
+# Start the LangServe API server
+python serve.py
+
+# Alternative using langchain CLI
+langchain serve --api app.server:app
+        </code></pre>
+      </div>
+      <div id="tab-langgraph" class="tab-content" style="display: none">
+        <p>Use LangGraph Dev for visual workflow development:</p>
+        <pre><code>
+# Start the LangGraph dev server
+langgraph dev
+
+# With blocking operations allowed
+langgraph dev --allow-blocking
+        </code></pre>
+        <p>
+          The LangGraph Studio UI will open at:
+          <a
+            href="https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024"
+            target="_blank"
+            >https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024</a
+          >
+        </p>
+      </div>
+
+      <script>
+        function showTab(tabId) {
+          // Hide all tab contents
+          document.querySelectorAll(".tab-content").forEach((tab) => {
+            tab.style.display = "none";
+          });
+
+          // Remove active class from all tabs
+          document.querySelectorAll(".tab").forEach((tab) => {
+            tab.classList.remove("active");
+          });
+
+          // Show selected tab content and mark tab as active
+          document.getElementById(tabId).style.display = "block";
+          document
+            .querySelector(`.tab[onclick="showTab('${tabId}')"]`)
+            .classList.add("active");
+        }
+      </script>
+    </div>
+  </body>
+</html>

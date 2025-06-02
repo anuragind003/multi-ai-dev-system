@@ -5,6 +5,7 @@ Performs comprehensive code quality analysis on generated code.
 
 import json
 import os
+import re  # Add this import
 from typing import Dict, Any, Optional, List, Tuple
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.retrievers import BaseRetriever

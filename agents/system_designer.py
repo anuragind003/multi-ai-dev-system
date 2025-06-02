@@ -762,3 +762,32 @@ class SystemDesignerAgent(BaseAgent):
             for risk in risks:
                 if risk.get("impact", "").lower() in ["high", "severe", "critical"]:
                     self.log_warning(f"   HIGH RISK: {risk.get('risk', '')}")
+    
+    def extract_json_from_response(self, response) -> Dict[str, Any]:
+        """Extract JSON from response with enhanced error handling."""
+        try:
+            # Handle different response types
+            if hasattr(response, 'content'):
+                content = response.content
+            elif isinstance(response, str):
+                content = response
+            elif isinstance(response, list):
+                # Handle list response by joining its string elements
+                content = ' '.join([str(item) for item in response])
+            else:
+                content = str(response)
+            
+            # Find JSON in content
+            start_idx = content.find('{')
+            end_idx = content.rfind('}')
+            
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx + 1]
+                return json.loads(json_str)
+            else:
+                self.log_error("Could not find JSON in response")
+                return self.get_default_response()
+                
+        except Exception as e:
+            self.log_error(f"Error extracting JSON: {e}")
+            return self.get_default_response()

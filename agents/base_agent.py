@@ -6,6 +6,7 @@ error handling, monitoring, and standardized logging.
 
 import time
 import json
+import os
 from typing import Dict, Any, Optional, List
 from abc import ABC, abstractmethod
 
@@ -15,6 +16,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
 import monitoring
+from monitoring import agent_trace_span
 
 class BaseAgent(ABC):
     """
@@ -77,45 +79,88 @@ class BaseAgent(ABC):
         """Log error message."""
         monitoring.log_agent_activity(self.agent_name, message, "ERROR")
     
-    def execute_with_monitoring(self, func, *args, **kwargs) -> Dict[str, Any]:
+    def execute_with_monitoring(self, func, *args, **kwargs):
         """
-        Execute agent function with monitoring and error handling.
-        No duplicate logging - all logging goes through self.log_* methods.
+        Execute agent function with comprehensive monitoring and tracing.
+        
+        Args:
+            func: Function to execute
+            *args, **kwargs: Arguments to pass to function
         """
         start_time = time.time()
+        agent_temp = self._get_agent_temperature()
         
+        # Add LangSmith metadata for temperature tracking
+        if os.getenv("LANGCHAIN_TRACING_V2") == "true":
+            # This will show up in the LangSmith UI
+            from langsmith import trace
+            
+            with trace(
+                name=f"{self.agent_name} Execution",
+                metadata={
+                    "agent_type": self.agent_name,
+                    "temperature": agent_temp,
+                    "temperature_category": self._categorize_temperature(agent_temp)
+                },
+                tags=[self.agent_name, self._categorize_temperature(agent_temp)]
+            ):
+                return self._execute_with_monitoring_impl(func, start_time, agent_temp, *args, **kwargs)
+        else:
+            # Fall back to standard monitoring if LangSmith disabled
+            return self._execute_with_monitoring_impl(func, start_time, agent_temp, *args, **kwargs)
+            
+    def _execute_with_monitoring_impl(self, func, start_time, agent_temp, *args, **kwargs):
+        """Implementation of execute with monitoring, with or without LangSmith."""
         try:
-            self.log_start("Starting execution")
-            
-            # Update execution stats
-            self.execution_stats["total_executions"] += 1
-            
-            # Execute the main function
             result = func(*args, **kwargs)
-            
-            # Calculate execution time
             execution_time = time.time() - start_time
-            self.execution_stats["last_execution_time"] = execution_time
-            self.execution_stats["total_execution_time"] += execution_time
-            self.execution_stats["successful_executions"] += 1
-            self.execution_stats["last_execution_status"] = "success"
             
-            self.log_success(f"Completed successfully in {execution_time:.2f}s")
+            # Store result in memory if available
+            if hasattr(self, 'memory') and self.memory:
+                self.memory.store_agent_result(
+                    self.agent_name, 
+                    result, 
+                    execution_time
+                )
             
             return result
-            
+        
         except Exception as e:
-            # Calculate execution time even for failures
             execution_time = time.time() - start_time
-            self.execution_stats["last_execution_time"] = execution_time
-            self.execution_stats["total_execution_time"] += execution_time
-            self.execution_stats["failed_executions"] += 1
-            self.execution_stats["last_execution_status"] = "error"
-            
-            self.log_error(f"Execution failed after {execution_time:.2f}s: {e}")
-            
-            # Return default response instead of raising
-            return self.get_default_response()
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Error during execution: {str(e)}",
+                "ERROR"
+            )
+            raise
+    
+    def _categorize_temperature(self, temperature: float) -> str:
+        """Categorize temperature according to project guidelines."""
+        if temperature <= 0.1:
+            return "code_generation"
+        elif temperature <= 0.2:
+            return "analytical"
+        elif temperature <= 0.4:
+            return "creative"
+        else:
+            return "other"
+    
+    def _get_agent_temperature(self) -> float:
+        """Get the temperature setting for this agent based on agent type."""
+        # Default temperature mapping based on your guidelines
+        temperature_map = {
+            "BRD Analyst": 0.3,
+            "Tech Stack Advisor": 0.2,
+            "System Designer": 0.2,
+            "Planning Agent": 0.4,
+            "Code Generation Agent": 0.1,
+            "Test Case Generator": 0.2,
+            "Code Quality Agent": 0.1,
+            "Test Validation Agent": 0.1
+        }
+        
+        # Get temperature from map or default to 0.2 for unknown agents
+        return temperature_map.get(self.agent_name, 0.2)
     
     def execute_llm_chain(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -352,6 +397,83 @@ class BaseAgent(ABC):
             "last_execution_time": 0.0,
             "last_execution_status": "not_started"
         }
+    
+    def execute_chain_of_thought(self, prompt: str, temperature: float = None) -> str:
+        """
+        Execute a chain of thought with the LLM and properly handle AIMessage responses.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            temperature: Optional temperature override
+            
+        Returns:
+            str: The extracted content from the LLM response
+        """
+        start_time = time.time()
+        agent_temp = temperature or self.temperature
+        
+        try:
+            # Get temperature-adjusted LLM
+            llm_with_temp = self.llm.bind(temperature=agent_temp)
+            
+            # Invoke the model
+            with monitoring.agent_trace_span(self.agent_name, agent_temp):
+                response = llm_with_temp.invoke(prompt)
+            
+            # Extract content based on response type
+            if hasattr(response, 'content'):
+                content = response.content
+            else:
+                content = str(response)
+            
+            # Log execution metrics
+            execution_time = time.time() - start_time
+            monitoring.log_agent_activity(
+                agent_name=self.agent_name,
+                message=f"Chain of thought executed successfully in {execution_time:.2f}s",
+                level="INFO",
+                metadata={
+                    "temperature": agent_temp,
+                    "execution_time": execution_time,
+                    "prompt_length": len(prompt)
+                }
+            )
+            
+            # Store in memory if available
+            if self.memory:
+                # Store just the string content to avoid serialization issues
+                self.memory.store_agent_activity(
+                    self.agent_name,
+                    "execution",
+                    {
+                        "prompt": prompt[:1000] + "..." if len(prompt) > 1000 else prompt,
+                        "temperature": agent_temp,
+                        "execution_time": execution_time,
+                        "content_length": len(content) if content else 0
+                    }
+                )
+            
+            return content
+        
+        except Exception as e:
+            execution_time = time.time() - start_time
+            error_msg = f"Chain of thought execution failed: {str(e)}"
+            self.log_error(error_msg)
+            
+            # Log execution error
+            monitoring.log_agent_activity(
+                agent_name=self.agent_name,
+                message=error_msg,
+                level="ERROR",
+                metadata={
+                    "temperature": agent_temp,
+                    "execution_time": execution_time,
+                    "error": str(e)
+                }
+            )
+            
+            # Re-raise exception for proper handling
+            raise
     
     @abstractmethod
     def get_default_response(self) -> Dict[str, Any]:

@@ -575,15 +575,18 @@ class PlanningAgent(BaseAgent):
             
             # Execute LLM chain to generate base implementation plan
             self.log_info("Generating comprehensive implementation plan")
-            base_plan = self.execute_with_monitoring(
-                lambda kwargs: llm_with_temp.invoke(self.prompt_template.format(**kwargs)),
-                {
-                    "brd_analysis": json.dumps(brd_analysis, indent=2),
-                    "tech_stack_recommendation": json.dumps(tech_stack_recommendation, indent=2),
-                    "system_design": json.dumps(system_design, indent=2),
-                    "project_constraints": constraints_str,
-                    "rag_context": rag_context
-                }
+            
+            # FIXED: Use execute_chain_of_thought instead of execute_with_monitoring 
+            # for better AIMessage handling
+            base_plan = self.execute_chain_of_thought(
+                prompt=self.prompt_template.format(
+                    brd_analysis=json.dumps(brd_analysis, indent=2),
+                    tech_stack_recommendation=json.dumps(tech_stack_recommendation, indent=2),
+                    system_design=json.dumps(system_design, indent=2),
+                    project_constraints=constraints_str,
+                    rag_context=rag_context
+                ),
+                temperature=0.4
             )
             
             # Parse the response
@@ -591,16 +594,18 @@ class PlanningAgent(BaseAgent):
                 # First handle the response based on its type
                 if hasattr(base_plan, 'content'):
                     content = base_plan.content
-                    # Handle case where content is a list
-                    if isinstance(content, list):
-                        content = "\n".join(content) if all(isinstance(item, str) for item in content) else str(content)
-                    plan_json = self.json_parser.parse(content)
+                elif isinstance(base_plan, str):
+                    content = base_plan
                 else:
-                    # Handle case where base_plan itself might be a list
-                    base_plan_str = base_plan
-                    if isinstance(base_plan, list):
-                        base_plan_str = "\n".join(base_plan) if all(isinstance(item, str) for item in base_plan) else str(base_plan)
-                    plan_json = self.json_parser.parse(str(base_plan_str))
+                    try:
+                        # Try converting to string as fallback
+                        content = str(base_plan)
+                    except:
+                        self.log_error("Unable to extract content from LLM response")
+                        return self.get_default_response()
+            
+                # Extract JSON from the content
+                plan_json = self.extract_json_from_response(content)
             except Exception as e:
                 self.log_warning(f"Error parsing implementation plan: {e}")
                 return self.get_default_response()

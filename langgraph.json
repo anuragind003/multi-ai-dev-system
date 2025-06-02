@@ -1,0 +1,53 @@
+{
+  "app": {
+    "title": "Multi-AI Development System",
+    "version": "1.0.0",
+    "description": "Automated software development using specialized AI agents",
+    "api_base_url": "http://127.0.0.1:8000"
+  },
+  "dev": {
+    "port": 3001,
+    "host": "localhost",
+    "watch_paths": [
+      "graph.py",
+      "graph_nodes.py",
+      "async_graph.py",
+      "async_graph_nodes.py",
+      "agents/"
+    ],
+    "reload": true,
+    "allow_blocking": false,
+    "enable_api": true
+  },
+  "graphs": {
+    "phased_workflow": "async_graph:create_async_phased_workflow"
+  },
+  "dependencies": [
+    "agents",
+    "agent_state",
+    "graph_nodes",
+    "async_graph_nodes",
+    "shared_memory",
+    "monitoring",
+    "rag_manager",
+    "config",
+    "tools"
+  ],
+  "config": {
+    "llm_provider": "gemini",
+    "environment": "development",
+    "temperature_strategy": {
+      "analytical": 0.2,
+      "creative": 0.4,
+      "code_generation": 0.1
+    },
+    "monitoring": {
+      "enabled": true,
+      "log_level": "info"
+    },
+    "memory": {
+      "type": "shared_project_memory",
+      "batch_size": 50
+    }
+  }
+}

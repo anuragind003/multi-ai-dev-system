@@ -654,9 +654,10 @@ class CodeGenerationAgent(BaseAgent):
         
         return directories + processed
     
-    def run(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict, implementation_plan: dict) -> Dict[str, Any]:
-        """Generate complete codebase with enhanced directory and file handling."""
-        self.log_start("Starting code generation")
+    def run(self, brd_analysis: dict, tech_stack_recommendation: dict, system_design: dict, 
+            implementation_plan: dict, current_phase: str = None) -> Dict[str, Any]:
+        """Generate codebase by phase or as a whole based on implementation plan."""
+        self.log_start(f"Starting code generation{f' for phase {current_phase}' if current_phase else ''}")
         
         try:
             # Generate file structure with comprehensive context
@@ -665,6 +666,28 @@ class CodeGenerationAgent(BaseAgent):
                 tech_stack_recommendation, 
                 system_design
             )
+            
+            # Filter files by phase if a phase is specified
+            if current_phase:
+                file_structure = self._filter_files_by_phase(
+                    file_structure,
+                    current_phase,
+                    implementation_plan
+                )
+                
+                if not file_structure:
+                    self.log_warning(f"No files identified for phase {current_phase}")
+                    return {
+                        "status": "warning",
+                        "generated_files": {},
+                        "file_details": {},
+                        "file_count": 0,
+                        "success_count": 0,
+                        "success_rate": 0.0,
+                        "output_directory": self.output_dir,
+                        "phase": current_phase,
+                        "summary": f"No files to generate for phase {current_phase}"
+                    }
             
             # Create consolidated context summary once
             context_summary = self._create_requirements_summary(brd_analysis)
@@ -759,6 +782,7 @@ class CodeGenerationAgent(BaseAgent):
             
             self.log_success(f"Code generation complete: {successful_files}/{len(generated_files)} files successful ({success_rate:.1f}%)")
             
+            # Add phase information to the result
             return {
                 "status": status,
                 "generated_files": {k: v["content"] for k, v in generated_files.items()},
@@ -767,150 +791,68 @@ class CodeGenerationAgent(BaseAgent):
                 "success_count": successful_files,
                 "success_rate": success_rate,
                 "output_directory": self.output_dir,
-                "summary": f"Generated {len(generated_files)} files with {successful_files} successful ({success_rate:.1f}%)"
+                "phase": current_phase,
+                "summary": f"Generated {len(generated_files)} files with {successful_files} successful ({success_rate:.1f}%){f' for phase {current_phase}' if current_phase else ''}"
             }
             
         except Exception as e:
             self.log_error(f"Code generation failed: {e}")
             import traceback
             self.log_error(traceback.format_exc())
-            return self.get_default_response()
-    
-    def _get_default_file_structure(self, backend_name: str, backend_framework: str) -> dict:
-        """Get enhanced default file structure based on backend technology."""
+            return self.get_default_response(current_phase)
+            
+    def _filter_files_by_phase(self, file_structure: dict, phase_id: str, implementation_plan: dict) -> dict:
+        """Filter file structure to only include files relevant to the current phase."""
+        self.log_info(f"Filtering files for phase: {phase_id}")
         
-        # Python/Flask structure
-        if 'python' in backend_name.lower() and 'flask' in backend_framework.lower():
-            return {
-                "app.py": "Main Flask application entry point",
-                "config.py": "Configuration settings for different environments",
-                "requirements.txt": "Python dependencies",
-                "README.md": "Project documentation and setup instructions",
-                ".env.example": "Example environment variables template",
-                ".gitignore": "Git ignore patterns",
-                "app/": "Application package directory",
-                "app/__init__.py": "Application factory and initialization",
-                "app/models/": "Data models directory",
-                "app/models/__init__.py": "Models package initialization",
-                "app/models/user.py": "User model definition",
-                "app/routes/": "API routes directory",
-                "app/routes/__init__.py": "Routes package initialization",
-                "app/routes/auth.py": "Authentication routes",
-                "app/routes/api.py": "Main API endpoints",
-                "app/services/": "Business logic services",
-                "app/services/__init__.py": "Services package initialization",
-                "app/utils/": "Utility functions directory",
-                "app/utils/__init__.py": "Utils package initialization",
-                "migrations/": "Database migrations directory",
-                "tests/": "Test suite directory",
-                "tests/__init__.py": "Test package initialization",
-                "tests/test_routes.py": "Route tests",
-                "tests/test_models.py": "Model tests",
-                "tests/conftest.py": "Pytest configuration and fixtures",
-                "static/": "Static assets directory",
-                "templates/": "Jinja2 templates directory",
-                "docs/": "Documentation directory",
-                "scripts/": "Utility scripts directory"
-            }
+        # Extract phase information from implementation plan
+        phases = implementation_plan.get("development_phases", [])
+        current_phase = next((p for p in phases if p.get("phase_id") == phase_id), None)
         
-        # Python/Django structure
-        elif 'python' in backend_name.lower() and 'django' in backend_framework.lower():
-            project_name = "project"
-            app_name = "core"
+        if not current_phase:
+            self.log_warning(f"Phase {phase_id} not found in implementation plan")
+            return {}
+        
+        # Get phase components, modules, and deliverables
+        components = current_phase.get("components", [])
+        deliverables = current_phase.get("deliverables", [])
+        modules = current_phase.get("modules", [])
+        
+        # Convert all to lowercase for case-insensitive matching
+        components_lower = [c.lower() for c in components]
+        deliverables_lower = [d.lower() for d in deliverables]
+        modules_lower = [m.lower() for m in modules]
+        
+        # Filter file structure
+        filtered_structure = {}
+        
+        for path, description in file_structure.items():
+            path_lower = path.lower()
             
-            return {
-                "manage.py": "Django management script",
-                "requirements.txt": "Python dependencies",
-                "README.md": "Project documentation",
-                ".env.example": "Example environment variables",
-                ".gitignore": "Git ignore patterns",
-                f"{project_name}/": "Django project directory",
-                f"{project_name}/__init__.py": "Project package initialization",
-                f"{project_name}/settings.py": "Django settings",
-                f"{project_name}/urls.py": "Project URL configuration",
-                f"{project_name}/wsgi.py": "WSGI configuration",
-                f"{project_name}/asgi.py": "ASGI configuration",
-                f"{app_name}/": "Main Django app directory",
-                f"{app_name}/__init__.py": "App package initialization",
-                f"{app_name}/admin.py": "Admin interface configuration",
-                f"{app_name}/models.py": "Data models",
-                f"{app_name}/views.py": "View functions/classes",
-                f"{app_name}/urls.py": "App URL patterns",
-                f"{app_name}/serializers.py": "DRF serializers",
-                f"{app_name}/tests/": "Tests directory",
-                f"{app_name}/tests/__init__.py": "Tests initialization",
-                f"{app_name}/tests/test_models.py": "Model tests",
-                f"{app_name}/tests/test_views.py": "View tests",
-                f"{app_name}/migrations/": "Database migrations",
-                "static/": "Static files directory",
-                "templates/": "Django templates directory",
-                "media/": "User-uploaded files directory",
-                "docs/": "Documentation directory"
-            }
-            
-        # Node.js/Express structure
-        elif ('javascript' in backend_name.lower() or 'node' in backend_name.lower()) and 'express' in backend_framework.lower():
-            return {
-                "package.json": "Node.js package configuration",
-                "package-lock.json": "Node.js dependency lock file",
-                ".env.example": "Example environment variables",
-                ".gitignore": "Git ignore patterns",
-                "app.js": "Express application entry point",
-                "server.js": "Server initialization",
-                "config/": "Configuration directory",
-                "config/database.js": "Database configuration",
-                "config/env.js": "Environment configuration",
-                "src/": "Source code directory",
-                "src/controllers/": "Route controllers directory",
-                "src/models/": "Data models directory",
-                "src/middlewares/": "Express middlewares",
-                "src/routes/": "API routes directory",
-                "src/services/": "Business logic services",
-                "src/utils/": "Utility functions",
-                "public/": "Static assets directory",
-                "tests/": "Test suite directory",
-                "views/": "View templates directory",
-                "docs/": "Documentation directory",
-                "README.md": "Project documentation"
-            }
-            
-        # Java/Spring Boot structure
-        elif 'java' in backend_name.lower() and 'spring' in backend_framework.lower():
-            return {
-                "pom.xml": "Maven project configuration",
-                ".gitignore": "Git ignore patterns",
-                "src/": "Source root directory",
-                "src/main/": "Main source directory",
-                "src/main/java/": "Java source files directory",
-                "src/main/java/com/example/app/": "Application package",
-                "src/main/java/com/example/app/Application.java": "Spring Boot entry point",
-                "src/main/java/com/example/app/controllers/": "REST controllers",
-                "src/main/java/com/example/app/models/": "Data models",
-                "src/main/java/com/example/app/repositories/": "Data repositories",
-                "src/main/java/com/example/app/services/": "Business services",
-                "src/main/java/com/example/app/config/": "Configuration classes",
-                "src/main/resources/": "Resource files directory",
-                "src/main/resources/application.properties": "Application properties",
-                "src/main/resources/static/": "Static resources",
-                "src/main/resources/templates/": "View templates",
-                "src/test/": "Test suite directory",
-                "src/test/java/": "Java test files",
-                "README.md": "Project documentation"
-            }
-            
-        # Generic structure for other cases
-        else:
-            return {
-                "src/": "Source code directory",
-                "config/": "Configuration files directory",
-                "docs/": "Documentation directory",
-                "tests/": "Test suite directory",
-                "scripts/": "Utility scripts",
-                "README.md": "Project documentation",
-                ".gitignore": "Git ignore patterns",
-            }
-    
-    def get_default_response(self) -> Dict[str, Any]:
+            # Always include directories
+            if path.endswith('/'):
+                filtered_structure[path] = description
+                continue
+                
+            # Check if file matches any component, deliverable, or module
+            if any(c in path_lower for c in components_lower) or \
+               any(d in path_lower for d in deliverables_lower) or \
+               any(m in path_lower for m in modules_lower):
+                filtered_structure[path] = description
+                continue
+                
+            # Check description for matches
+            desc_lower = description.lower()
+            if any(c in desc_lower for c in components_lower) or \
+               any(d in desc_lower for d in deliverables_lower) or \
+               any(m in desc_lower for m in modules_lower):
+                filtered_structure[path] = description
+                continue
+        
+        self.log_info(f"Identified {len(filtered_structure)} files/directories for phase {phase_id}")
+        return filtered_structure
+        
+    def get_default_response(self, current_phase: str = None) -> Dict[str, Any]:
         """Get structured default response when code generation fails completely."""
         return {
             "status": "error",
@@ -920,6 +862,6 @@ class CodeGenerationAgent(BaseAgent):
             "success_count": 0,
             "success_rate": 0.0,
             "output_directory": self.output_dir,
-            "summary": "Code generation failed due to critical errors",
-            "error": "The code generation process encountered unrecoverable errors"
+            "phase": current_phase,
+            "summary": f"Code generation failed due to critical errors{f' for phase {current_phase}' if current_phase else ''}"
         }

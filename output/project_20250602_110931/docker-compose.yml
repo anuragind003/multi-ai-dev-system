@@ -1,0 +1,65 @@
+version: '3.8'
+
+# This Docker Compose file defines the services for the Simple Task Tracker application.
+# It sets up the Flask backend and a PostgreSQL database for development and small-scale production.
+services:
+  # Backend service for the Flask application
+  web:
+    # Build the Docker image from the Dockerfile located in the './backend' directory.
+    # This assumes your Flask application code and Dockerfile are in a 'backend' folder.
+    build: ./backend
+    # Map port 5000 on the host to port 5000 inside the container.
+    # This allows you to access the Flask application from your host machine at http://localhost:5000.
+    ports:
+      - "5000:5000"
+    # Mount the local 'backend' directory into the '/app' directory inside the container.
+    # This enables live code changes to be reflected without rebuilding the image,
+    # which is useful for development.
+    volumes:
+      - ./backend:/app
+    # Environment variables for the Flask application.
+    environment:
+      # Set Flask to development mode for debugging and auto-reloading.
+      FLASK_ENV: development
+      # Define the database URL for the Flask application to connect to the PostgreSQL service.
+      # 'db' is the service name defined below, and '5432' is the default PostgreSQL port.
+      DATABASE_URL: postgresql://user:password@db:5432/tasktracker_db
+      # Set a secret key for Flask sessions and other security features.
+      # In a real production environment, this should be a strong, randomly generated key
+      # and managed securely (e.g., via Docker secrets or environment variables).
+      FLASK_SECRET_KEY: your_super_secret_key_here_replace_me_in_prod
+    # Ensure the 'db' service starts before the 'web' service.
+    depends_on:
+      - db
+    # Command to run the Flask application.
+    # This assumes your Flask app entry point is 'app.py' and it's runnable with 'flask run'.
+    # The --host=0.0.0.0 makes the Flask development server accessible from outside the container.
+    command: flask run --host=0.0.0.0
+
+  # Database service using PostgreSQL
+  db:
+    # Use the official PostgreSQL 13-alpine image for a lightweight database.
+    image: postgres:13-alpine
+    # Environment variables for PostgreSQL.
+    environment:
+      # Database name for the Task Tracker application.
+      POSTGRES_DB: tasktracker_db
+      # Username for the database.
+      POSTGRES_USER: user
+      # Password for the database user.
+      # In a real production environment, avoid hardcoding passwords.
+      POSTGRES_PASSWORD: password
+    # Persist database data using a named volume.
+    # This ensures that your data is not lost when the container is stopped or removed.
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Optionally expose the PostgreSQL port to the host.
+    # This is useful if you want to connect to the database directly from your host machine
+    # using a GUI tool (e.g., DBeaver, pgAdmin).
+    ports:
+      - "5432:5432"
+
+# Define named volumes for data persistence.
+volumes:
+  # Volume for PostgreSQL data.
+  db_data:

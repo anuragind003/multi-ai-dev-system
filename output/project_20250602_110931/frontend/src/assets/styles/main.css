@@ -1,0 +1,313 @@
+/*
+ * Global Stylesheet for the Simple Task Tracker application.
+ *
+ * This file defines base styles, typography, layout, and common UI elements
+ * to ensure a consistent look and feel across the application.
+ */
+
+/* 1. CSS Reset & Box Sizing */
+*,
+*::before,
+*::after {
+    box-sizing: border-box; /* Ensures padding and border are included in the element's total width and height */
+    margin: 0;
+    padding: 0;
+}
+
+/* 2. Root Variables (Color Palette, Fonts, Spacing) */
+:root {
+    /* Colors */
+    --color-primary: #4CAF50; /* Green for primary actions/accents */
+    --color-primary-dark: #45a049; /* Darker green for hover states */
+    --color-secondary: #2196F3; /* Blue for secondary actions/info */
+    --color-secondary-dark: #1976D2; /* Darker blue */
+    --color-background: #f4f7f6; /* Light grey background */
+    --color-text-dark: #333; /* Dark text for main content */
+    --color-text-light: #666; /* Lighter text for secondary info */
+    --color-border: #ddd; /* Light grey for borders */
+    --color-error: #f44336; /* Red for error messages */
+    --color-success: #8BC34A; /* Green for success messages */
+    --color-white: #fff; /* Pure white */
+
+    /* Fonts */
+    --font-family-sans-serif: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-size-base: 16px;
+    --line-height-base: 1.6;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Border Radius */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+
+    /* Box Shadow */
+    --box-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --box-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 3. Base HTML & Body Styles */
+html {
+    font-size: var(--font-size-base); /* Base font size for rem units */
+    scroll-behavior: smooth; /* Smooth scrolling for anchor links */
+}
+
+body {
+    font-family: var(--font-family-sans-serif);
+    line-height: var(--line-height-base);
+    color: var(--color-text-dark);
+    background-color: var(--color-background);
+    min-height: 100vh; /* Ensures body takes at least full viewport height */
+    display: flex;
+    flex-direction: column; /* Allows footer to stick to bottom if content is short */
+    -webkit-font-smoothing: antialiased; /* Improves font rendering on macOS */
+    -moz-osx-font-smoothing: grayscale; /* Improves font rendering on macOS */
+}
+
+/* 4. Typography */
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-dark);
+    line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; } /* ~40px */
+h2 { font-size: 2rem; }   /* ~32px */
+h3 { font-size: 1.75rem; } /* ~28px */
+h4 { font-size: 1.5rem; }  /* ~24px */
+h5 { font-size: 1.25rem; } /* ~20px */
+h6 { font-size: 1rem; }    /* ~16px */
+
+p {
+    margin-bottom: var(--spacing-md);
+}
+
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color 0.2s ease-in-out;
+}
+
+a:hover {
+    color: var(--color-primary-dark);
+    text-decoration: underline;
+}
+
+/* 5. Layout & Containers */
+.container {
+    max-width: 960px; /* Standard max-width for content */
+    margin: 0 auto; /* Center the container */
+    padding: var(--spacing-lg); /* Padding on sides for smaller screens */
+    width: 100%; /* Ensure it takes full width on smaller screens */
+}
+
+/* Main content area, allowing for flexible growth */
+main {
+    flex-grow: 1;
+    padding: var(--spacing-lg) 0; /* Vertical padding for main content */
+}
+
+/* 6. Buttons */
+button,
+.btn {
+    display: inline-flex; /* Allows content to be centered if needed */
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-sm);
+    transition: all 0.2s ease-in-out;
+    user-select: none; /* Prevent text selection on buttons */
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+    border-color: var(--color-primary);
+}
+
+.btn-primary:hover {
+    background-color: var(--color-primary-dark);
+    border-color: var(--color-primary-dark);
+}
+
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: var(--color-white);
+    border-color: var(--color-secondary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--color-secondary-dark);
+    border-color: var(--color-secondary-dark);
+}
+
+.btn-outline {
+    background-color: transparent;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.btn-outline:hover {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+}
+
+.btn-danger {
+    background-color: var(--color-error);
+    color: var(--color-white);
+    border-color: var(--color-error);
+}
+
+.btn-danger:hover {
+    background-color: darken(var(--color-error), 10%); /* Placeholder for darker color */
+    border-color: darken(var(--color-error), 10%);
+}
+
+.btn:disabled,
+.btn[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 7. Form Elements */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+textarea {
+    width: 100%;
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--color-text-dark);
+    background-color: var(--color-white);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="date"]:focus,
+textarea:focus {
+    border-color: var(--color-primary);
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(76, 175, 80, 0.25); /* Primary color with transparency */
+}
+
+label {
+    display: block;
+    margin-bottom: var(--spacing-xs);
+    font-weight: 500;
+    color: var(--color-text-dark);
+}
+
+.form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+/* 8. Utility Classes */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.mb-xs { margin-bottom: var(--spacing-xs); }
+.mb-sm { margin-bottom: var(--spacing-sm); }
+.mb-md { margin-bottom: var(--spacing-md); }
+.mb-lg { margin-bottom: var(--spacing-lg); }
+.mb-xl { margin-bottom: var(--spacing-xl); }
+
+.mt-xs { margin-top: var(--spacing-xs); }
+.mt-sm { margin-top: var(--spacing-sm); }
+.mt-md { margin-top: var(--spacing-md); }
+.mt-lg { margin-top: var(--spacing-lg); }
+.mt-xl { margin-top: var(--spacing-xl); }
+
+.p-xs { padding: var(--spacing-xs); }
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+.py-md { padding-top: var(--spacing-md); padding-bottom: var(--spacing-md); }
+.px-md { padding-left: var(--spacing-md); padding-right: var(--spacing-md); }
+
+.d-flex { display: flex; }
+.justify-content-center { justify-content: center; }
+.align-items-center { align-items: center; }
+.flex-column { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+
+.card {
+    background-color: var(--color-white);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--box-shadow-sm);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.alert {
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+}
+
+.alert-success {
+    background-color: rgba(139, 195, 74, 0.1); /* Light green */
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+}
+
+.alert-error {
+    background-color: rgba(244, 67, 54, 0.1); /* Light red */
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+}
+
+/* 9. Accessibility & Focus States */
+/* Improve focus states for keyboard navigation */
+:focus-visible {
+    outline: 2px solid var(--color-secondary);
+    outline-offset: 2px;
+    border-radius: var(--border-radius-sm);
+}
+
+/* Hide outline for mouse users (optional, but common) */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* 10. Responsive Adjustments (Basic) */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-md); /* Reduce padding on smaller screens */
+    }
+
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.75rem; }
+    h3 { font-size: 1.5rem; }
+}
+
+@media (max-width: 480px) {
+    h1 { font-size: 1.75rem; }
+    h2 { font-size: 1.5rem; }
+    h3 { font-size: 1.25rem; }
+    .btn {
+        padding: var(--spacing-sm);
+        font-size: 0.9rem;
+    }
+}

@@ -12,6 +12,7 @@ import argparse
 import time
 from pathlib import Path
 import atexit
+import json
 
 # Add project root to Python path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 try:
     # FIXED: Import get_embedding_model instead of get_embeddings
-    from config import get_llm, get_embedding_model, TrackedChatModel, AdvancedWorkflowConfig
+    from config import get_llm, get_embedding_model, TrackedChatModel, AdvancedWorkflowConfig, setup_langgraph_server
     from shared_memory import SharedProjectMemory
     from tools.code_execution_tool import CodeExecutionTool
     from rag_manager import ProjectRAGManager  # Clean import without debugging
@@ -45,6 +46,20 @@ except ImportError as e:
     print("Please ensure all required dependencies are installed:")
     print("  pip install -r requirements.txt")
     sys.exit(1)
+
+# Initialize LangSmith at startup - MUST be before any agent instantiation
+langsmith_enabled = setup_langgraph_server(enable_server=True)
+if langsmith_enabled:
+    print("🔍 Using LangSmith for tracing and observability")
+    # Set up temperature categories appropriate for your agents
+    os.environ["LANGSMITH_TEMPERATURE_CATEGORIES"] = json.dumps({
+        "code_generation": 0.1,
+        "analytical": 0.2, 
+        "creative": 0.3,
+        "planning": 0.4
+    })
+else:
+    print("ℹ️ Using local tracing only")
 
 def parse_arguments():
     """ENHANCED: Parse command line arguments for AdvancedWorkflowConfig integration."""
@@ -86,7 +101,7 @@ Environment Variables:
     
     # Workflow settings
     parser.add_argument("--workflow-type", default="iterative", 
-                       choices=["basic", "iterative", "modular", "resumable"],
+                       choices=["basic", "iterative", "phased", "modular", "resumable"],
                        help="Type of workflow to run")
     parser.add_argument("--environment", choices=["development", "staging", "production"],
                        help="Deployment environment (affects security and behavior)")
@@ -120,6 +135,18 @@ Environment Variables:
                        help="Enable verbose output")
     parser.add_argument("--debug", action="store_true",
                        help="Enable debug mode")
+    
+    # Add to your argparse arguments
+    parser.add_argument(
+        "--platform",
+        action="store_true",
+        help="Enable LangGraph Platform integration"
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Enable LangGraph Server for workflow visualization and debugging"
+    )
     
     return parser.parse_args()
 
@@ -217,8 +244,15 @@ def create_initial_state(brd_content: str, workflow_config: AdvancedWorkflowConf
     # Use the enhanced state creation function
     return create_initial_agent_state(brd_content, workflow_config)
 
-def display_results(final_state: dict, output_dir: str):
-    """ENHANCED: Display comprehensive results with improved state handling."""
+def display_results(final_state, run_output_dir):
+    """Enhanced result display with trace URL."""
+    print("\n" + "="*50)
+    print("📊 WORKFLOW EXECUTION SUMMARY")
+    print("="*50)
+    
+    # Add the trace viewer URL
+    trace_url = monitoring.get_trace_viewer_url()
+    print(f"\n🔍 View detailed execution trace: {trace_url}")
     
     # Print workflow summary
     print_workflow_summary(final_state)
@@ -239,10 +273,10 @@ def display_results(final_state: dict, output_dir: str):
         print(f"Errors: {state_summary['errors_count']}")
     
     # Show output directory contents
-    print(f"\n📁 Generated files in: {output_dir}")
+    print(f"\n📁 Generated files in: {run_output_dir}")
     try:
-        for root, dirs, files in os.walk(output_dir):
-            level = root.replace(output_dir, '').count(os.sep)
+        for root, dirs, files in os.walk(run_output_dir):
+            level = root.replace(run_output_dir, '').count(os.sep)
             indent = ' ' * 2 * level
             print(f"{indent}{os.path.basename(root)}/")
             subindent = ' ' * 2 * (level + 1)
@@ -388,7 +422,10 @@ def main():
         
         # Get and run workflow
         try:
-            workflow = get_workflow(args.workflow_type)
+            workflow = get_workflow(
+                workflow_type=args.workflow_type,
+                platform_enabled=args.platform
+            )
             print(f"🚀 Starting {args.workflow_type} workflow with {workflow_config.environment} configuration...")
             
             # Initialize shared memory - MOVED THIS UP

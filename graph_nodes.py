@@ -4,7 +4,78 @@ Each node represents a specialized AI agent in the development workflow.
 SIMPLIFIED: No decorators - BaseAgent handles all monitoring and tracking.
 """
 
+from typing import Dict, Any, Optional, Generator, Callable, TypedDict, List, Union
+from contextlib import contextmanager
 import time
+import traceback
+import monitoring
+from config import get_system_config
+
+@contextmanager
+def start_trace_span(name: str, metadata: Optional[Dict[str, Any]] = None) -> Generator[None, None, None]:
+    """
+    Custom implementation to replace missing LangChain function.
+    
+    Provides tracing functionality for phases in workflow execution
+    with comprehensive error handling and monitoring integration.
+    
+    Args:
+        name: The name of the phase/span to be traced
+        metadata: Optional metadata associated with the span
+    
+    Yields:
+        None: Context manager pattern
+    """
+    start_time = time.time()
+    span_id = f"phase_{int(start_time * 1000)}"
+    
+    try:
+        # Log the start of the phase - FIXED: using agent_name instead of agent
+        monitoring.log_agent_activity(
+            agent_name="Phase Iterator", 
+            message=f"Starting phase: {name}", 
+            level="INFO",
+            metadata={
+                "span_id": span_id,
+                "phase": name,
+                **(metadata or {})
+            }
+        )
+        
+        # Execute the phase
+        yield
+        
+    except Exception as e:
+        # Log error with comprehensive details - FIXED: using agent_name instead of agent
+        monitoring.log_agent_activity(
+            agent_name="Phase Iterator",
+            message=f"Error in phase {name}: {str(e)}",
+            level="ERROR",
+            metadata={
+                "span_id": span_id,
+                "phase": name,
+                "execution_time": time.time() - start_time,
+                "error_traceback": traceback.format_exc(),
+                **(metadata or {})
+            }
+        )
+        # Re-raise the exception for proper handling
+        raise
+        
+    finally:
+        # Always log completion with performance metrics - FIXED: using agent_name instead of agent
+        monitoring.log_agent_activity(
+            agent_name="Phase Iterator",
+            message=f"Completed phase: {name}",
+            level="INFO",
+            metadata={
+                "span_id": span_id,
+                "phase": name,
+                "execution_time": time.time() - start_time,
+                **(metadata or {})
+            }
+        )
+
 from typing import Dict, Any
 
 from agent_state import AgentState
@@ -446,11 +517,10 @@ def finalize_workflow(state: AgentState, config: dict) -> AgentState:
 # ENHANCED: Decision functions using extracted metrics from graph_nodes.py
 def should_retry_code_generation(state: AgentState) -> str:
     """
-    ENHANCED: Decision function using extracted metrics and dynamic configuration.
-    No hardcoded thresholds - uses state configuration.
+    ENHANCED: Decision function with proper detection of code files versus directories.
     """
     # Get configuration from state
-    quality_threshold = state.get("quality_threshold", 6.0)
+    quality_threshold = state.get("quality_threshold", 3.0)
     max_retries = state.get("max_code_gen_retries", 3)
     current_retry = state.get("current_code_gen_retry", 0)
     
@@ -458,27 +528,67 @@ def should_retry_code_generation(state: AgentState) -> str:
     overall_quality_score = state.get("overall_quality_score", 0.0)
     has_critical_issues = state.get("has_critical_issues", True)
     
+    # IMPROVED FILE VS DIRECTORY DETECTION
+    code_gen_result = state.get("code_generation_result", {})
+    generated_files = code_gen_result.get("generated_files", {})
+    
+    # Count actual code files (non-directory paths)
+    # A path is likely a directory if it ends with '/' or if it's in the file_details but has no content
+    code_files_count = 0
+    directory_count = 0
+    
+    for path, content in generated_files.items():
+        if path.endswith('/') or path.endswith('\\') or not content.strip():
+            directory_count += 1
+        else:
+            # Check common directory-like names that may not have trailing slashes
+            if path.split('/')[-1] in ['.gitignore', 'README.md', 'LICENSE']:
+                directory_count += 1
+            else:
+                code_files_count += 1
+    
+    # If we only generated directories (no actual code files)
+    if code_files_count == 0 and directory_count > 0:
+        monitoring.log_agent_activity(
+            "Retry Decision",
+            f"Skipping retry - Phase {state.get('current_phase_id', 'unknown')} contains only directory structures. No code files to analyze.",
+            "INFO"
+        )
+        return "continue"
+    
+    # Log quality metrics for regular retry decision
     monitoring.log_agent_activity(
         "Retry Decision", 
         f"Code generation retry check: quality={overall_quality_score}, "
-        f"critical_issues={has_critical_issues}, retry={current_retry}/{max_retries}",
+        f"critical_issues={has_critical_issues}, retry={current_retry}/{max_retries}, "
+        f"code_files={code_files_count}, directories={directory_count}",
         "INFO"
     )
     
-    # Check if we should retry
+    # Standard retry logic for phases with actual code
     should_retry = (
         (overall_quality_score < quality_threshold or has_critical_issues) and 
-        current_retry < max_retries
+        current_retry < max_retries and
+        code_files_count > 0  # Only retry if we have actual code files
     )
     
     if should_retry:
-        monitoring.log_agent_activity("Retry Decision", 
-            f"Code generation retry check: quality={quality_score}, critical_issues={has_critical_issues}, retry={current_retry}/{max_retries}", "INFO")
-        return "retry_code_generation"  # CHANGE THIS FROM "retry_code" to "retry_code_generation"
+        # Increment retry counter
+        state["current_code_gen_retry"] = current_retry + 1
+        
+        monitoring.log_agent_activity(
+            "Retry Decision", 
+            f"Code generation retry check: quality={overall_quality_score}, critical_issues={has_critical_issues}, retry={state['current_code_gen_retry']}/{max_retries}", 
+            "INFO"
+        )
+        return "retry_code_generation"
     else:
         if current_retry >= max_retries:
-            monitoring.log_agent_activity("Retry Decision", 
-                f"Max retries reached ({max_retries}), continuing despite quality issues", "WARNING")
+            monitoring.log_agent_activity(
+                "Retry Decision", 
+                f"Max retries reached ({max_retries}), continuing despite quality issues", 
+                "WARNING"
+            )
         return "continue"
 
 def should_retry_tests(state: AgentState) -> str:
@@ -654,3 +764,191 @@ def should_iterate_implementation(state: AgentState) -> str:
         return "iterate"
     else:
         return "finalize"
+
+def phase_iterator_node(state: AgentState, config: dict) -> AgentState:
+    """Handle iteration through development phases for code generation."""
+    
+    with start_trace_span(name=f"Phase Iterator - {state.get('current_phase_index', 0)}"):
+        # Get all phases from implementation plan
+        implementation_plan = state.get("implementation_plan", {})
+        all_phases = implementation_plan.get("development_phases", [])
+        
+        if not all_phases:
+            monitoring.log_agent_activity("Phase Iterator", "No phases found in implementation plan", "WARNING")
+            return state
+        
+        # Get or initialize phase tracking
+        completed_phases = state.get("completed_phases", [])
+        current_phase_index = state.get("current_phase_index", 0)
+        
+        # Check if we've completed all phases
+        if current_phase_index >= len(all_phases):
+            monitoring.log_agent_activity("Phase Iterator", "All phases completed", "INFO")
+            return state
+        
+        # Get current phase
+        current_phase = all_phases[current_phase_index]
+        phase_id = current_phase.get("phase_id")
+        phase_name = current_phase.get("phase_name", f"Phase {current_phase_index + 1}")
+        
+        # Translate phase ID (PH1 → P1) for compatibility with code generation
+        translated_id = phase_id.replace("PH", "P") if phase_id and phase_id.startswith("PH") else phase_id
+        
+        monitoring.log_agent_activity("Phase Iterator", 
+                                     f"Processing phase {phase_id} (translated to {translated_id}): {phase_name}", "INFO")
+        
+        # Update state with current phase info
+        state["current_phase"] = current_phase
+        state["current_phase_id"] = translated_id  # Translated for code generation
+        state["original_phase_id"] = phase_id      # Original for reference
+        state["current_phase_name"] = phase_name
+    
+    return state
+
+def phase_code_generation_node(state: AgentState, config: dict) -> AgentState:
+    """Modified code generation node that handles phase-based code generation."""
+    start_time = time.time()
+    
+    # Get dependencies from config
+    llm = config["configurable"]["llm"]
+    memory = config["configurable"]["memory"] 
+    code_execution_tool = config["configurable"]["code_execution_tool"]
+    run_output_dir = config["configurable"]["run_output_dir"]
+    rag_manager = config["configurable"].get("rag_manager")
+    
+    # Create agent with correct constructor parameters
+    agent = CodeGenerationAgent(
+        llm=llm,
+        memory=memory,
+        output_dir=run_output_dir,
+        code_execution_tool=code_execution_tool,
+        rag_retriever=rag_manager.get_retriever() if rag_manager else None
+    )
+    
+    # Safety check: Get phase ID with error handling
+    if "current_phase_id" not in state:
+        # Phase ID missing, get it from current_phase if possible
+        if "current_phase" in state and isinstance(state["current_phase"], dict):
+            phase_id = state["current_phase"].get("phase_id")
+            if phase_id:
+                monitoring.log_agent_activity("Phase Code Generation", 
+                    f"Recovered phase ID '{phase_id}' from current_phase", "WARNING")
+                # Store it for later nodes
+                state["current_phase_id"] = phase_id
+            else:
+                # No phase ID in current_phase either
+                monitoring.log_agent_activity("Phase Code Generation", 
+                    "Missing phase ID in state, defaulting to first phase", "WARNING")
+                # Try to get the first phase from implementation plan
+                phases = state.get("implementation_plan", {}).get("development_phases", [])
+                if phases:
+                    phase_id = phases[0].get("phase_id", "P1")
+                    state["current_phase_id"] = phase_id
+                    monitoring.log_agent_activity("Phase Code Generation", 
+                        f"Using first phase from plan: {phase_id}", "WARNING")
+                else:
+                    # Last resort default
+                    phase_id = "P1" 
+                    state["current_phase_id"] = phase_id
+                    monitoring.log_agent_activity("Phase Code Generation", 
+                        "Using hardcoded default phase: P1", "ERROR")
+        else:
+            # Both current_phase_id and current_phase are missing
+            phase_id = "P1"
+            state["current_phase_id"] = phase_id
+            monitoring.log_agent_activity("Phase Code Generation", 
+                "Missing current_phase in state, using default P1", "ERROR")
+    else:
+        # Normal path - phase ID exists
+        phase_id = state["current_phase_id"]
+    
+    # Execute with monitoring, passing the phase ID (not from state directly)
+    result = agent.execute_with_monitoring(
+        agent.run,
+        state["requirements_analysis"],
+        state["tech_stack_recommendation"], 
+        state["system_design"],
+        state["implementation_plan"],
+        phase_id  # Use the variable, not direct state access
+    )
+    
+    # Store result in phase-specific key
+    phase_id = state["current_phase_id"]
+    if "phase_code_results" not in state:
+        state["phase_code_results"] = {}
+    
+    state["phase_code_results"][phase_id] = result
+    
+    # Also store in code_generation_result for compatibility
+    state["code_generation_result"] = result
+    
+    # Update execution tracking
+    execution_time = time.time() - start_time
+    if "phase_execution_times" not in state:
+        state["phase_execution_times"] = {}
+    
+    state["phase_execution_times"][phase_id] = execution_time
+    state["agent_execution_times"][agent.agent_name] = execution_time
+    
+    # Check for errors using structured response
+    if result.get("status") == "error" or result.get("file_count", 0) == 0:
+        state["errors"].append({
+            "agent": agent.agent_name,
+            "phase": phase_id,
+            "error": result.get("summary", f"Code generation failed for phase {phase_id}"),
+            "timestamp": time.time()
+        })
+    
+    return state
+
+def phase_completion_node(state: AgentState, config: dict) -> AgentState:
+    """Mark current phase as complete and increment phase counter."""
+    
+    # Get the ORIGINAL phase ID from state
+    current_phase_id = state.get("current_phase_id")
+    original_phase_id = state.get("original_phase_id")
+    current_phase_name = state.get("current_phase_name", "Unknown Phase")
+    current_phase_index = state.get("current_phase_index", 0)
+    
+    # Use the most specific phase ID available
+    effective_phase_id = original_phase_id or current_phase_id or f"P{current_phase_index + 1}"
+    
+    # Add current phase to completed phases
+    if "completed_phases" not in state:
+        state["completed_phases"] = []
+    
+    if effective_phase_id and effective_phase_id not in state["completed_phases"]:
+        state["completed_phases"].append(effective_phase_id)
+    
+    # Reset retry counter for next phase
+    state["current_code_gen_retry"] = 0
+    
+    # Increment phase index for next phase
+    state["current_phase_index"] = current_phase_index + 1
+    
+    # Get total phases for logging
+    total_phases = len(state.get("implementation_plan", {}).get("development_phases", []))
+    
+    # Log completion
+    monitoring.log_agent_activity(
+        "Phase Completion", 
+        f"Completed phase {effective_phase_id} ({current_phase_name}) - ({current_phase_index + 1}/{total_phases})",
+        "INFO"
+    )
+    
+    return state
+
+def has_next_phase(state: AgentState) -> str:
+    """Decision function to check if there are more phases to process."""
+    implementation_plan = state.get("implementation_plan", {})
+    all_phases = implementation_plan.get("development_phases", [])
+    current_phase_index = state.get("current_phase_index", 0)
+    
+    if current_phase_index >= len(all_phases):
+        monitoring.log_agent_activity("Phase Decision", "All phases completed, continuing to tests", "INFO")
+        return "complete"
+    else:
+        next_phase = all_phases[current_phase_index]
+        phase_name = next_phase.get("phase_name", f"Phase {current_phase_index + 1}")
+        monitoring.log_agent_activity("Phase Decision", f"Moving to next phase: {phase_name}", "INFO")
+        return "next_phase"

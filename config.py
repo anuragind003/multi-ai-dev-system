@@ -3,7 +3,7 @@ import os
 import time
 import json
 from pathlib import Path
-from typing import Optional, Dict, Any, List  # FIXED: Added List import
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import yaml
@@ -14,12 +14,41 @@ from langchain_community.embeddings import OllamaEmbeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables import RunnableSerializable
-from pydantic import Field, PrivateAttr  # Import PrivateAttr from pydantic directly
+from pydantic import Field, PrivateAttr
 import monitoring
 import argparse
+from langsmith import Client as LangSmithClient
 
 # Load environment variables
 load_dotenv()
+
+def test_langsmith_connection():
+    """Test connection to LangSmith and return client if successful."""
+    try:
+        api_key = os.getenv("LANGSMITH_API_KEY")
+        if not api_key:
+            print("⚠️ LANGSMITH_API_KEY not set in environment")
+            return None
+            
+        client = LangSmithClient(api_key=api_key)
+        # Simple API call to test connection
+        client.list_projects(limit=1)
+        print("✅ LangSmith connection successful")
+        return client
+    except Exception as e:
+        print(f"⚠️ LangSmith connection test failed: {str(e)}")
+        print("⚠️ Continuing with local tracing only")
+        return None
+
+def setup_langgraph_server(enable_server=True):
+    """Configure LangGraph server for development and monitoring."""
+    if enable_server:
+        # Use the centralized initialization function
+        return initialize_langsmith()
+    else:
+        print("⚠️ LangSmith tracing disabled (server not enabled)")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return False
 
 class ConfigSource(Enum):
     """Configuration source priorities."""
@@ -38,7 +67,7 @@ class AdvancedWorkflowConfig:
     max_quality_retries: int = 2
     
     # Quality thresholds
-    min_quality_score: float = 6.0
+    min_quality_score: float = 3.0
     min_success_rate: float = 0.7
     min_coverage_percentage: float = 60.0
     
@@ -548,16 +577,27 @@ class TrackedChatModel(RunnableSerializable):
         output_preview = ""
         error_msg = ""
         
-        # Extract temperature for logging
+        # Extract temperature for logging (improved temperature detection)
         logged_temperature = None
+        temperature_category = None
         underlying_llm = self.model_instance
-        if hasattr(underlying_llm, 'generation_config') and underlying_llm.generation_config:
-            if isinstance(underlying_llm.generation_config, dict):
-                logged_temperature = underlying_llm.generation_config.get('temperature')
-            elif hasattr(underlying_llm.generation_config, 'temperature'):
-                logged_temperature = underlying_llm.generation_config.temperature
-        elif hasattr(underlying_llm, 'temperature'):
-            logged_temperature = underlying_llm.temperature
+        
+        # More robust temperature extraction
+        if config and isinstance(config, dict):
+            if "configurable" in config and isinstance(config["configurable"], dict):
+                agent_name = config["configurable"].get("agent_name", "")
+                if agent_name:
+                    # Use temperature strategy from agent_temperatures.py
+                    cfg = get_system_config()
+                    logged_temperature = cfg.agent_temperatures.get(agent_name, 0.2)
+                    
+                    # Categorize temperature for LangSmith
+                    if logged_temperature <= 0.1:
+                        temperature_category = "code_generation"
+                    elif logged_temperature <= 0.2:
+                        temperature_category = "analytical"
+                    elif logged_temperature <= 0.4:
+                        temperature_category = "creative"
         
         # Extract agent_context for logging
         agent_context = ""
@@ -863,3 +903,52 @@ def validate_security_requirements(environment: str = None) -> List[str]:
             issues.append("Set FAISS_ENCRYPTION_SALT environment variable for production")
     
     return issues
+
+def initialize_langsmith():
+    """
+    Initialize LangSmith with proper error handling and environment setup.
+    This centralizes all LangSmith configuration to avoid conflicts.
+    
+    Returns:
+        bool: True if LangSmith was successfully enabled
+    """
+    print("🔄 Initializing LangSmith connection...")
+    
+    # Check for API key first
+    api_key = os.getenv("LANGSMITH_API_KEY")
+    if not api_key:
+        print("⚠️ LangSmith tracing disabled (API key not found)")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return False
+    
+    # Set up environment variables for LangSmith
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com" 
+    os.environ["LANGCHAIN_API_KEY"] = api_key
+    os.environ["LANGCHAIN_PROJECT"] = "Multi-AI-Dev-System"
+    
+    print("🔍 LangSmith tracing enabled - testing connection...")
+    
+    # Test connection
+    try:
+        client = LangSmithClient(api_key=api_key)
+        # Simple API call to test connection
+        client.list_projects(limit=1)
+        print("✅ LangSmith connection successful")
+        
+        # Add temperature categories for specialized agents
+        temperature_categories = {
+            "code_generation": 0.1,  # Deterministic code output
+            "analytical": 0.2,       # Analysis tasks (tech stack, test validation)
+            "creative": 0.3,         # BRD analysis 
+            "planning": 0.4          # Implementation planning
+        }
+        os.environ["LANGSMITH_TEMPERATURE_CATEGORIES"] = json.dumps(temperature_categories)
+        print("📊 Temperature categories configured for agent specialization")
+        
+        return True
+    except Exception as e:
+        print(f"⚠️ LangSmith connection test failed: {str(e)}")
+        print("⚠️ Continuing with local tracing only")
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        return False

@@ -9,15 +9,19 @@ import time
 import os
 import threading
 import sqlite3
+import asyncio
+import aiofiles
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Generator, Callable
 from collections import defaultdict, Counter
+from contextlib import contextmanager
+from functools import wraps
 
 # Base logs directory - consistent with MetricsCollector
 LOG_DIR = Path("logs")
 
-class MetricsCollector:
-    """Enhanced metrics collector with structured logging and performance tracking."""
+class AsyncMetricsCollector:
+    """Enhanced async-compatible metrics collector for agent monitoring."""
     
     def __init__(self):
         """Initialize metrics collector with counters and setup logging."""
@@ -37,104 +41,173 @@ class MetricsCollector:
         
         # Initialize lock for thread safety
         self._lock = threading.Lock()
+        
+        # Queue for async logging
+        self._log_queue = asyncio.Queue()
+        
+        # Start log processor if running in async environment
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self._process_log_queue())
+        except RuntimeError:
+            # Not in an async context, will use sync methods
+            pass
     
     def setup_logging_directories(self):
-        """Create log directories if they don't exist."""
-        self.logs_dir = Path("logs")
+        """Create logging directories if they don't exist."""
+        self.logs_dir = LOG_DIR
         self.api_logs_dir = self.logs_dir / "api_calls"
-        self.agent_logs_dir = self.logs_dir / "agent_activity"
+        self.agent_logs_dir = self.logs_dir / "agent_logs"
         self.workflow_logs_dir = self.logs_dir / "workflow"
-        self.security_logs_dir = self.logs_dir / "security"  # ADDED: Security logs subdirectory
         
-        # Create directories
-        self.logs_dir.mkdir(exist_ok=True)
-        self.api_logs_dir.mkdir(exist_ok=True)
-        self.agent_logs_dir.mkdir(exist_ok=True)
-        self.workflow_logs_dir.mkdir(exist_ok=True)
-        self.security_logs_dir.mkdir(exist_ok=True)  # ADDED: Create security logs directory
+        # Create dirs if they don't exist
+        for directory in [self.logs_dir, self.api_logs_dir, self.agent_logs_dir, self.workflow_logs_dir]:
+            directory.mkdir(exist_ok=True, parents=True)
+    
+    async def _process_log_queue(self):
+        """Process log entries from the queue asynchronously."""
+        while True:
+            log_func, log_entry, log_dir, prefix = await self._log_queue.get()
+            try:
+                await log_func(log_entry, log_dir, prefix)
+            except Exception as e:
+                print(f"Error processing log: {e}")
+            finally:
+                self._log_queue.task_done()
+    
+    async def _log_to_file_async(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
+        """Async method to log to a file with standardized format."""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d")
+        log_file = log_dir / f"{prefix}_{timestamp}.jsonl"
+        
+        try:
+            async with aiofiles.open(log_file, "a") as f:
+                await f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            print(f"❌ Failed to write async log: {e}")
+    
+    def _log_to_file_sync(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
+        """Synchronous method to log to a file when async is unavailable."""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d")
+        log_file = log_dir / f"{prefix}_{timestamp}.jsonl"
+        
+        try:
+            with open(log_file, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            print(f"❌ Failed to write sync log: {e}")
+    
+    def log_entry(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
+        """Log an entry using async when possible, falling back to sync."""
+        try:
+            loop = asyncio.get_running_loop()
+            # In async context, add to queue
+            self._log_queue.put_nowait((self._log_to_file_async, log_entry, log_dir, prefix))
+        except RuntimeError:
+            # Not in async context, use sync method
+            self._log_to_file_sync(log_entry, log_dir, prefix)
+
+    # The rest of your existing methods with minimal changes to use the new log_entry method
     
     def increment_api_call(self, model_name: str):
-        """Increment API call counter for the specified model."""
+        """Increment counter for specific model API call."""
         with self._lock:
             self.api_calls[model_name] += 1
     
-    def increment_agent_activity(self, agent_name: str, activity_type: str):
-        """Increment agent activity counter."""
+    def increment_agent_activity(self, agent_name: str):
+        """Increment counter for agent activity."""
         with self._lock:
-            self.agent_activities[f"{agent_name}:{activity_type}"] += 1
+            self.agent_activities[agent_name] += 1
     
-    def increment_error(self, error_type: str):
-        """Increment error counter."""
-        with self._lock:
-            self.errors[error_type] += 1
+    def log_api_call(self, log_entry: Dict[str, Any]):
+        """Log API call details to file."""
+        self.log_entry(log_entry, self.api_logs_dir, "api")
     
-    def record_token_usage(self, input_tokens: int, output_tokens: int, model_name: str):
-        """Record token usage and estimate cost."""
-        with self._lock:
-            self.total_tokens += (input_tokens + output_tokens)
-            
-            # Very rough cost estimation (customize based on your models)
-            input_cost = input_tokens * 0.00001  # $0.01 per 1000 tokens
-            output_cost = output_tokens * 0.00002  # $0.02 per 1000 tokens
-            self.total_cost += (input_cost + output_cost)
+    def log_agent(self, log_entry: Dict[str, Any]):
+        """Log agent activity to file."""
+        self.log_entry(log_entry, self.agent_logs_dir, "agent")
     
-    def get_elapsed_time(self) -> float:
-        """Get elapsed time since metrics collector was initialized."""
-        return time.time() - self.start_time
+    def log_workflow(self, log_entry: Dict[str, Any]):
+        """Log workflow event to file."""
+        self.log_entry(log_entry, self.workflow_logs_dir, "workflow")
     
     def get_summary_metrics(self) -> Dict[str, Any]:
-        """Get summary metrics for the current session."""
+        """Get summary metrics for reporting."""
         with self._lock:
+            elapsed_time = time.time() - self.start_time
             return {
                 "session_id": self.session_id,
-                "elapsed_time": self.get_elapsed_time(),
-                "api_calls": dict(self.api_calls),
+                "elapsed_time": elapsed_time,
+                "total_api_calls": sum(self.api_calls.values()),
+                "api_calls_by_model": dict(self.api_calls),
                 "agent_activities": dict(self.agent_activities),
-                "errors": dict(self.errors),
+                "total_errors": sum(self.errors.values()),
                 "total_tokens": self.total_tokens,
-                "estimated_cost": self.total_cost,
+                "total_cost": self.total_cost,
                 "timestamp": datetime.datetime.now().isoformat()
             }
     
-    def save_metrics_to_file(self):
-        """Save all metrics to a JSON file."""
+    async def save_metrics_to_file_async(self):
+        """Save all metrics to a JSON file asynchronously."""
         metrics_file = self.logs_dir / f"metrics_{self.session_id}.json"
         
         try:
-            with open(metrics_file, "w") as f:
-                json.dump(self.get_summary_metrics(), f, indent=2)
+            async with aiofiles.open(metrics_file, "w") as f:
+                await f.write(json.dumps(self.get_summary_metrics(), indent=2))
             print(f"✅ Metrics saved to {metrics_file}")
             
         except Exception as e:
             print(f"❌ Failed to save metrics: {e}")
     
-    def log_workflow_phase(self, phase_name: str, status: str, details: Dict[str, Any] = None):
-        """Log workflow phase transitions."""
-        log_entry = {
-            "timestamp": datetime.datetime.now().isoformat(),
-            "session_id": self.session_id,
-            "phase": phase_name,
-            "status": status,
-            "details": details or {}
-        }
-        
-        self._log_to_file(log_entry, self.workflow_logs_dir, "workflow")
-    
-    def _log_to_file(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
-        """Internal method to log to a file with standardized format."""
-        today = datetime.datetime.now().strftime("%Y%m%d")
-        log_file = log_dir / f"{prefix}_{today}.jsonl"  # FIXED: Use .jsonl extension
-        
+    def save_metrics_to_file(self):
+        """Save all metrics to a JSON file, attempting async if possible."""
         try:
-            with open(log_file, "a") as f:
-                f.write(json.dumps(log_entry) + "\n")
-                
-        except Exception as e:
-            print(f"❌ Failed to write to log file {log_file}: {e}")
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.save_metrics_to_file_async())
+        except RuntimeError:
+            # Not in async context, use sync approach
+            metrics_file = self.logs_dir / f"metrics_{self.session_id}.json"
+            try:
+                with open(metrics_file, "w") as f:
+                    json.dump(self.get_summary_metrics(), f, indent=2)
+                print(f"✅ Metrics saved to {metrics_file}")
+            except Exception as e:
+                print(f"❌ Failed to save metrics: {e}")
 
-# Initialize metrics collector
-metrics_collector = MetricsCollector()
+# Initialize metrics collector with async support
+metrics_collector = AsyncMetricsCollector()
 
+# Adapt your log functions to be async-compatible
+async def log_api_call_realtime_async(
+    model: str, 
+    call_type: str, 
+    input_preview: str, 
+    output_preview: str = "", 
+    duration: float = 0.0,
+    success: bool = True,
+    error_msg: str = "",
+    temperature: Optional[float] = None,
+    agent_context: str = ""
+):
+    """Async version of log_api_call_realtime"""
+    log_entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "session_id": metrics_collector.session_id,
+        "model": model,
+        "type": call_type,
+        "input_preview": input_preview[:100] + "..." if len(input_preview) > 100 else input_preview,
+        "output_preview": output_preview[:100] + "..." if len(output_preview) > 100 else output_preview,
+        "duration": duration,
+        "success": success,
+        "error": error_msg if not success else "",
+        "temperature": temperature,
+        "agent_context": agent_context
+    }
+    
+    metrics_collector.increment_api_call(model)
+    await asyncio.to_thread(metrics_collector.log_api_call, log_entry)
+
+# Sync version that delegates to async when possible
 def log_api_call_realtime(
     model: str, 
     call_type: str, 
@@ -146,119 +219,182 @@ def log_api_call_realtime(
     temperature: Optional[float] = None,
     agent_context: str = ""
 ):
-    """Log API call details in real-time to a file."""
+    """Log API call details in real-time, adapting to sync or async context."""
     log_entry = {
         "timestamp": datetime.datetime.now().isoformat(),
         "session_id": metrics_collector.session_id,
         "model": model,
-        "call_type": call_type,
-        "input_preview": input_preview,
-        "output_preview": output_preview,
-        "duration_seconds": duration,
+        "type": call_type,
+        "input_preview": input_preview[:100] + "..." if len(input_preview) > 100 else input_preview,
+        "output_preview": output_preview[:100] + "..." if len(output_preview) > 100 else output_preview,
+        "duration": duration,
         "success": success,
-        "error": error_msg,
+        "error": error_msg if not success else "",
         "temperature": temperature,
         "agent_context": agent_context
     }
     
-    # FIXED: Use the appropriate logs directory and .jsonl extension
-    log_file = metrics_collector.api_logs_dir / f"api_calls_{datetime.datetime.now().strftime('%Y%m%d')}.jsonl"
-    
-    try:
-        with open(log_file, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-            
-    except Exception as e:
-        print(f"❌ Failed to write API log: {e}")
+    metrics_collector.increment_api_call(model)
+    metrics_collector.log_api_call(log_entry)
 
-def log_agent_activity(agent_name: str, message: str, level: str = "INFO"):
+# Create async version of log_agent_activity
+async def log_agent_activity_async(agent_name: str, message: str, level: str = "INFO", metadata: Optional[Dict[str, Any]] = None):
+    """Log agent activity asynchronously."""
+    log_entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "session_id": metrics_collector.session_id,
+        "agent": agent_name,
+        "message": message,
+        "level": level,
+        "metadata": metadata or {}
+    }
+    
+    metrics_collector.increment_agent_activity(agent_name)
+    await asyncio.to_thread(metrics_collector.log_agent, log_entry)
+
+# Regular version that adapts to async when possible
+def log_agent_activity(agent_name: str, message: str, level: str = "INFO", metadata: Optional[Dict[str, Any]] = None):
     """Log agent activity with standardized format."""
     log_entry = {
         "timestamp": datetime.datetime.now().isoformat(),
         "session_id": metrics_collector.session_id,
         "agent": agent_name,
+        "message": message,
         "level": level,
-        "message": message
+        "metadata": metadata or {}
     }
     
-    # Increment counter for agent activity
-    if level in ["ERROR", "WARNING"]:
-        metrics_collector.increment_error(f"{agent_name}:{level}")
+    metrics_collector.increment_agent_activity(agent_name)
+    metrics_collector.log_agent(log_entry)
     
-    metrics_collector.increment_agent_activity(agent_name, level)
-    
-    # Console output for visibility
-    level_markers = {
-        "ERROR": "❌",
-        "WARNING": "⚠️",
-        "INFO": "ℹ️",
-        "SUCCESS": "✅",
-        "START": "🚀"
-    }
-    marker = level_markers.get(level, "ℹ️")
-    print(f"{marker} [{agent_name}] {message}")
-    
-    # FIXED: Use the appropriate logs directory and .jsonl extension
-    log_file = metrics_collector.agent_logs_dir / f"agent_activity_{datetime.datetime.now().strftime('%Y%m%d')}.jsonl"
-    
-    try:
-        with open(log_file, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-            
-    except Exception as e:
-        print(f"❌ Failed to write agent log: {e}")
+    # Print to console for visibility
+    if level in ["ERROR", "WARNING", "SUCCESS"]:
+        if level == "ERROR":
+            print(f"❌ [{agent_name}] {message}")
+        elif level == "WARNING":
+            print(f"⚠️ [{agent_name}] {message}")
+        elif level == "SUCCESS":
+            print(f"✅ [{agent_name}] {message}")
 
-def log_security_event(event_type: str, details: Dict[str, Any], severity: str = "INFO"):
-    """Log security-related events."""
-    log_entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "session_id": metrics_collector.session_id,
-        "event_type": event_type,
-        "severity": severity,
-        "details": details
-    }
+# Add the async version of SimpleTracer
+class AsyncSimpleTracer:
+    """Async-compatible tracer for workflow spans."""
     
-    # FIXED: Use the security logs directory and .jsonl extension
-    log_file = metrics_collector.security_logs_dir / f"security_{datetime.datetime.now().strftime('%Y%m%d')}.jsonl"
+    def __init__(self):
+        self.spans = {}
     
-    try:
-        with open(log_file, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-            
-    except Exception as e:
-        print(f"❌ Failed to write security log: {e}")
+    @contextmanager
+    async def start_span_async(self, span_name: str, attributes: Dict[str, Any] = None) -> Generator:
+        """Start a tracing span asynchronously."""
+        span_id = f"span_{int(time.time() * 1000)}"
+        start_time = time.time()
         
-    # Increment counter for security events
-    if severity in ["HIGH", "CRITICAL"]:
-        metrics_collector.increment_error(f"security:{event_type}")
+        await log_agent_activity_async(span_name, f"Starting span", "INFO", 
+                           metadata={"span_id": span_id, **(attributes or {})})
         
-    # Console output for high-severity events
-    if severity in ["HIGH", "CRITICAL"]:
-        print(f"🔒 SECURITY {severity}: {event_type} - {details.get('message', '')}")
+        try:
+            yield span_id
+            duration = time.time() - start_time
+            await log_agent_activity_async(span_name, f"Span completed in {duration:.2f}s", "INFO", 
+                               metadata={"span_id": span_id, "duration": duration, **(attributes or {})})
+        except Exception as e:
+            # Log error in span
+            duration = time.time() - start_time
+            await log_agent_activity_async(span_name, f"Span failed after {duration:.2f}s: {str(e)}", "ERROR",
+                               metadata={"span_id": span_id, "duration": duration, "error": str(e), **(attributes or {})})
+            raise
 
-# Global convenience logging functions
-def log_global(message: str, level: str = "INFO"):
-    """Global logging function for system-wide events."""
-    log_agent_activity("System", message, level)
+# Maintain the original for backward compatibility
+class SimpleTracer:
+    """Simple tracer for workflow spans."""
+    
+    def __init__(self):
+        self.spans = {}
+    
+    @contextmanager
+    def start_span(self, span_name: str, attributes: Dict[str, Any] = None) -> Generator:
+        """Start a tracing span, will use async when possible."""
+        span_id = f"span_{int(time.time() * 1000)}"
+        start_time = time.time()
+        
+        log_agent_activity(span_name, f"Starting span", "INFO", 
+                           metadata={"span_id": span_id, **(attributes or {})})
+        
+        try:
+            yield span_id
+            duration = time.time() - start_time
+            log_agent_activity(span_name, f"Span completed in {duration:.2f}s", "INFO", 
+                               metadata={"span_id": span_id, "duration": duration, **(attributes or {})})
+        except Exception as e:
+            # Log error in span
+            duration = time.time() - start_time
+            log_agent_activity(span_name, f"Span failed after {duration:.2f}s: {str(e)}", "ERROR",
+                               metadata={"span_id": span_id, "duration": duration, "error": str(e), **(attributes or {})})
+            raise
 
-def log_info(message: str):
-    """Convenience function for INFO level logging."""
-    log_global(message, "INFO")
+# Add the tracer instance
+tracer = SimpleTracer()
+async_tracer = AsyncSimpleTracer()
 
-def log_warning(message: str):
-    """Convenience function for WARNING level logging."""
-    log_global(message, "WARNING")
+# Update the async version of agent_trace_span
+@contextmanager
+async def agent_trace_span_async(agent_name: str, temperature: float, metadata: Optional[Dict[str, Any]] = None):
+    """
+    Async context manager for tracing agent execution with temperature metrics.
+    
+    Args:
+        agent_name: Name of the agent (e.g., "BRD Analyst")
+        temperature: Temperature setting for this agent (0.1-0.4)
+        metadata: Additional metadata
+    """
+    # Create combined metadata with temperature information
+    trace_metadata = {
+        "agent_type": agent_name,
+        "temperature": temperature,
+        "temperature_category": _categorize_temperature(temperature),
+        **(metadata or {})
+    }
+    
+    async with async_tracer.start_span_async(
+        span_name=f"{agent_name} Execution",
+        attributes=trace_metadata
+    ):
+        yield
 
-def log_error(message: str):
-    """Convenience function for ERROR level logging."""
-    log_global(message, "ERROR")
+# Helper function for temperature categorization (following your temperature strategy)
+def _categorize_temperature(temperature: float) -> str:
+    """Categorize temperature according to project guidelines."""
+    if temperature <= 0.1:
+        return "code_generation"
+    elif temperature <= 0.2:
+        return "analytical"
+    elif temperature <= 0.4:
+        return "creative"
+    else:
+        return "other"
 
-def initialize_logging(agent_name: str = "System"):
-    """Initialize logging system."""
-    log_agent_activity(agent_name, "Logging system initialized", "START")
-    return metrics_collector
-
-def save_final_metrics():
-    """Save final metrics at the end of execution."""
-    metrics_collector.save_metrics_to_file()
-    log_global("Final metrics saved", "SUCCESS")
+# Update the sync version to adapt to async when possible
+@contextmanager
+def agent_trace_span(agent_name: str, temperature: float, metadata: Optional[Dict[str, Any]] = None):
+    """
+    Context manager for tracing agent execution with temperature metrics.
+    Will use async when in an async context.
+    
+    Args:
+        agent_name: Name of the agent (e.g., "BRD Analyst")
+        temperature: Temperature setting for this agent (0.1-0.4)
+        metadata: Additional metadata
+    """
+    # Create combined metadata with temperature information
+    trace_metadata = {
+        "agent_type": agent_name,
+        "temperature": temperature,
+        "temperature_category": _categorize_temperature(temperature),
+        **(metadata or {})
+    }
+    
+    with tracer.start_span(
+        span_name=f"{agent_name} Execution",
+        attributes=trace_metadata
+    ):
+        yield

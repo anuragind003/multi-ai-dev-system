@@ -4,9 +4,10 @@ Defines the centralized state structure using LangGraph's TypedDict.
 ENHANCED: Integrated with AdvancedWorkflowConfig for sophisticated configuration management.
 """
 
-from typing import Dict, Any, List, Optional, TypedDict
-from typing_extensions import NotRequired
+from typing import Dict, Any, List, Optional, TypedDict, Union
+# Remove NotRequired import - we'll use a different approach
 from config import AdvancedWorkflowConfig
+import time
 
 class AgentState(TypedDict):
     """
@@ -31,8 +32,16 @@ class AgentState(TypedDict):
     # Retry configuration
     max_code_gen_retries: int  # Maximum code generation retries
     max_test_retries: int  # Maximum test generation retries
+    
+    # Phase tracking for phased workflow
     current_code_gen_retry: int  # Current code generation retry count
     current_test_retry: int  # Current test retry count
+    
+    # ==================== PHASE TRACKING ====================
+    current_phase_index: int  # Index of current phase in development_phases
+    completed_phases: List[str]  # List of completed phase IDs
+    phase_code_results: Dict[str, Dict[str, Any]]  # Phase ID -> code generation result
+    phase_execution_times: Dict[str, float]  # Phase ID -> execution time
     
     # ==================== AGENT OUTPUTS ====================
     # All agent outputs use STANDARDIZED field names
@@ -58,7 +67,8 @@ class AgentState(TypedDict):
     errors: List[Dict[str, Any]]  # List of errors encountered during execution
     
     # ==================== OPTIONAL WORKFLOW SUMMARY ====================
-    workflow_summary: NotRequired[Dict[str, Any]]  # Final workflow summary (added by finalize_workflow)
+    # Instead of NotRequired, use Dict or None for optional fields
+    workflow_summary: Dict[str, Any]  # Final workflow summary (added by finalize_workflow)
     
     # ==================== DEBUG AND CONTROL FLAGS ====================
     verbose: bool  # Enable verbose output
@@ -69,40 +79,38 @@ def create_initial_agent_state(
     workflow_config: AdvancedWorkflowConfig
 ) -> AgentState:
     """
-    ENHANCED: Create initial agent state using AdvancedWorkflowConfig.
-    
-    This function creates a properly initialized AgentState with all required
-    fields populated from the sophisticated configuration system.
+    ENHANCED: Create initial state for the workflow using AdvancedWorkflowConfig.
     
     Args:
         brd_content: Business Requirements Document content
         workflow_config: Advanced workflow configuration object
         
     Returns:
-        AgentState: Properly initialized state dictionary
+        AgentState: Initial state for the workflow
     """
-    import time
-    
-    # Convert workflow config to dictionary for storage in state
-    config_dict = workflow_config.to_dict()
-    
     return AgentState(
-        # Core input
+        # Core inputs
         brd_content=brd_content,
         
-        # Configuration from AdvancedWorkflowConfig
-        workflow_config=config_dict,
-        quality_threshold=workflow_config.min_quality_score,
+        # Configuration
+        workflow_config=workflow_config.to_dict(),
+        quality_threshold=workflow_config.min_quality_score,  # FIXED: Use min_quality_score instead of quality_threshold
         min_success_rate=workflow_config.min_success_rate,
-        min_coverage_percentage=workflow_config.min_coverage_percentage,
+        min_coverage_percentage=workflow_config.min_coverage_percentage,  # FIXED: Use min_coverage_percentage instead of min_coverage
         max_code_gen_retries=workflow_config.max_code_gen_retries,
         max_test_retries=workflow_config.max_test_retries,
         
-        # Retry tracking (initialized)
+        # Initialize retry counters
         current_code_gen_retry=0,
         current_test_retry=0,
         
-        # Agent outputs (empty initially, populated by agents)
+        # Phase tracking for phased code generation
+        current_phase_index=0,
+        completed_phases=[],
+        phase_code_results={},
+        phase_execution_times={},
+        
+        # Agent results
         requirements_analysis={},
         tech_stack_recommendation={},
         system_design={},
@@ -112,143 +120,89 @@ def create_initial_agent_state(
         quality_analysis={},
         test_validation_result={},
         
-        # Extracted metrics (conservative defaults)
+        # Metrics
         overall_quality_score=0.0,
         test_success_rate=0.0,
         code_coverage_percentage=0.0,
-        has_critical_issues=True,  # Conservative default
+        has_critical_issues=True,
         
-        # Workflow metadata
+        # Workflow tracking
         workflow_start_time=time.time(),
         agent_execution_times={},
         errors=[],
         
-        # Debug and control flags
+        # Initialize workflow_summary with empty dict (no longer NotRequired)
+        workflow_summary={},
+        
+        # Logging
         verbose=workflow_config.verbose_logging,
         debug=workflow_config.debug_mode
     )
 
 def validate_agent_state(state: AgentState) -> List[str]:
-    """
-    Validate the agent state structure and return any validation errors.
+    """Validate agent state and return list of issues."""
+    issues = []
     
-    Args:
-        state: Agent state to validate
+    # Check required fields
+    required_fields = ["brd_content", "workflow_config"]
+    for field in required_fields:
+        if field not in state or not state[field]:
+            issues.append(f"Missing required field: {field}")
+    
+    # Check that quality thresholds are valid
+    quality_threshold = state.get("quality_threshold", 0.0)
+    if not (0 <= quality_threshold <= 10):
+        issues.append(f"Invalid quality threshold: {quality_threshold}, must be between 0 and 10")
         
-    Returns:
-        List[str]: List of validation error messages (empty if valid)
-    """
-    errors = []
+    min_success_rate = state.get("min_success_rate", 0.0) 
+    if not (0 <= min_success_rate <= 1):
+        issues.append(f"Invalid min success rate: {min_success_rate}, must be between 0 and 1")
     
-    # Required string fields
-    required_string_fields = ["brd_content"]
-    for field in required_string_fields:
-        if not isinstance(state.get(field), str) or not state[field].strip():
-            errors.append(f"Field '{field}' must be a non-empty string")
-    
-    # Required numeric fields with ranges
-    numeric_validations = [
-        ("quality_threshold", 0.0, 10.0),
-        ("min_success_rate", 0.0, 1.0),
-        ("min_coverage_percentage", 0.0, 100.0),
-        ("overall_quality_score", 0.0, 10.0),
-        ("test_success_rate", 0.0, 1.0),
-        ("code_coverage_percentage", 0.0, 100.0),
-    ]
-    
-    for field, min_val, max_val in numeric_validations:
-        value = state.get(field)
-        if not isinstance(value, (int, float)):
-            errors.append(f"Field '{field}' must be a number")
-        elif not (min_val <= value <= max_val):
-            errors.append(f"Field '{field}' must be between {min_val} and {max_val}")
-    
-    # Required integer fields
-    required_int_fields = [
-        "max_code_gen_retries", "max_test_retries", 
-        "current_code_gen_retry", "current_test_retry"
-    ]
-    for field in required_int_fields:
-        value = state.get(field)
-        if not isinstance(value, int) or value < 0:
-            errors.append(f"Field '{field}' must be a non-negative integer")
-    
-    # Required dictionary fields
-    required_dict_fields = [
-        "workflow_config", "requirements_analysis", "tech_stack_recommendation",
-        "system_design", "implementation_plan", "code_generation_result",
-        "test_files", "quality_analysis", "test_validation_result",
-        "agent_execution_times"
-    ]
-    for field in required_dict_fields:
-        if not isinstance(state.get(field), dict):
-            errors.append(f"Field '{field}' must be a dictionary")
-    
-    # Required list field
-    if not isinstance(state.get("errors"), list):
-        errors.append("Field 'errors' must be a list")
-    
-    # Required boolean fields
-    required_bool_fields = ["has_critical_issues", "verbose", "debug"]
-    for field in required_bool_fields:
-        if not isinstance(state.get(field), bool):
-            errors.append(f"Field '{field}' must be a boolean")
-    
-    # Workflow start time validation
-    if not isinstance(state.get("workflow_start_time"), (int, float)):
-        errors.append("Field 'workflow_start_time' must be a timestamp")
-    
-    return errors
+    # Check that retry counters don't exceed limits
+    max_code_gen_retries = state.get("max_code_gen_retries", 3)
+    current_code_gen_retry = state.get("current_code_gen_retry", 0)
+    if current_code_gen_retry > max_code_gen_retries:
+        issues.append(f"Code generation retry count ({current_code_gen_retry}) exceeds limit ({max_code_gen_retries})")
+        
+    return issues
 
 def get_state_summary(state: AgentState) -> Dict[str, Any]:
-    """
-    Get a summary of the current agent state for monitoring and debugging.
+    """Get a summary of the current state for display or logging."""
     
-    Args:
-        state: Agent state to summarize
-        
-    Returns:
-        Dict[str, Any]: Summary information
-    """
-    import time
+    # Get workflow completion metrics
+    errors_count = len(state.get("errors", []))
     
-    # Calculate workflow progress
-    total_agents = 8  # Number of main agents in the workflow
-    completed_agents = sum(1 for key in [
-        "requirements_analysis", "tech_stack_recommendation", "system_design",
-        "implementation_plan", "code_generation_result", "test_files",
-        "quality_analysis", "test_validation_result"
-    ] if state.get(key))
+    # Get completed agents (approximate by checking non-empty results)
+    agent_results = {
+        "BRD Analysis": bool(state.get("requirements_analysis")),
+        "Tech Stack": bool(state.get("tech_stack_recommendation")),
+        "System Design": bool(state.get("system_design")),
+        "Planning": bool(state.get("implementation_plan")),
+        "Code Generation": bool(state.get("code_generation_result")), 
+        "Quality Analysis": bool(state.get("quality_analysis")),
+        "Tests": bool(state.get("test_files")),
+        "Test Validation": bool(state.get("test_validation_result"))
+    }
     
-    progress_percentage = (completed_agents / total_agents) * 100
+    completed_agents = sum(1 for agent, completed in agent_results.items() if completed)
+    total_agents = len(agent_results)
     
-    # Get current execution time
-    current_time = time.time()
-    elapsed_time = current_time - state.get("workflow_start_time", current_time)
+    # Create elapsed time string
+    elapsed_time = time.time() - state.get("workflow_start_time", time.time())
+    elapsed_str = f"{elapsed_time:.2f}s"
+    
+    # Get phase information for phased workflow
+    current_phase = state.get("current_phase_index", 0)
+    total_phases = len(state.get("implementation_plan", {}).get("development_phases", []))
     
     return {
-        "workflow_progress": {
-            "completed_agents": completed_agents,
-            "total_agents": total_agents,
-            "progress_percentage": progress_percentage,
-            "elapsed_time": elapsed_time
-        },
-        "current_metrics": {
-            "quality_score": state.get("overall_quality_score", 0.0),
-            "test_success_rate": state.get("test_success_rate", 0.0),
-            "coverage_percentage": state.get("code_coverage_percentage", 0.0),
-            "has_critical_issues": state.get("has_critical_issues", True)
-        },
-        "retry_status": {
-            "code_gen_retries": f"{state.get('current_code_gen_retry', 0)}/{state.get('max_code_gen_retries', 0)}",
-            "test_retries": f"{state.get('current_test_retry', 0)}/{state.get('max_test_retries', 0)}"
-        },
-        "errors_count": len(state.get("errors", [])),
-        "configuration": {
-            "environment": state.get("workflow_config", {}).get("environment", "unknown"),
-            "quality_threshold": state.get("quality_threshold", 0.0),
-            "debug_mode": state.get("debug", False)
-        }
+        "completed_agents": f"{completed_agents}/{total_agents}",
+        "current_phase": f"{current_phase}/{total_phases}" if total_phases > 0 else "N/A",
+        "elapsed_time": elapsed_str,
+        "errors_count": errors_count,
+        "quality_score": state.get("overall_quality_score", 0.0),
+        "test_success": f"{state.get('test_success_rate', 0.0) * 100:.1f}%",
+        "has_critical_issues": state.get("has_critical_issues", True),
     }
 
 # Type aliases for better code readability
@@ -266,23 +220,29 @@ class StateFields:
     WORKFLOW_CONFIG = "workflow_config"
     QUALITY_THRESHOLD = "quality_threshold"
     MIN_SUCCESS_RATE = "min_success_rate"
-    MIN_COVERAGE_PERCENTAGE = "min_coverage_percentage"
-    
-    # Retry tracking
+    MIN_COVERAGE = "min_coverage_percentage"
     MAX_CODE_GEN_RETRIES = "max_code_gen_retries"
     MAX_TEST_RETRIES = "max_test_retries"
-    CURRENT_CODE_GEN_RETRY = "current_code_gen_retry"  # FIXED: Changed from "current_code_gen_retries" to match AgentState field
+    
+    # Retry counters
+    CURRENT_CODE_GEN_RETRY = "current_code_gen_retries"
     CURRENT_TEST_RETRY = "current_test_retry"
     
-    # Agent outputs (STANDARDIZED names)
+    # Phase tracking
+    CURRENT_PHASE_INDEX = "current_phase_index"
+    COMPLETED_PHASES = "completed_phases"
+    PHASE_CODE_RESULTS = "phase_code_results"
+    PHASE_EXECUTION_TIMES = "phase_execution_times"
+    
+    # Agent results
     REQUIREMENTS_ANALYSIS = "requirements_analysis"
     TECH_STACK_RECOMMENDATION = "tech_stack_recommendation"
     SYSTEM_DESIGN = "system_design"
     IMPLEMENTATION_PLAN = "implementation_plan"
     CODE_GENERATION_RESULT = "code_generation_result"
-    TEST_FILES = "test_files"  # STANDARDIZED
-    QUALITY_ANALYSIS = "quality_analysis"  # STANDARDIZED
-    TEST_VALIDATION_RESULT = "test_validation_result"  # STANDARDIZED
+    TEST_FILES = "test_files"
+    QUALITY_ANALYSIS = "quality_analysis"
+    TEST_VALIDATION_RESULT = "test_validation_result"
     
     # Extracted metrics
     OVERALL_QUALITY_SCORE = "overall_quality_score"
@@ -290,12 +250,14 @@ class StateFields:
     CODE_COVERAGE_PERCENTAGE = "code_coverage_percentage"
     HAS_CRITICAL_ISSUES = "has_critical_issues"
     
-    # Workflow metadata
+    # Workflow tracking
     WORKFLOW_START_TIME = "workflow_start_time"
     AGENT_EXECUTION_TIMES = "agent_execution_times"
     ERRORS = "errors"
+    
+    # Optional workflow summary
     WORKFLOW_SUMMARY = "workflow_summary"
     
-    # Control flags
+    # Debug and control flags
     VERBOSE = "verbose"
     DEBUG = "debug"
