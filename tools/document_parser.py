@@ -38,6 +38,10 @@ class DocumentParser:
         if PDF_LIBRARY:
             print(f"   PDF support: {PDF_LIBRARY}")
     
+    def parse(self, file_path: str) -> str:
+        """Alias for parse_document to maintain API compatibility."""
+        return self.parse_document(file_path)
+        
     def parse_document(self, file_path: str) -> str:
         """Parse document with enhanced error handling and validation."""
         file_path = Path(file_path)

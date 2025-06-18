@@ -258,6 +258,9 @@ class RAGManager:
         self.metadata_file = self.vector_store_path / "metadata.json"
         self.documents_metadata: Dict[str, Any] = {}
         
+        # Add agent_name for consistent logging
+        self.agent_name = "RAG Manager"
+        
         # Text splitter for document chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
@@ -441,16 +444,7 @@ class RAGManager:
             return 0
     
     def add_document_string(self, content: str, metadata: Dict[str, Any] = None) -> int:
-        """
-        Add a document from string content to the vector store.
-        
-        Args:
-            content: Document content as string
-            metadata: Additional metadata for the document
-            
-        Returns:
-            1 if document was added, 0 if failed
-        """
+        """Add a document from string content to the vector store."""
         try:
             if not content.strip():
                 return 0
@@ -470,28 +464,89 @@ class RAGManager:
             
             # Add to vector store
             if self.vector_store is None:
+                # Directly use CachedEmbeddings as an Embeddings object
+                # The class now properly implements the Embeddings interface
                 self.vector_store = FAISS.from_documents(chunks, self.embeddings)
             else:
                 self.vector_store.add_documents(chunks)
-            
-            monitoring.log_agent_activity("RAG Manager", f"Added string document ({len(chunks)} chunks)")
+        
+            monitoring.log_agent_activity(self.agent_name, f"Added string document ({len(chunks)} chunks)")
             return 1
-            
+        
         except Exception as e:
-            monitoring.log_agent_activity("RAG Manager", f"Error adding string document: {e}", "ERROR")
+            monitoring.log_agent_activity(self.agent_name, f"Error adding string document: {str(e)}", "ERROR")
             return 0
+        
+    # Add this fallback JSON loader method around line 485
+    def _load_json_without_jq(self, file_path: Path) -> List[Document]:
+        """Alternative JSON loading method that doesn't require jq."""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                # Try to parse as JSON
+                data = json.load(f)
+                content = json.dumps(data, indent=2)  # Format for readability
+                
+            return [Document(
+                page_content=content,
+                metadata={
+                    "source": str(file_path),
+                    "file_type": "json",
+                    "loading_method": "direct_json_parse"
+                }
+            )]
+        except Exception as e:
+            # If JSON parsing fails, treat as plain text
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            return [Document(
+                page_content=content,
+                metadata={
+                    "source": str(file_path),
+                    "file_type": "json_as_text",
+                    "parsing_error": str(e)
+                }
+            )]
     
     def _load_document(self, file_path: Path) -> List[Document]:
         """Load a document based on its file type."""
         documents = []
         
         try:
-            if file_path.suffix.lower() == '.json':
-                loader = JSONLoader(str(file_path), jq_schema='.', text_content=False)
-                documents = loader.load()
+            # FIXED: Enhanced document loading with specialized handling
+            file_extension = file_path.suffix.lower()
+            
+            # Special handling for requirements files
+            if file_path.name == "requirements.txt" or file_path.name.endswith("requirements.txt"):
+                # Read directly instead of using loader
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    documents = [Document(
+                        page_content=content,
+                        metadata={"source": str(file_path), "file_type": "txt"}
+                    )]
+                    return documents
+                except Exception as e:
+                    monitoring.log_agent_activity("RAG Manager", f"Error directly reading {file_path}: {e}", "WARNING")
+            
+            # Regular document loading with appropriate loaders
+            elif file_extension == '.json':
+                try:
+                    # Try to use JSONLoader
+                    loader = JSONLoader(str(file_path), jq_schema='.', text_content=False)
+                    documents = loader.load()
+                except ImportError:
+                    # Fallback if jq not installed
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    documents = [Document(
+                        page_content=content,
+                        metadata={"source": str(file_path), "file_type": "json"}
+                    )]
             else:
                 # Text-based files (Python, Markdown, etc.)
-                loader = TextLoader(str(file_path), encoding='utf-8')
+                loader = TextLoader(str(file_path), encoding='utf-8', autodetect_encoding=True)
                 documents = loader.load()
                 
         except Exception as e:
@@ -499,313 +554,243 @@ class RAGManager:
             
         return documents
     
+    def get_stats(self) -> Dict[str, Any]:
+        """Get basic statistics for the RAGManager."""
+        doc_count = 0
+        chunk_count = 0
+        
+        # Extract document and chunk counts from FAISS if available
+        if self.vector_store and hasattr(self.vector_store, 'index_to_docstore_id'):
+            doc_ids = self.vector_store.index_to_docstore_id.values()
+            doc_count = len(set(doc_ids))  # Count unique documents
+            
+            if hasattr(self.vector_store, 'docstore') and hasattr(self.vector_store.docstore, '_dict'):
+                chunk_count = len(self.vector_store.docstore._dict)
+        
+        return {
+            "vector_store_path": str(self.vector_store_path),
+            "embeddings_model": str(type(self.embeddings).__name__),
+            "vector_store_initialized": self.vector_store is not None,
+            "documents_in_metadata": len(self.documents_metadata),
+            "estimated_documents": doc_count,
+            "total_chunks": chunk_count,
+            "last_updated": datetime.now().isoformat()
+        }
+    
+    # Add basic _save_vector_store method that doesn't rely on security features
     def _save_vector_store(self) -> None:
-        """
-        ENHANCED: Save vector store using SecureFAISSManager with security measures.
-        """
+        """Save FAISS vector store to local path."""
         if not self.vector_store:
-            # FIXED: Changed self.logger.error to monitoring.log_agent_activity
             monitoring.log_agent_activity(self.agent_name, "No vector store to save", "ERROR")
             return
         
         try:
-            # Update secure manager's vector store reference
-            self.secure_manager.vector_store = self.vector_store
+            # Ensure directory exists
+            os.makedirs(self.vector_store_path, exist_ok=True)
             
-            # Use secure saving
-            success = self.secure_manager.save_index_securely()
-            
-            if success:
-                monitoring.log_agent_activity(
-                    "Project RAG Manager",
-                    f"Vector store saved securely (mode: {self.environment})",
-                    "SUCCESS"
-                )
-            else:
-                # Fallback to basic saving in development mode
-                if self.environment == "development":
-                    monitoring.log_agent_activity(
-                        "Project RAG Manager",
-                        "Secure save failed, using basic save in development mode",
-                        "WARNING"
-                    )
-                    super()._save_vector_store()
-                else:
-                    raise Exception("Secure save failed in production environment")
-                    
-        except Exception as e:
-            monitoring.log_agent_activity(
-                "Project RAG Manager",
-                f"Error during secure vector store save: {e}",
-                "ERROR"
-            )
-            
-            # In development mode, try fallback
-            if self.environment == "development":
-                monitoring.log_agent_activity(
-                    "Project RAG Manager",
-                    "Attempting fallback to basic save",
-                    "WARNING"
-                )
-                try:
-                    super()._save_vector_store()
-                except Exception as fallback_error:
-                    monitoring.log_agent_activity(
-                        "Project RAG Manager",
-                        f"Fallback save also failed: {fallback_error}",
-                        "ERROR"
-                    )
-    
-    def index_project_code(self, exclude_patterns: List[str] = None) -> bool:
-        """Enhanced project indexing with robust exclusion pattern matching and security."""
-        
-        if exclude_patterns is None:
-            exclude_patterns = self._get_default_exclusion_patterns()
-        
-        try:
-            all_documents = []
-            processed_files = 0
-            skipped_files = 0
-            error_files = 0
-            
-            # FIXED: Changed self.logger.info to monitoring.log_agent_activity
+            # Save vector store
+            self.vector_store.save_local(str(self.vector_store_path))
             monitoring.log_agent_activity(
                 self.agent_name,
-                f"Starting RAG indexing of {self.project_root} (security mode: {self.environment})",
+                f"Vector store saved to {self.vector_store_path}",
+                "SUCCESS"
+            )
+        except Exception as e:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Error saving vector store: {e}",
+                "ERROR"
+            )
+
+    def initialize_empty_vector_store(self) -> bool:
+        """
+        Initialize an empty vector store without adding any documents.
+        
+        This creates a minimal vector store that can be populated later,
+        which is useful for incremental building or testing.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                "Initializing empty vector store",
                 "INFO"
             )
             
-            for file_path in Path(self.project_root).rglob('*'):
-                if file_path.is_file():
-                    # Enhanced exclusion checking
-                    if self._should_exclude_file_enhanced(file_path, exclude_patterns):
-                        skipped_files += 1
-                        continue
-                    
-                    # Enhanced size check with warning
-                    file_size = file_path.stat().st_size
-                    if file_size > 5 * 1024 * 1024:  # 5MB limit
-                        monitoring.log_agent_activity(
-                            self.agent_name,
-                            f"Skipping large file: {file_path} ({file_size / 1024 / 1024:.1f}MB)",
-                            "WARNING"
-                        )
-                        skipped_files += 1
-                        continue
-                    
-                    # Load document with enhanced error handling
-                    document = self._load_document_enhanced(file_path)
-                    if document:
-                        all_documents.append(document)
-                        processed_files += 1
-                    else:
-                        error_files += 1
+            # Create a minimal document to initialize the store
+            # (FAISS requires at least one document to create the index)
+            placeholder_doc = Document(
+                page_content="Vector store initialization placeholder",
+                metadata={
+                    "source": "system",
+                    "type": "initialization",
+                    "created_at": datetime.now().isoformat()
+                }
+            )
             
-            if all_documents:
-                # Create vector store with security considerations
-                try:
-                    # Use secure manager for vector store creation
-                    self.vector_store = FAISS.from_documents(all_documents, self.embeddings)
-                    self.secure_manager.vector_store = self.vector_store
-                    
-                    # Save securely
-                    success = self.secure_manager.save_index_securely()
-                    
-                    if not success and self.environment == "development":
-                        # Fallback to basic save in development
-                        self.vector_store.save_local(str(self.vector_store_path))
-                        monitoring.log_agent_activity(
-                            "Project RAG Manager",
-                            "Used fallback saving in development mode",
-                            "WARNING"
-                        )
-                    
-                    monitoring.log_agent_activity(
-                        self.agent_name,
-                        f"RAG indexing complete - Processed: {processed_files} files, Skipped: {skipped_files}, "
-                        f"Errors: {error_files}, Documents: {len(all_documents)}, Security: {self.environment}",
-                        "SUCCESS"
-                    )
-                    
-                    return True
-                    
-                except Exception as e:
-                    monitoring.log_agent_activity(
-                        self.agent_name, 
-                        f"Failed to save vector store: {e}", 
-                        "ERROR"
-                    )
-                    return False
-            else:
-                monitoring.log_agent_activity(
-                    self.agent_name,
-                    "No documents found to index", 
-                    "WARNING"
-                )
-                return False
-                
+            # Create vector store with single placeholder document
+            chunks = self.text_splitter.split_documents([placeholder_doc])
+            self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+            
+            # Save the initialized vector store
+            self._save_vector_store()
+            self._save_metadata()
+            
+            monitoring.log_agent_activity(
+                self.agent_name,
+                "Empty vector store initialized successfully",
+                "SUCCESS"
+            )
+            return True
+            
         except Exception as e:
             monitoring.log_agent_activity(
                 self.agent_name,
-                f"RAG indexing failed: {e}", 
+                f"Failed to initialize empty vector store: {str(e)}",
                 "ERROR"
             )
             return False
-    
-    def get_security_status(self) -> Dict[str, Any]:
-        """Get security status information."""
-        features_enabled = {
-            "encryption": self.require_encryption and SECURITY_AVAILABLE,
-            "integrity_checks": self.enable_integrity_checks,
-            "access_logging": self.enable_access_logging,
-            "secure_deserialization": not self.allow_dangerous_deserialization,
-            "backup": self.backup_required
-        }
-        
-        recommendations = []
-        
-        # Generate recommendations based on security mode
-        if self.security_mode == "development":
-            if not features_enabled["encryption"] and SECURITY_AVAILABLE:
-                recommendations.append("Enable encryption for better security")
-            if not features_enabled["integrity_checks"]:
-                recommendations.append("Enable integrity checks for better security")
-        elif self.security_mode == "staging" or self.security_mode == "production":
-            if not features_enabled["encryption"]:
-                if SECURITY_AVAILABLE:
-                    recommendations.append("CRITICAL: Enable encryption for production environment")
-                else:
-                    recommendations.append("CRITICAL: Install cryptography package for encryption support")
-            if not features_enabled["integrity_checks"]:
-                recommendations.append("CRITICAL: Enable integrity checks for production environment")
-            if not features_enabled["access_logging"]:
-                recommendations.append("Enable access logging for audit trails")
-            if features_enabled["secure_deserialization"]:
-                recommendations.append("Disable dangerous deserialization in production")
-        
-        return {
-            "security_mode": self.security_mode,
-            "features_enabled": features_enabled,
-            "security_available": SECURITY_AVAILABLE,
-            "recommendations": recommendations
-        }
 
-    def get_stats(self) -> Dict[str, Any]:
-        """Get statistics including security information."""
-        
-        base_stats = super().get_stats()
-        
-        # Add security stats
-        security_stats = {
-            "security_mode": self.environment,
-            "security_features_available": SECURITY_AVAILABLE,
-            "secure_manager_initialized": self.secure_manager is not None
-        }
-        
-        if self.secure_manager:
-            security_status = self.secure_manager.get_security_status()
-            security_stats["active_security_features"] = [
-                feature for feature, enabled in security_status['features_enabled'].items() 
-                if enabled
-            ]
-        
-        return {**base_stats, "security": security_stats}
+class CachedEmbeddings(Embeddings):
+    """Cache embedding results to avoid recomputing."""
     
-    def _get_default_exclusion_patterns(self) -> List[str]:
-        """Return the default exclusion patterns for project code indexing."""
-        return self.default_exclude_patterns
-
-    def _should_exclude_file_enhanced(self, file_path: Path, exclude_patterns: List[str]) -> bool:
+    def __init__(self, embedding_model, cache_dir=None, vector_store_path=None):
         """
-        Enhanced exclusion check with pattern matching.
+        Initialize the embedding cache.
         
         Args:
-            file_path: Path to check
-            exclude_patterns: List of patterns to exclude
-            
-        Returns:
-            True if the file should be excluded, False otherwise
+            embedding_model: The underlying embedding model
+            cache_dir: Directory to store cache files (defaults to .embedding_cache in vector_store_path)
+            vector_store_path: Path to the vector store (for default cache location)
         """
-        str_path = str(file_path)
+        self.model = embedding_model
+        self.cache = {}
         
-        for pattern in exclude_patterns:
-            # Check for direct substring match (faster)
-            if pattern in str_path:
-                return True
+        # Improved cache location logic
+        if cache_dir:
+            self.cache_dir = cache_dir
+        elif vector_store_path:
+            self.cache_dir = os.path.join(vector_store_path, ".embedding_cache")
+        else:
+            self.cache_dir = ".rag_cache"
             
-            # Check for glob pattern match
-            if any(fnmatch.fnmatch(str_path, p) for p in exclude_patterns if '*' in p):
-                return True
+        self.cache_file = os.path.join(self.cache_dir, "embedding_cache.pkl")
         
-        return False
-
-    def _load_document_enhanced(self, file_path: Path) -> Optional[Document]:
-        """
-        Enhanced document loading with better error handling.
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.cache_dir, exist_ok=True)
         
-        Args:
-            file_path: Path to the document
+        # Load existing cache if available
+        self._load_cache()
+        
+        # Stats for reporting
+        self.cache_hits = 0
+        self.cache_misses = 0
+    
+    def _load_cache(self):
+        """Load embedding cache from file with improved error handling."""
+        if not os.path.exists(self.cache_file):
+            self.cache = {}
+            return
             
-        Returns:
-            Document object or None if loading failed
-        """
         try:
-            # Choose loader based on file type
-            if file_path.suffix.lower() in ['.py', '.js', '.ts', '.java', '.c', '.cpp', '.h']:
-                # Code file - use code-specific splitter
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                    
-                doc = Document(
-                    page_content=content,
-                    metadata={
-                        'source': str(file_path),
-                        'file_type': file_path.suffix,
-                        'file_size': file_path.stat().st_size,
-                        'indexed_at': datetime.now().isoformat()
-                    }
-                )
-                return doc
-                
-            elif file_path.suffix.lower() in ['.json', '.yaml', '.yml']:
-                # Structured data file
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                    
-                doc = Document(
-                    page_content=content,
-                    metadata={
-                        'source': str(file_path),
-                        'file_type': file_path.suffix,
-                        'file_size': file_path.stat().st_size,
-                        'indexed_at': datetime.now().isoformat()
-                    }
-                )
-                return doc
-                
-            else:
-                # Text file (default)
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                    
-                doc = Document(
-                    page_content=content,
-                    metadata={
-                        'source': str(file_path),
-                        'file_type': file_path.suffix,
-                        'file_size': file_path.stat().st_size,
-                        'indexed_at': datetime.now().isoformat()
-                    }
-                )
-                return doc
-                
+            with open(self.cache_file, "rb") as f:
+                import pickle
+                self.cache = pickle.load(f)
+        except (pickle.PickleError, IOError, EOFError) as e:
+            # More specific error handling
+            print(f"Warning: Failed to load embedding cache: {e}")
+            self.cache = {}
         except Exception as e:
-            monitoring.log_agent_activity(
-                "Project RAG Manager",
-                f"Error loading document {file_path}: {e}",
-                "ERROR"
-            )
-            return None
+            print(f"Warning: Unexpected error loading cache: {e}")
+            self.cache = {}
+    
+    def _save_cache(self):
+        """Save embedding cache to file with improved error handling."""
+        try:
+            # Ensure directory exists (might have been deleted)
+            os.makedirs(self.cache_dir, exist_ok=True)
+            
+            with open(self.cache_file, "wb") as f:
+                import pickle
+                pickle.dump(self.cache, f)
+        except (pickle.PickleError, IOError) as e:
+            print(f"Warning: Failed to save embedding cache: {e}")
+        except Exception as e:
+            print(f"Warning: Unexpected error saving cache: {e}")
+    
+    def save_cache_explicitly(self):
+        """Explicitly save the cache, useful for shutdown or close operations."""
+        if self.cache_misses > 0:  # Only save if cache was modified
+            self._save_cache()
+            return True
+        return False
+        
+    def embed_documents(self, texts):
+        """Embed documents with caching (implements Embeddings interface)."""
+        results = []
+        to_compute = []
+        indices = []
+        
+        # Check cache first
+        for i, text in enumerate(texts):
+            # Use a hash of the text as the cache key
+            text_hash = hashlib.md5(text.encode()).hexdigest()
+            
+            if text_hash in self.cache:
+                results.append(self.cache[text_hash])
+                self.cache_hits += 1
+            else:
+                to_compute.append(text)
+                indices.append((i, text_hash))
+                self.cache_misses += 1
+        
+        # Compute missing embeddings
+        if to_compute:
+            computed = self.model.embed_documents(to_compute)
+            
+            # Update cache with new embeddings
+            for (i, text_hash), embedding in zip(indices, computed):
+                self.cache[text_hash] = embedding
+                results.append(embedding)
+        
+        # Save cache periodically (every 100 misses)
+        if self.cache_misses % 100 == 0 and self.cache_misses > 0:
+            self._save_cache()
+            
+        return results
+    
+    def embed_query(self, text):
+        """Embed query with caching (implements Embeddings interface)."""
+        # Use a hash of the text as the cache key
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        query_key = f"query_{text_hash}"
+        
+        if query_key in self.cache:
+            self.cache_hits += 1
+            return self.cache[query_key]
+        
+        # Calculate embedding
+        embedding = self.model.embed_query(text)
+        
+        # Cache the result
+        self.cache[query_key] = embedding
+        self.cache_misses += 1
+        
+        # Save cache periodically
+        if self.cache_misses % 20 == 0:
+            self._save_cache()
+            
+        return embedding
+
+    # ADD THIS METHOD to make the class callable
+    def __call__(self, texts):
+        """Make the embeddings object callable - required by FAISS."""
+        if isinstance(texts, str):
+            return self.embed_query(texts)
+        else:
+            return self.embed_documents(texts)
 
 class ProjectRAGManager(RAGManager):
     """
@@ -814,7 +799,7 @@ class ProjectRAGManager(RAGManager):
     """
     
     def __init__(self, project_root: str, vector_store_path: str = None, 
-                 embeddings: Optional[Embeddings] = None, environment: str = "development"):
+             embeddings: Optional[Embeddings] = None, environment: str = "development"):
         """Initialize the Project RAG Manager with security settings."""
         # Initialize vector store path if not provided
         vector_store_path = vector_store_path or os.path.join(project_root, ".rag_store")
@@ -826,6 +811,9 @@ class ProjectRAGManager(RAGManager):
         self.project_root = Path(project_root)
         self.environment = environment
         self.agent_name = "Project RAG Manager"
+        
+        # Set up logger
+        self.logger = logging.getLogger(self.agent_name)
         
         # Common file patterns to exclude from indexing
         self.default_exclude_patterns = [
@@ -850,6 +838,9 @@ class ProjectRAGManager(RAGManager):
             f"Initialized ProjectRAGManager for {project_root} in {environment} mode",
             "INFO"
         )
+        
+        # Register this instance for shutdown handling
+        register_rag_manager(self)
 
     def load_existing_index(self) -> bool:
         """
@@ -924,49 +915,35 @@ class ProjectRAGManager(RAGManager):
         # Delegate to the secure_manager's get_security_status method
         return self.secure_manager.get_security_status()
 
-    def get_retriever(self, search_type: str = "similarity", search_kwargs: Optional[Dict[str, Any]] = None) -> Optional[BaseRetriever]:
+    def get_retriever(self, search_kwargs=None):
         """
-        Get a retriever for the vector store.
+        Get a retriever from the vector store with fallback.
         
         Args:
-            search_type: Type of search to perform ("similarity", "mmr", or "similarity_score_threshold")
-            search_kwargs: Additional search arguments (like "k" for number of results)
+            search_kwargs: Optional search parameters for the retriever
             
         Returns:
-            A retriever object or None if vector store is not initialized
+            Retriever instance if available, otherwise None
         """
-        if self.vector_store is None:
-            monitoring.log_agent_activity(
-                self.agent_name,
-                "Cannot create retriever - vector store not initialized",
-                "WARNING"
-            )
+        if not self.vector_store:
+            self.logger.warning("Cannot create retriever - vector store not initialized")
             return None
-        
-        # Set default search kwargs if not provided
-        if search_kwargs is None:
-            search_kwargs = {"k": 5}  # Default to retrieving 5 documents
-        
+            
         try:
-            retriever = self.vector_store.as_retriever(
-                search_type=search_type,
-                search_kwargs=search_kwargs
+            default_search_kwargs = {
+                "k": 5,
+                "score_threshold": 0.5
+            }
+            
+            if search_kwargs:
+                default_search_kwargs.update(search_kwargs)
+                
+            return self.vector_store.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs=default_search_kwargs
             )
-            
-            monitoring.log_agent_activity(
-                self.agent_name,
-                f"Created retriever with search_type={search_type} and k={search_kwargs.get('k', 'default')}",
-                "INFO"
-            )
-            
-            return retriever
-            
         except Exception as e:
-            monitoring.log_agent_activity(
-                self.agent_name,
-                f"Error creating retriever: {e}",
-                "ERROR"
-            )
+            self.logger.error(f"Error creating retriever from vector store: {e}")
             return None
     
     def initialize_index_from_project(self, project_dir: str = None) -> bool:
@@ -1024,3 +1001,467 @@ class ProjectRAGManager(RAGManager):
                 "ERROR"
             )
             return False
+    
+    def _save_vector_store(self) -> None:
+        """
+        ENHANCED: Save vector store using SecureFAISSManager with security measures.
+        """
+        if not self.vector_store:
+            monitoring.log_agent_activity(self.agent_name, "No vector store to save", "ERROR")
+            return
+        
+        try:
+            # Update secure manager's vector store reference
+            self.secure_manager.vector_store = self.vector_store
+            
+            # Use secure saving
+            success = self.secure_manager.save_index_securely()
+            
+            if success:
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    f"Vector store saved securely (mode: {self.environment})",
+                    "SUCCESS"
+                )
+            else:
+                # Fallback to basic saving in development mode
+                if self.environment == "development":
+                    monitoring.log_agent_activity(
+                        self.agent_name,
+                        "Secure save failed, using basic save in development mode",
+                        "WARNING"
+                    )
+                    super()._save_vector_store()  # Use parent's basic save method
+                else:
+                    monitoring.log_agent_activity(
+                        self.agent_name,
+                        "CRITICAL: Secure save failed in production environment",
+                        "ERROR"
+                    )
+                    # In production, don't fallback to insecure save
+                    raise Exception("Secure save failed in production environment")
+                    
+        except Exception as e:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Error during secure vector store save: {e}",
+                "ERROR"
+            )
+            
+            # In development mode, try fallback
+            if self.environment == "development":
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    "Attempting fallback to basic save",
+                    "WARNING"
+                )
+                try:
+                    super()._save_vector_store()  # Use parent's basic save method
+                except Exception as fallback_error:
+                    monitoring.log_agent_activity(
+                        self.agent_name,
+                        f"Fallback save also failed: {fallback_error}",
+                        "ERROR"
+                    )
+
+    def index_project_code(self, project_path: Optional[str] = None, file_patterns: Optional[List[str]] = None) -> int:
+        """
+        Index code files from a project directory into the vector store.
+        
+        Args:
+            project_path: Optional path to index (defaults to project_root)
+            file_patterns: Optional list of file patterns to include
+            
+        Returns:
+            Number of files indexed
+        """
+        logger = logging.getLogger(self.agent_name)
+        
+        # Enable embedding cache for better performance
+        self.enable_embedding_cache()
+        
+        # Use optimized indexing with batching and parallelization
+        try:
+            return self.optimized_index_project(
+                project_path=project_path, 
+                batch_size=50,  # Process 50 documents at a time
+                max_workers=4   # Use 4 parallel workers
+            )
+        except Exception as e:
+            # Fall back to original implementation if optimization fails
+            logger.warning(f"Optimized indexing failed: {e}. Falling back to standard indexing.")
+            
+            # Rest of the original implementation...
+            # (Keep the existing implementation as fallback)
+            try:
+                # Use the provided project directory or fall back to a sensible default
+                if not project_path:
+                    # Use the current working directory instead of module directory
+                    project_path = os.getcwd()
+                
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    f"Creating new RAG index from project code in: {project_path}",
+                    "INFO"
+                )
+                
+                # Check if directory exists
+                if not os.path.exists(project_path):
+                    monitoring.log_agent_activity(
+                        self.agent_name,
+                        f"Project directory does not exist: {project_path}",
+                        "ERROR"
+                    )
+                    return False
+                    
+                # Define file patterns to include in indexing
+                file_patterns = file_patterns or ['*.py', '*.js', '*.html', '*.css', '*.md', '*.txt', 
+                                                   '*.json', '*.yaml', '*.yml']
+                
+                documents_added_total = 0
+                
+                # Iterate through specified patterns
+                for pattern in file_patterns:
+                    for file_path in Path(project_path).rglob(pattern):
+                        if file_path.is_file():
+                            # Check against exclusion patterns
+                            should_exclude = False
+                            for exclude in self.default_exclude_patterns:
+                                if fnmatch.fnmatch(str(file_path.relative_to(project_path)), exclude) or \
+                                   any(part.startswith('.') for part in file_path.parts) or \
+                                   any(ex_part in file_path.parts for ex_part in ['node_modules', 'venv', '.venv', '__pycache__', '.git']):
+                                    should_exclude = True
+                                    break
+                        
+                            if not should_exclude:
+                                try:
+                                    # Add document using relative path for better context
+                                    rel_path = str(file_path.relative_to(project_path))
+                                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                        content = f.read()
+                                
+                                    # Fix: Use add_document_string instead of add_document for content
+                                    added = self.add_document_string(content, {
+                                        "source": rel_path, 
+                                        "filetype": file_path.suffix[1:],
+                                        "full_path": str(file_path)
+                                    })
+                                
+                                    documents_added_total += added
+                                except Exception as e:
+                                    logger.warning(f"Error processing file {file_path}: {str(e)}")
+                
+                if documents_added_total > 0:
+                    # Save the vector store if methods exist
+                    if hasattr(self, '_save_vector_store'):
+                        self._save_vector_store()
+                    if hasattr(self, '_save_metadata'):
+                        self._save_metadata()
+                    logger.info(f"Successfully indexed {documents_added_total} files from project.")
+                else:
+                    logger.warning(f"No new documents found to index in {project_path}.")
+                
+                return documents_added_total
+                
+            except Exception as e:
+                logger.error(f"Error during indexing: {e}")
+                return 0
+
+    def optimized_index_project(self, project_path=None, batch_size=50, max_workers=4):
+        """
+        Optimized project indexing with batching, parallelization and hash-based change detection.
+        Significantly improves indexing speed compared to sequential processing.
+        
+        Args:
+            project_path: Path to project directory (defaults to self.project_root)
+            batch_size: Number of documents to process in one batch
+            max_workers: Number of parallel workers for file processing
+            
+        Returns:
+            int: Number of chunks indexed
+        """
+        import concurrent.futures
+        import time
+        
+        start_time = time.time()
+        logger = logging.getLogger(self.agent_name)
+        logger.info(f"Starting optimized indexing for {project_path or self.project_root}")
+        
+        # 1. Load hash registry for incremental indexing
+        hash_registry = self._load_hash_registry()
+        path_to_index = Path(project_path) if project_path else Path(self.project_root)
+        
+        # 2. Get optimized file patterns based on project type
+        file_patterns = self._get_optimized_file_patterns()
+        
+        # 3. Gather files to process with efficient filtering
+        changed_files = []
+        for pattern in file_patterns:
+            for file_path in path_to_index.rglob(pattern.replace('**/', '')):
+                # Skip excluded directories efficiently with fast path checks
+                if any(exclude in str(file_path) for exclude in self.default_exclude_patterns):
+                    continue
+                
+                if file_path.is_file():
+                    # Check if file has changed using hash
+                    try:
+                        file_hash = hashlib.md5(file_path.read_bytes()).hexdigest()
+                        file_key = str(file_path)
+                        
+                        if file_key not in hash_registry or hash_registry[file_key] != file_hash:
+                            changed_files.append((file_path, file_hash))
+                            hash_registry[file_key] = file_hash
+                    except Exception as e:
+                        logger.warning(f"Error hashing file {file_path}: {e}")
+        
+        logger.info(f"Found {len(changed_files)} changed files to process")
+        
+        # 4. Process files in parallel
+        documents = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Use ThreadPoolExecutor instead of ProcessPoolExecutor to avoid pickling issues
+            results = list(executor.map(_process_file_for_indexing, changed_files))
+            
+            # Filter out failed results and create documents
+            documents = [
+                Document(
+                    page_content=r["content"],
+                    metadata={
+                        "source": r["path"], 
+                        "filetype": Path(r["path"]).suffix[1:],
+                        "indexed_at": datetime.now().isoformat(),
+                        "file_hash": r["hash"]
+                    }
+                ) 
+                for r in results if r
+            ]
+        
+        # 5. Process documents in batches
+        total_chunks = 0
+        if documents:
+            # Chunk and index the documents in batches
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i+batch_size]
+                chunks = self.text_splitter.split_documents(batch)
+                total_chunks += len(chunks)
+                
+                # Add to vector store efficiently
+                if self.vector_store is None:
+                    self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+                else:
+                    self.vector_store.add_documents(chunks)
+        
+            # 6. Save only after all batches are processed
+            self._save_vector_store()
+            self._save_hash_registry(hash_registry)
+            
+        end_time = time.time()
+        duration = end_time - start_time
+        logger.info(f"Indexing completed in {duration:.2f} seconds")
+        logger.info(f"Processed {len(documents)} documents with {total_chunks} total chunks")
+        
+        return total_chunks
+    
+    def _load_hash_registry(self):
+        """Load hash registry for incremental indexing."""
+        hash_file = os.path.join(self.vector_store_path, "hash_registry.json")
+        if os.path.exists(hash_file):
+            try:
+                with open(hash_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger = logging.getLogger(self.agent_name)
+                logger.warning(f"Error loading hash registry: {e}")
+        return {}
+
+    def _save_hash_registry(self, hash_registry):
+        """Save hash registry for incremental indexing."""
+        hash_file = os.path.join(self.vector_store_path, "hash_registry.json")
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(hash_file), exist_ok=True)
+            
+            with open(hash_file, 'w', encoding='utf-8') as f:
+                json.dump(hash_registry, f, indent=2)
+            return True
+        except Exception as e:
+            logger = logging.getLogger(self.agent_name)
+            logger.warning(f"Error saving hash registry: {e}")
+            return False
+        
+        # Add this helper method to detect file encoding
+    def _detect_file_encoding(self, file_path: Path) -> str:
+        """Detect the encoding of a file to avoid encoding errors."""
+        try:
+            import chardet
+            with open(file_path, 'rb') as f:
+                raw_data = f.read(10000)  # Read a sample to detect encoding
+                result = chardet.detect(raw_data)
+                return result['encoding'] or 'utf-8'
+        except ImportError:
+            # Fallback encodings to try if chardet is not available
+            for encoding in ['utf-8', 'latin-1', 'cp1252', 'ascii']:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        f.read(100)  # Try reading a sample
+                    return encoding
+                except UnicodeDecodeError:
+                    continue
+            return 'utf-8'  # Default to UTF-8 if all else fails
+
+    def _get_optimized_file_patterns(self):
+        """Return more specific file patterns based on project type."""
+        # Detect project type based on files in root
+        project_root = self.project_root
+        logger = logging.getLogger(self.agent_name)
+        
+        # JavaScript/TypeScript project detection
+        if (os.path.exists(os.path.join(project_root, 'package.json')) or
+            os.path.exists(os.path.join(project_root, 'node_modules'))):
+            logger.info("Detected JavaScript/TypeScript project")
+            return ['**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx', '**/*.md', '**/*.json']
+        
+        # Python project detection
+        elif (os.path.exists(os.path.join(project_root, 'requirements.txt')) or
+              os.path.exists(os.path.join(project_root, 'setup.py')) or
+              os.path.exists(os.path.join(project_root, 'pyproject.toml'))):
+            logger.info("Detected Python project")
+            return ['**/*.py', '**/*.md', '**/*.rst', '**/*.txt']
+        
+        # Generic fallback with common code file extensions
+        else:
+            logger.info("Using generic file patterns")
+            return [
+                '**/*.py', '**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx',
+                '**/*.java', '**/*.kt', '**/*.c', '**/*.cpp', '**/*.h',
+                '**/*.cs', '**/*.go', '**/*.rb', '**/*.php',
+                '**/*.md', '**/*.rst', '**/*.txt',
+                '**/*.json', '**/*.yaml', '**/*.yml'
+            ]
+    
+    def enable_embedding_cache(self):
+        """Enable embedding cache for better performance."""
+        if not hasattr(self, '_original_embeddings'):
+            # Store the original embeddings
+            self._original_embeddings = self.embeddings
+            
+            # Create cache directory within the vector store path
+            cache_dir = os.path.join(self.vector_store_path, '.embedding_cache')
+            
+            # Create and use the cached embeddings wrapper with vector_store_path
+            self.embeddings = CachedEmbeddings(
+                self._original_embeddings, 
+                cache_dir=cache_dir,
+                vector_store_path=str(self.vector_store_path)
+            )
+            logger = logging.getLogger(self.agent_name)
+            logger.info(f"Embedding cache enabled at {cache_dir}")
+            
+            # If vector store already exists, update its embeddings
+            if self.vector_store and hasattr(self.vector_store, 'embedding_function'):
+                self.vector_store.embedding_function = self.embeddings
+                
+            return True
+        return False
+
+    def _get_embedding_function(self):
+        """Get the appropriate embedding function based on type."""
+        if isinstance(self.embeddings, CachedEmbeddings):
+            # Use callable interface for FAISS
+            return self.embeddings
+        else:
+            return self.embeddings
+        
+
+    def close(self):
+        """Properly close the RAG manager, saving caches."""
+        try:
+            # Save embedding cache if it exists
+            if hasattr(self, 'embeddings') and isinstance(self.embeddings, CachedEmbeddings):
+                saved = self.embeddings.save_cache_explicitly()
+                if saved:
+                    logger = logging.getLogger(self.agent_name)
+                    logger.info("Embedding cache saved during shutdown")
+            
+            # Save vector store if needed
+            if hasattr(self, 'vector_store') and self.vector_store is not None:
+                self._save_vector_store()
+                
+            # Save metadata
+            self._save_metadata()
+            
+            # Save hash registry if available
+            if hasattr(self, '_save_hash_registry'):
+                self._save_hash_registry(self._load_hash_registry())
+                
+            return True
+        except Exception as e:
+            logger = logging.getLogger(self.agent_name)
+            logger.error(f"Error during RAG manager shutdown: {e}")
+            return False
+
+# Add this function outside of any class
+def _process_file_for_indexing(args):
+    """Process a single file for indexing (must be at module level for multiprocessing)."""
+    # FIXED: Handle both tuple unpacking and single argument case
+    if isinstance(args, tuple) and len(args) == 2:
+        file_path, file_hash = args
+    else:
+        # Handle the case where only file_path is provided
+        file_path = args
+        try:
+            file_hash = hashlib.md5(Path(file_path).read_bytes()).hexdigest()
+        except Exception:
+            file_hash = str(time.time())  # Fallback hash
+
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        return {
+            "content": content, 
+            "path": str(file_path),
+            "hash": file_hash
+        }
+    except UnicodeDecodeError:
+        # Try as binary file in case of encoding issues
+        try:
+            import chardet
+            with open(file_path, 'rb') as f:
+                raw_content = f.read()
+                encoding = chardet.detect(raw_content)['encoding'] or 'utf-8'
+            with open(file_path, 'r', encoding=encoding, errors='ignore') as f:
+                content = f.read()
+            return {
+                "content": content, 
+                "path": str(file_path),
+                "hash": file_hash
+            }
+        except Exception as e:
+            print(f"Error processing file {file_path}: {str(e)}")
+            return None
+    except Exception as e:
+        print(f"Error processing file {file_path}: {str(e)}")
+        return None
+
+# Add this method to ProjectRAGManager
+
+import atexit
+_rag_managers = []
+
+def register_rag_manager(manager):
+    """Register a RAG manager for proper shutdown handling."""
+    if manager not in _rag_managers:
+        _rag_managers.append(manager)
+
+def _shutdown_rag_managers():
+    """Save all RAG manager caches on shutdown."""
+    for manager in _rag_managers:
+        try:
+            if hasattr(manager, 'close'):
+                manager.close()
+        except:
+            pass  # Ignore errors during shutdown
+
+# Register the shutdown function
+atexit.register(_shutdown_rag_managers)
+

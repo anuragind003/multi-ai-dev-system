@@ -1,481 +1,693 @@
+#!/usr/bin/env python
 """
-Multi-AI Development System - Main Entry Point
-
-This module orchestrates the complete software development automation workflow
-using specialized AI agents and LangGraph for workflow management.
-ENHANCED: Uses AdvancedWorkflowConfig for comprehensive configuration management.
+Multi-AI Development System - Command line interface
 """
 
 import os
 import sys
-import argparse
+import logging
+from typing import Dict, List, Optional, Any
+from dotenv import load_dotenv
+
+# Load .env file at the very beginning
+load_dotenv()
+
+# Verify LangSmith variables are loaded
+for key in ["LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "LANGCHAIN_TRACING_V2", "LANGCHAIN_PROJECT"]:
+    if key in os.environ:
+        logging.info(f"{key} found in environment variables")
+    else:        logging.warning(f"{key} NOT found in environment variables")
+
+# Now import project modules
+from utils.langsmith_utils import configure_logging
+configure_logging(silent_mode=True)
+
+# Rest of your imports
 import time
-from pathlib import Path
-import atexit
 import json
+import argparse
+import uuid
+import atexit
+import threading
+from datetime import datetime, timedelta
+from pathlib import Path
+from langchain_google_genai import HarmCategory, HarmBlockThreshold
+from langchain.globals import set_llm_cache
+from langchain_community.cache import SQLiteCache
 
-# Add project root to Python path
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, PROJECT_ROOT)
+# Now your other imports
+from config import (
+    get_llm,
+    get_embedding_model,
+    AdvancedWorkflowConfig,
+    initialize_system_config  # Add this import
+)
+from tools.document_parser import DocumentParser
+from graph import get_workflow, create_phased_workflow, create_iterative_workflow, validate_workflow_configuration  # Added validate_workflow_configuration
+import monitoring
+from agent_state import create_initial_agent_state, StateFields  # Add this import
+from shared_memory import SharedProjectMemory
+from checkpoint_manager import CheckpointManager
+from rag_manager import ProjectRAGManager
+from message_bus import MessageBus
+from tools.code_execution_tool import CodeExecutionTool
+from agent_temperatures import get_default_temperatures  # Add this import
 
-try:
-    # FIXED: Import get_embedding_model instead of get_embeddings
-    from config import get_llm, get_embedding_model, TrackedChatModel, AdvancedWorkflowConfig, setup_langgraph_server
-    from shared_memory import SharedProjectMemory
-    from tools.code_execution_tool import CodeExecutionTool
-    from rag_manager import ProjectRAGManager  # Clean import without debugging
-    from tools.document_parser import DocumentParser
-    from graph import get_workflow
-    import monitoring
-    
-    # Import graph nodes
-    from graph_nodes import (
-        brd_analysis_node,
-        tech_stack_recommendation_node,
-        system_design_node,
-        planning_node,
-        code_generation_node,
-        test_case_generation_node,
-        code_quality_analysis_node,
-        test_validation_node,
-        finalize_workflow
-    )
-    
-except ImportError as e:
-    print(f"❌ Critical import error: {e}")
-    print("Please ensure all required dependencies are installed:")
-    print("  pip install -r requirements.txt")
-    sys.exit(1)
+# Add this after the existing imports, around line 28
+import hashlib
 
-# Initialize LangSmith at startup - MUST be before any agent instantiation
-langsmith_enabled = setup_langgraph_server(enable_server=True)
-if langsmith_enabled:
-    print("🔍 Using LangSmith for tracing and observability")
-    # Set up temperature categories appropriate for your agents
-    os.environ["LANGSMITH_TEMPERATURE_CATEGORIES"] = json.dumps({
-        "code_generation": 0.1,
-        "analytical": 0.2, 
-        "creative": 0.3,
-        "planning": 0.4
-    })
-else:
-    print("ℹ️ Using local tracing only")
+# Add at the top after imports
+os.environ["DEBUG_JSON_PARSING"] = "true"  # Enable detailed JSON parsing logs
 
-def parse_arguments():
-    """ENHANCED: Parse command line arguments for AdvancedWorkflowConfig integration."""
-    
-    parser = argparse.ArgumentParser(
-        description="Multi-AI Development System - Automated Software Development",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic usage with default configuration
-  python main.py requirements.pdf
-  
-  # Production deployment with configuration file
-  python main.py requirements.pdf --config configs/production.yaml --environment production
-  
-  # Development with debugging and custom thresholds
-  python main.py requirements.pdf --environment development --debug --quality-threshold 7.0
-  
-Configuration Sources (in order of precedence):
-  1. Command line arguments (highest priority)
-  2. Environment variables (prefix: MAISD_)
-  3. Configuration file (YAML/JSON)
-  4. Default values (lowest priority)
-  
-Environment Variables:
-  RAG_SECURITY_MODE: Set to 'development', 'staging', or 'production'
-  MAISD_QUALITY_THRESHOLD: Minimum code quality score (0-10)
-  MAISD_MAX_CODE_GEN_RETRIES: Maximum code generation retries
-  FAISS_ENCRYPTION_PASSWORD: Custom encryption password for production
-        """
-    )
-    
-    # Required arguments
-    parser.add_argument("brd_file", help="Path to Business Requirements Document")
-    
-    # Configuration file
-    parser.add_argument("--config", help="Path to configuration file (YAML/JSON)")
-    parser.add_argument("--output-dir", help="Custom output directory")
-    
-    # Workflow settings
-    parser.add_argument("--workflow-type", default="iterative", 
-                       choices=["basic", "iterative", "phased", "modular", "resumable"],
-                       help="Type of workflow to run")
-    parser.add_argument("--environment", choices=["development", "staging", "production"],
-                       help="Deployment environment (affects security and behavior)")
-    
-    # Quality thresholds (will be merged with config file)
-    parser.add_argument("--quality-threshold", type=float,
-                       help="Minimum code quality score (0-10)")
-    parser.add_argument("--min-success-rate", type=float,
-                       help="Minimum test success rate (0.0-1.0)")
-    parser.add_argument("--min-coverage", type=float,
-                       help="Minimum code coverage percentage")
-    
-    # Retry settings
-    parser.add_argument("--max-retries", type=int,
-                       help="Maximum code generation retries")
-    parser.add_argument("--max-test-retries", type=int,
-                       help="Maximum test generation retries")
-    
-    # Performance settings
-    parser.add_argument("--agent-timeout", type=int,
-                       help="Agent execution timeout in seconds")
-    parser.add_argument("--parallel-execution", action="store_true",
-                       help="Enable parallel agent execution (experimental)")
-    
-    # System settings
-    parser.add_argument("--skip-rag", action="store_true",
-                       help="Skip RAG system initialization")
-    parser.add_argument("--fail-fast", action="store_true",
-                       help="Stop execution on first critical error")
-    parser.add_argument("--verbose", action="store_true",
-                       help="Enable verbose output")
-    parser.add_argument("--debug", action="store_true",
-                       help="Enable debug mode")
-    
-    # Add to your argparse arguments
-    parser.add_argument(
-        "--platform",
-        action="store_true",
-        help="Enable LangGraph Platform integration"
-    )
-    parser.add_argument(
-        "--server",
-        action="store_true",
-        help="Enable LangGraph Server for workflow visualization and debugging"
-    )
-    
-    return parser.parse_args()
+# Create cache directory if it doesn't exist
+os.makedirs(".cache", exist_ok=True)
 
-def load_brd_content(brd_file_path: str) -> str:
-    """Load and parse Business Requirements Document."""
+# Get rate limiting settings from environment or use defaults
+_min_delay_seconds = float(os.environ.get("LLM_RATE_LIMIT_DELAY", "4.0"))
+_max_calls_per_minute = int(os.environ.get("LLM_MAX_CALLS_PER_MINUTE", "15"))
+logging.info(f"Rate limiting: {_min_delay_seconds}s delay ({_max_calls_per_minute} calls/minute maximum)")
+
+# Set up caching for LLM calls with additional debug options
+set_llm_cache(SQLiteCache(database_path=".cache/langchain.db"))
+logging.info("LLM caching enabled with SQLite backend")
+
+# Register a function to report cache stats on exit
+def report_cache_stats():
+    """Report cache performance statistics when application exits"""
+    from config import get_cache_stats  # Import here to avoid circular imports
+    stats = get_cache_stats()
+    hits = stats.get("hits", 0)
+    misses = stats.get("misses", 0)
+    total = hits + misses
+    hit_rate = (hits / total * 100) if total > 0 else 0
+    logging.info(f"Cache performance: {hits} hits, {misses} misses ({hit_rate:.1f}% hit rate)")
+    logging.info(f"Estimated API calls saved: {hits}")
     
-    if not os.path.exists(brd_file_path):
-        raise FileNotFoundError(f"BRD file not found: {brd_file_path}")
+atexit.register(report_cache_stats)
+
+# Add this near the beginning of main() function
+# Report cache stats periodically during long runs
+def report_cache_stats_periodically():
+    """Report cache stats periodically during long runs"""
+    current_time = time.time()
+    if current_time - _cache_stats["last_report_time"] > 300:  # Every 5 minutes
+        from config import get_cache_stats
+        stats = get_cache_stats()
+        hits = stats.get("hits", 0)
+        misses = stats.get("misses", 0)
+        total = hits + misses
+        hit_rate = (hits / total * 100) if total > 0 else 0
+        
+        monitoring.log_global(
+            f"Cache performance: {hits} hits, {misses} misses ({hit_rate:.1f}% hit rate)",
+            "INFO"
+        )
+        _cache_stats["last_report_time"] = current_time
+
+# Register the periodic reporter with atexit to ensure it runs
+timer = threading.Timer(300.0, report_cache_stats_periodically)
+timer.daemon = True
+timer.start()
+
+def validate_initial_state(state: Dict) -> List[str]:
+    """Validate that the initial state contains all required keys."""
+    required_keys = [
+        "brd_content",
+        "workflow_id", 
+        "workflow_start_time",
+        "temperature_strategy"
+    ]
+    
+    missing_keys = [key for key in required_keys if key not in state]
+    return missing_keys
+
+# Add timing measurements:
+def log_timed_activity(activity_name, func, *args, **kwargs):
+    """Execute a function with timing and logging."""
+    start = time.time()
+    monitoring.log_agent_activity("System", f"Starting {activity_name}", "START")
+    try:
+        result = func(*args, **kwargs)
+        elapsed = time.time() - start
+        monitoring.log_agent_activity("System", f"{activity_name} completed in {elapsed:.2f}s", "SUCCESS")
+        return result
+    except Exception as e:
+        elapsed = time.time() - start
+        monitoring.log_agent_activity("System", f"{activity_name} failed after {elapsed:.2f}s: {e}", "ERROR")
+        raise
+
+def warm_llm_cache(common_prompts):
+    """Pre-populate cache with responses for common prompts."""
+    if not common_prompts:
+        return 0
+    
+    llm = get_llm(temperature=0.1)
+    count = 0
+    logging.info(f"Warming cache with {len(common_prompts)} common prompts...")
+    
+    for prompt in common_prompts:
+        try:
+            _ = llm.invoke(prompt)
+            count += 1
+            # Add small delay to avoid hitting rate limits during warming
+            time.sleep(0.5)
+        except Exception as e:
+            logging.warning(f"Error warming cache for prompt: {str(e)}")
+    
+    logging.info(f"Cache warmed with {count} common prompts")
+    return count
+
+def clear_llm_caches():
+    """Clear all LLM caches to free memory and reset cache state."""
+    from config import clear_caches  # Import here to avoid circular imports
+    import sqlite3
     
     try:
-        parser = DocumentParser()
-        content = parser.parse_document(brd_file_path)
+        # Try to clear the SQLite cache
+        if os.path.exists(".cache/langchain.db"):
+            try:
+                conn = sqlite3.connect(".cache/langchain.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM llm_cache")
+                conn.commit()
+                conn.close()
+                logging.info("SQLite cache cleared")
+            except Exception as e:
+                logging.warning(f"Failed to clear SQLite cache: {e}")
         
-        if not content or len(content.strip()) < 100:
-            raise ValueError("BRD content is too short or empty")
-        
-        print(f"✅ BRD loaded successfully: {len(content)} characters")
-        return content
-        
-    except Exception as e:
-        raise Exception(f"Failed to parse BRD file: {e}")
-
-def setup_output_directory(project_name: str, custom_output_dir: str = None) -> str:
-    """Setup output directory for generated code."""
-    
-    if custom_output_dir:
-        output_dir = Path(custom_output_dir)
-    else:
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output_dir = Path("output") / f"{project_name}_{timestamp}"
-    
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Create subdirectories
-    (output_dir / "src").mkdir(exist_ok=True)
-    (output_dir / "tests").mkdir(exist_ok=True)
-    (output_dir / "docs").mkdir(exist_ok=True)
-    (output_dir / "logs").mkdir(exist_ok=True)
-    
-    return str(output_dir)
-
-def initialize_rag_system(project_root: str, skip_rag: bool = False, environment: str = "development") -> ProjectRAGManager:
-    """Initialize the RAG system with security considerations."""
-    
-    if skip_rag:
-        print("⏭️ Skipping RAG initialization as requested")
-        return None
-    
-    try:
-        print(f"🔍 Initializing RAG system (security mode: {environment})...")
-        
-        # ENHANCED: Use environment parameter for security mode
-        rag_manager = ProjectRAGManager(project_root, environment=environment)
-        
-        # Display security status
-        security_status = rag_manager.get_security_status()
-        print(f"🔒 Security mode: {security_status['security_mode']}")
-        
-        if security_status['recommendations']:
-            print("💡 Security recommendations:")
-            for rec in security_status['recommendations'][:3]:  # Show top 3
-                print(f"   • {rec}")
-        
-        # Try to load existing index first
-        if rag_manager.load_existing_index():
-            print("✅ Loaded existing RAG index with security verification")
-            
-            # Show active security features
-            active_features = security_status.get('features_enabled', {})
-            enabled_features = [feature for feature, enabled in active_features.items() if enabled]
-            if enabled_features:
-                print(f"🛡️  Active security features: {', '.join(enabled_features)}")
-        else:
-            print("📚 Creating new RAG index from project code...")
-            if rag_manager.index_project_code():
-                print("✅ RAG index created successfully with security integration")
-            else:
-                print("⚠️ RAG indexing failed, continuing without RAG")
-                return None
-        
-        return rag_manager
+        # Clear in-memory caches from config
+        stats = clear_caches()
+        logging.info(f"Memory caches cleared. Stats: {stats.get('entries_cleared', 0)} entries removed")
         
     except Exception as e:
-        print(f"⚠️ RAG initialization failed: {e}")
-        print("Continuing without RAG support...")
-        return None
+        logging.error(f"Error clearing caches: {str(e)}")
 
-def create_initial_state(brd_content: str, workflow_config: AdvancedWorkflowConfig) -> dict:
-    """
-    SIMPLIFIED: Create initial state using the enhanced agent_state.py functionality.
-    This function now delegates to the proper state creation function.
-    """
-    from agent_state import create_initial_agent_state
-    
-    # Use the enhanced state creation function
-    return create_initial_agent_state(brd_content, workflow_config)
-
-def display_results(final_state, run_output_dir):
-    """Enhanced result display with trace URL."""
-    print("\n" + "="*50)
-    print("📊 WORKFLOW EXECUTION SUMMARY")
-    print("="*50)
-    
-    # Add the trace viewer URL
-    trace_url = monitoring.get_trace_viewer_url()
-    print(f"\n🔍 View detailed execution trace: {trace_url}")
-    
-    # Print workflow summary
-    print_workflow_summary(final_state)
-    
-    # Show state summary for debugging
-    if final_state.get("debug", False):
-        from agent_state import get_state_summary
-        state_summary = get_state_summary(final_state)
-        print("\n" + "="*60)
-        print("DEBUG: WORKFLOW STATE SUMMARY")
-        print("="*60)
-        print(f"Progress: {state_summary['workflow_progress']['progress_percentage']:.1f}% complete")
-        print(f"Elapsed Time: {state_summary['workflow_progress']['elapsed_time']:.2f}s")
-        print(f"Quality Score: {state_summary['current_metrics']['quality_score']:.1f}/10")
-        print(f"Test Success Rate: {state_summary['current_metrics']['test_success_rate']:.2%}")
-        print(f"Coverage: {state_summary['current_metrics']['coverage_percentage']:.1f}%")
-        print(f"Retries Used: Code({state_summary['retry_status']['code_gen_retries']}), Tests({state_summary['retry_status']['test_retries']})")
-        print(f"Errors: {state_summary['errors_count']}")
-    
-    # Show output directory contents
-    print(f"\n📁 Generated files in: {run_output_dir}")
-    try:
-        for root, dirs, files in os.walk(run_output_dir):
-            level = root.replace(run_output_dir, '').count(os.sep)
-            indent = ' ' * 2 * level
-            print(f"{indent}{os.path.basename(root)}/")
-            subindent = ' ' * 2 * (level + 1)
-            for file in files:
-                print(f"{subindent}{file}")
-    except Exception as e:
-        print(f"⚠️ Could not list output directory: {e}")
-
-def print_workflow_summary(final_state: dict):
-    """ENHANCED: Print workflow summary with better state field access."""
-    
-    print("\n" + "="*80)
-    print("WORKFLOW EXECUTION SUMMARY")
-    print("="*80)
-    
-    # Import state field constants for consistency
-    from agent_state import StateFields
-    
-    # Basic information
-    workflow_summary = final_state.get(StateFields.WORKFLOW_SUMMARY, {})
-    total_time = workflow_summary.get("total_execution_time", 0)
-    status = workflow_summary.get("status", "unknown")
-    
-    print(f"Status: {status.upper()}")
-    print(f"Total Execution Time: {total_time:.2f} seconds")
-    
-    # Configuration summary
-    workflow_config = final_state.get(StateFields.WORKFLOW_CONFIG, {})
-    environment = workflow_config.get("environment", "unknown")
-    print(f"Environment: {environment}")
-    
-    # Agent execution times
-    execution_times = final_state.get(StateFields.AGENT_EXECUTION_TIMES, {})
-    if execution_times:
-        print(f"\n📊 Agent Performance:")
-        for agent, time_taken in execution_times.items():
-            print(f"   {agent}: {time_taken:.2f}s")
-    
-    # Quality metrics using standardized field names
-    quality_score = final_state.get(StateFields.OVERALL_QUALITY_SCORE, 0)
-    test_success_rate = final_state.get(StateFields.TEST_SUCCESS_RATE, 0)
-    coverage_percentage = final_state.get(StateFields.CODE_COVERAGE_PERCENTAGE, 0)
-    
-    print(f"\n📈 Quality Metrics:")
-    print(f"   Quality Score: {quality_score:.1f}/10")
-    print(f"   Test Success Rate: {test_success_rate:.2%}")
-    print(f"   Code Coverage: {coverage_percentage:.1f}%")
-    
-    # Errors
-    errors = final_state.get(StateFields.ERRORS, [])
-    if errors:
-        print(f"\n⚠️ Errors Encountered: {len(errors)}")
-        for i, error in enumerate(errors[:3], 1):  # Show first 3 errors
-            print(f"   {i}. {error.get('agent', 'Unknown')}: {error.get('error', 'Unknown error')}")
-        if len(errors) > 3:
-            print(f"   ... and {len(errors) - 3} more errors")
-    
-    # Configuration details
-    config_summary = {
-        "Quality Threshold": final_state.get(StateFields.QUALITY_THRESHOLD, 0),
-        "Min Success Rate": final_state.get(StateFields.MIN_SUCCESS_RATE, 0),
-        "Min Coverage": final_state.get(StateFields.MIN_COVERAGE_PERCENTAGE, 0),
-        "Max Retries": final_state.get(StateFields.MAX_CODE_GEN_RETRIES, 0)
-    }
-    
-    print(f"\n⚙️ Configuration Used:")
-    for key, value in config_summary.items():
-        if isinstance(value, float) and 0 < value < 1:
-            print(f"   {key}: {value:.2%}")
-        else:
-            print(f"   {key}: {value}")
-    
-    print("="*80)
+_cache_stats = {
+    "hits": 0,
+    "misses": 0,
+    "last_report_time": time.time()
+}
 
 def main():
-    """ENHANCED: Main entry point using AdvancedWorkflowConfig."""
+    """Main entry point for the Multi-AI Development System."""
+    import argparse
+    import json
+    import time
+    import logging
+    import os
+    import monitoring
+    from datetime import datetime
     
-    try:
-        # Parse command line arguments
-        args = parse_arguments()
-        
-        # ENHANCED: Create sophisticated workflow configuration
-        print("🔧 Loading workflow configuration...")
-        
-        try:
-            workflow_config = AdvancedWorkflowConfig.load_from_multiple_sources(
-                config_file=args.config,  # None if not provided
-                env_prefix="MAISD_",      # Environment variable prefix
-                args=args                 # Command line arguments
-            )
-            
-            # Print configuration summary
-            if args.debug:
-                workflow_config.print_detailed_summary()
-            else:
-                print(f"✅ Configuration loaded from: {workflow_config._config_source.name}")
-                print(f"   Environment: {workflow_config.environment}")
-                print(f"   Quality threshold: {workflow_config.min_quality_score}/10")
-                print(f"   Max retries: {workflow_config.max_code_gen_retries}")
-        
-        except Exception as e:
-            print(f"⚠️ Configuration loading failed: {e}")
-            print("Using default configuration...")
-            workflow_config = AdvancedWorkflowConfig()
-            workflow_config.environment = args.environment or "development"
-            workflow_config.debug_mode = args.debug or False
-            workflow_config.verbose_logging = args.verbose or False
-        
-        # Set up output directory
-        run_output_dir = setup_output_directory("project", args.output_dir)
-        print(f"📁 Output directory: {run_output_dir}")
-        
-        # Load BRD content
-        try:
-            brd_content = load_brd_content(args.brd_file)
-        except Exception as e:
-            print(f"❌ Error loading BRD: {e}")
-            return 1
-        
-        # Initialize components
-        try:
-            # Initialize LLM
-            llm = get_llm()
-            
-            # Initialize RAG system with environment-based security
-            rag_manager = initialize_rag_system(
-                project_root=PROJECT_ROOT,
-                skip_rag=args.skip_rag,
-                environment=workflow_config.environment
-            )
-            
-            # Initialize code execution tool
-            code_execution_tool = CodeExecutionTool(run_output_dir)
-            
-            print("✅ All components initialized successfully")
-            
-        except Exception as e:
-            print(f"❌ Error initializing components: {e}")
-            return 1
-        
-        # ENHANCED: Create initial state with sophisticated configuration
-        initial_state = create_initial_state(brd_content, workflow_config)
-        
-        # Get and run workflow
-        try:
-            workflow = get_workflow(
-                workflow_type=args.workflow_type,
-                platform_enabled=args.platform
-            )
-            print(f"🚀 Starting {args.workflow_type} workflow with {workflow_config.environment} configuration...")
-            
-            # Initialize shared memory - MOVED THIS UP
-            shared_memory = SharedProjectMemory(run_output_dir)
-            
-            # Register cleanup for application exit
-            atexit.register(shared_memory.close)
-            
-            # Create workflow configuration - USING shared_memory
-            config = {
-                "configurable": {
-                    "llm": llm,
-                    "memory": shared_memory,  # FIXED: Use shared_memory variable
-                    "rag_manager": rag_manager,
-                    "code_execution_tool": code_execution_tool,
-                    "run_output_dir": run_output_dir,
-                    "environment": workflow_config.environment,
-                    "workflow_config": workflow_config
+    # Setup argument parser
+    parser = argparse.ArgumentParser(description='Multi-AI Development System')
+    parser.add_argument('--brd', type=str, help='Path to Business Requirements Document')
+    parser.add_argument('--workflow', type=str, default='phased', 
+                        choices=['basic', 'iterative', 'phased', 'modular', 'resumable'],
+                        help='Workflow type to use')
+    parser.add_argument('--output', type=str, help='Output directory')
+    parser.add_argument('--config', type=str, help='Path to configuration file')
+    parser.add_argument('--platform', action='store_true', 
+                        help='Enable LangGraph Platform integration')
+    # Add new argument for LangGraph Dev console
+    parser.add_argument('--dev', action='store_true', 
+                        help='Register workflows with LangGraph Dev visualization console')
+    # Add argument for tracing
+    parser.add_argument('--trace-all', action='store_true',
+                   help='Execute all workflow types with tracing for LangSmith visibility')
+    # Add to the existing argument parser
+    parser.add_argument('--rate-limit', type=float, default=4.0,
+                   help='Minimum delay between API calls in seconds (default: 4.0)')
+    parser.add_argument('--no-cache', action='store_true',
+                   help='Disable LLM response caching')
+    parser.add_argument('--clear-cache', action='store_true',
+                   help='Clear all LLM caches before running')
+    args = parser.parse_args()
+    
+    # Configure logging
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    
+    # FIXED: Helper function definition moved to before its usage
+    def get_llm_specific_configuration(provider: str) -> dict:
+        """Returns provider-specific LLM configuration."""
+        if provider == "google":
+            return {
+                "safety_settings": {
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                },
+                "generation_config": {
+                    "top_k": 40,
+                    "top_p": 0.95,
+                    "max_output_tokens": 8192
                 }
             }
-            
-            # Run the workflow
-            final_state = workflow.invoke(initial_state, config=config)
-            
-            # Display results
-            display_results(final_state, run_output_dir)
-            
-            # Determine exit code based on workflow status
-            workflow_status = final_state.get("workflow_summary", {}).get("status", "unknown")
-            if workflow_status == "completed_successfully":
-                return 0
-            elif workflow_status in ["completed_with_issues", "completed_with_warnings"]:
-                return 1  # Warning exit code
-            else:
-                return 2  # Error exit code
-            
-        except Exception as e:
-            print(f"❌ Workflow execution failed: {e}")
-            if workflow_config.debug_mode:
-                import traceback
-                traceback.print_exc()
-            return 2
+        elif provider == "anthropic":
+            return {
+                "temperature": 0.2,
+                "max_tokens": 4096
+            }
+        return {}
     
-    except KeyboardInterrupt:
-        print("\n⏹️ Execution interrupted by user")
-        return 130  # Standard interrupt exit code
+    # Load system config - Add error handling and default config
+    logger.info("Initializing system configuration...")
+    try:
+        workflow_config = initialize_system_config(args.config)
+        if not workflow_config:
+            logger.warning("Failed to load configuration, using default settings")
+            workflow_config = AdvancedWorkflowConfig()
+            # Set default attributes that might be missing
+            setattr(workflow_config, 'llm_provider', 'google')
+            setattr(workflow_config, 'environment', 'development')
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return 1
+        logger.error(f"Error initializing configuration: {e}")
+        logger.warning("Using default configuration")
+        workflow_config = AdvancedWorkflowConfig()
+        # Set default attributes that might be missing
+        setattr(workflow_config, 'llm_provider', 'google')
+        setattr(workflow_config, 'environment', 'development')
 
+    # Safely access the configuration
+    provider = getattr(workflow_config, 'llm_provider', 'google')
+    logger.info(f"Using configuration with LLM provider: {provider}")
+    
+    # Parse BRD file
+    if not args.brd or not os.path.exists(args.brd):
+        logger.error("Business Requirements Document not provided or does not exist")
+        return 1
+        
+    brd_path = args.brd
+    parser = DocumentParser()
+    brd_content = parser.parse(brd_path)
+    
+    if not brd_content:
+        logger.error(f"Failed to parse BRD document: {brd_path}")
+        return 1
+        
+    logger.info(f"Successfully parsed BRD document: {brd_path}")
+    
+    # Setup output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = f"run_{timestamp}"
+    
+    if args.output:
+        run_output_dir = os.path.abspath(args.output)
+    else:
+        run_output_dir = os.path.join(os.getcwd(), "output", run_id)
+        
+    os.makedirs(run_output_dir, exist_ok=True)
+    logger.info(f"Using output directory: {run_output_dir}")
+    
+    # Initialize LLM
+    logger.info(f"Initializing LLM with provider: {workflow_config.llm_provider}")
+    
+    llm_specific_kwargs = get_llm_specific_configuration(workflow_config.llm_provider)
+    llm = get_llm(llm_specific_kwargs=llm_specific_kwargs)
+    embedding_model = get_embedding_model()
+    
+    # Initialize components
+    memory = SharedProjectMemory(run_dir=run_output_dir)
+    message_bus = MessageBus()
+    checkpoint_manager = CheckpointManager(output_dir=run_output_dir)
+    code_execution_tool = CodeExecutionTool(output_dir=run_output_dir)
+    
+    # Initialize RAG
+    rag_manager = ProjectRAGManager(
+        project_root=os.getcwd(),
+        embeddings=embedding_model,
+        environment=workflow_config.environment
+    )
+    
+    # Add this section to properly initialize the vector store
+    logger.info("Initializing RAG vector store...")
+    if rag_manager:
+        if rag_manager.vector_store is None:
+            try:
+                logger.info("No existing RAG index found. Creating new index from project code...")
+                # This will use the optimized implementation
+                indexed_count = rag_manager.index_project_code()
+                logger.info(f"Indexed {indexed_count} documents with optimized indexing")
+                
+                # Check if indexing was successful
+                if indexed_count == 0:
+                    # Fallback: Create an empty vector store
+                    logger.info("No documents indexed. Creating empty RAG vector store as fallback...")
+                    empty_success = rag_manager.initialize_empty_vector_store()
+                    if empty_success:
+                        logger.info("Empty vector store initialized successfully")
+                    else:
+                        logger.warning("Failed to initialize empty vector store")
+            except AttributeError as e:
+                logger.error(f"RAG method not found: {e}")
+                logger.info("Checking alternative method names...")
+                # Try alternative method names if they exist
+                if hasattr(rag_manager, 'initialize_index_from_project'):
+                    logger.info("Found initialize_index_from_project method, using as fallback...")
+                    rag_manager.initialize_index_from_project()
+                else:
+                    logger.warning("No suitable indexing method found")
+            except Exception as e:
+                logger.warning(f"Failed to create RAG index from project code: {e}")
+                try:
+                    # Fallback: Create an empty vector store
+                    logger.info("Creating empty RAG vector store as fallback...")
+                    rag_manager.initialize_empty_vector_store()
+                except Exception as e2:
+                    logger.error(f"Failed to initialize empty RAG vector store: {e2}")
+                    rag_manager = None  # Set to None so we can check later
+        else:
+            logger.info("Using existing RAG vector store")
+    else:
+        logger.warning("RAG manager not initialized, proceeding without RAG capabilities")
+    
+    # Register start of run
+    monitoring.log_agent_activity("System", f"Starting {args.workflow} workflow run: {run_id}", "START")
+    
+    # Define temperature strategy for logging, monitoring, and API responses.
+    # NOTE: This dictionary doesn't directly control LLM temperature settings.
+    # Actual LLM temperatures are managed by agent_temperatures.py and used via 
+    # get_agent_temperature() in graph_nodes.py's create_agent_with_temperature().
+    temperature_strategy = get_default_temperatures()
+
+    # Log the temperature strategy for this run
+    logger.info("Temperature Strategy for AI Agents:")
+    for agent, temp in temperature_strategy.items():
+        logger.info(f"  {agent}: {temp}")
+
+    # Monitor temperature usage
+    monitoring.log_global(f"Using temperature strategy with {len(temperature_strategy)} agent profiles", "INFO")
+    
+    # Define global LLM-specific kwargs (e.g., for Gemini safety settings, context limits)
+    global_llm_specific_kwargs = {}
+    
+    # For Gemini models, add safety settings if applicable
+    if workflow_config.llm_provider == "google":
+        global_llm_specific_kwargs = {
+            "safety_settings": {
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+            "generation_config": {
+                "top_k": 40,
+                "top_p": 0.95,
+                "max_output_tokens": 8192
+            }
+        }
+        logger.info("Applied Google Gemini-specific configuration settings (new safety_settings format)")
+    elif workflow_config.llm_provider == "anthropic":
+        global_llm_specific_kwargs = {
+            "temperature": 0.2,  # Base temperature, will be overridden by agent-specific settings
+            "max_tokens": 4096
+        }
+        logger.info("Applied Anthropic Claude-specific configuration settings")
+    
+    # Create configurable components dictionary for LangGraph
+    configurable_components = {
+        "llm": llm,
+        "memory": memory,
+        "rag_manager": rag_manager,
+        "code_execution_tool": code_execution_tool,
+        "run_output_dir": run_output_dir,
+        "message_bus": message_bus,
+        "checkpoint_manager": checkpoint_manager,
+        "workflow_id": run_id,
+        "global_llm_specific_kwargs": global_llm_specific_kwargs,
+        "temperature_strategy": temperature_strategy
+    }
+      # Validate workflow configuration
+    workflow_type = args.workflow
+    issues = validate_workflow_configuration({"configurable": configurable_components})
+    
+    if issues:
+        logger.warning("Workflow configuration has issues:")
+        for issue in issues:
+            logger.warning(f"  - {issue}")
+        
+        # Continue with warning or exit based on severity
+        if any("missing" in issue for issue in issues):
+            logger.error("Critical configuration issues detected. Exiting.")
+            return 1
+    
+    # Create workflow
+    try:
+        workflow = get_workflow(workflow_type, args.platform)
+    except Exception as e:
+        logger.error(f"Failed to create workflow: {e}")
+        return 1
+    
+    # Create initial agent state
+    initial_state = create_initial_agent_state(
+        brd_content=brd_content,
+        workflow_config=workflow_config
+    )
+    initial_state[StateFields.WORKFLOW_ID] = run_id
+    initial_state[StateFields.TEMPERATURE_STRATEGY] = temperature_strategy
+    
+    # Add the missing workflow_start_time to fix the finalizer error
+    start_time = time.time()
+    initial_state[StateFields.WORKFLOW_START_TIME] = start_time
+    
+    # Validate initial state
+    missing_keys = validate_initial_state(initial_state)
+    if missing_keys:
+        logger.warning(f"Initial state is missing required keys: {', '.join(missing_keys)}")
+        # Add missing keys with default values
+        for key in missing_keys:
+            if key == "workflow_start_time":
+                initial_state[key] = time.time()
+            elif key == "workflow_id":
+                initial_state[key] = run_id
+            # Add other defaults as needed
+    
+    try:
+        # Execute workflow
+        final_state = workflow.invoke(
+            initial_state,
+            config={"configurable": configurable_components}
+        )
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"Workflow completed in {elapsed_time:.2f} seconds")
+        
+        # Output final state summary
+        summary_path = os.path.join(run_output_dir, "summary.json")
+        with open(summary_path, "w") as f:
+            summary = {
+                "workflow_type": workflow_type,
+                "run_id": run_id,
+                "elapsed_time": elapsed_time,
+                "requirements_analysis": final_state.get("requirements_analysis", {}),
+                "tech_stack": final_state.get("tech_stack_recommendation", {}),
+                "temperature_strategy": temperature_strategy,
+                "metrics": {
+                    "total_files": len(final_state.get("code_generation_result", {}).get("generated_files", {})),
+                    "test_success_rate": final_state.get("test_success_rate", 0),
+                    "overall_quality_score": final_state.get("overall_quality_score", 0)
+                }
+            }
+            json.dump(summary, f, indent=2)
+            
+        logger.info(f"Summary written to {summary_path}")
+        monitoring.log_agent_activity("System", f"Workflow completed successfully: {run_id}", "SUCCESS")
+        
+    except Exception as e:
+        logger.error(f"Workflow execution failed: {e}")
+        monitoring.log_agent_activity("System", f"Workflow failed: {str(e)}", "ERROR")
+        return 1
+    
+    finally:
+        # Clean up resources
+        if 'memory' in locals():
+            memory.close()
+        if 'rag_manager' in locals() and rag_manager:
+            try:
+                # Close vector store if available
+                if hasattr(rag_manager, 'close') and callable(rag_manager.close):
+                    rag_manager.close()
+            except Exception as e:
+                logger.warning(f"Error closing RAG manager: {e}")
+
+    # Add this near the end of main(), right before workflow execution
+    if args.dev:
+        try:
+            from langgraph.dev import dev_console
+            from graph import (
+                create_basic_workflow,
+                create_iterative_workflow,
+                create_phased_workflow,
+                create_modular_workflow,
+                create_resumable_workflow,
+                create_implementation_workflow
+            )
+            
+            # Add async workflow imports
+            try:
+                from async_graph import (
+                    create_async_basic_workflow,
+                    create_async_iterative_workflow,
+                    create_async_phased_workflow,
+                    create_async_modular_workflow,
+                    create_async_resumable_workflow,
+                    create_async_implementation_workflow
+                )
+                has_async = True
+                logger.info("Async workflow modules loaded successfully")
+            except ImportError:
+                has_async = False
+                logger.warning("Async workflow modules not available")
+            
+            logger.info("Registering all workflows with LangGraph Dev")
+            
+            # Create and register all synchronous workflows
+            sync_workflows = {
+                "basic": create_basic_workflow(),
+                "iterative": create_iterative_workflow(),
+                "phased": create_phased_workflow(),
+                "modular": create_modular_workflow(),
+                "resumable": create_resumable_workflow(),
+                "implementation": create_implementation_workflow()
+            }
+            
+            # Register synchronous workflows
+            registered_count = 0
+            for name, workflow in sync_workflows.items():
+                try:
+                    dev_console.register_workflow(name, workflow)
+                    logger.info(f"✅ Registered synchronous {name} workflow")
+                    registered_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to register {name} workflow: {str(e)}")
+            
+            # Register async workflows if available
+            if has_async:
+                # We need to create the async workflows within an async context
+                import asyncio
+                
+                async def register_async_workflows():
+                    async_workflows = {
+                        "async_basic": create_async_basic_workflow(),
+                        "async_iterative": create_async_iterative_workflow(),
+                        "async_phased": create_async_phased_workflow(),
+                        "async_modular": create_async_modular_workflow(),
+                        "async_resumable": create_async_resumable_workflow(),
+                        "async_implementation": create_async_implementation_workflow()
+                    }
+                    
+                    async_count = 0
+                    for name, workflow_coro in async_workflows.items():
+                        try:
+                            # Await the coroutine to get the actual workflow
+                            workflow = await workflow_coro
+                            dev_console.register_workflow(name, workflow)
+                            logger.info(f"✅ Registered {name} workflow")
+                            nonlocal registered_count
+                            registered_count += 1
+                            async_count += 1
+                        except Exception as e:
+                            logger.error(f"Failed to register {name} workflow: {str(e)}")
+                    
+                    return async_count
+                
+                # Execute the async registration
+                try:
+                    async_registered = asyncio.run(register_async_workflows())
+                    logger.info(f"Registered {async_registered} async workflows")
+                except Exception as e:
+                    logger.error(f"Failed to register async workflows: {str(e)}")
+            
+            logger.info(f"LangGraph Dev console initialized with {registered_count} workflows")
+        except Exception as e:
+            logger.warning(f"Failed to initialize LangGraph Dev console: {e}")
+    
+    # Tracing option: Execute workflows on demand
+    if args.trace_all:
+        from utils.langsmith_utils import configure_tracing
+        
+        # Synchronous workflow tracing
+        for wtype in ["basic", "iterative", "phased", "modular", "resumable", "implementation"]:
+            try:
+                logger.info(f"Running {wtype} workflow for LangSmith visualization")
+                test_workflow = get_workflow(wtype)
+                # Create minimal state with required fields
+                test_state = initialize_workflow_state()
+                # Add minimal required content
+                test_state["brd_content"] = "This is a test BRD for tracing visualization."
+                test_state["workflow_id"] = f"trace_{wtype}_{uuid.uuid4().hex[:8]}"
+                test_state["workflow_start_time"] = time.time()
+                test_state["temperature_strategy"] = temperature_strategy
+                
+                # Configure tracing
+                configure_tracing(test_workflow, project_name="multi-ai-dev-system")
+                
+                # Run with minimal execution to generate trace
+                logger.info(f"Executing trace for {wtype} workflow")
+                test_workflow.invoke(
+                    test_state,
+                    config={"configurable": configurable_components}
+                )
+                logger.info(f"✅ Generated trace for {wtype} workflow")
+            except Exception as e:
+                logger.warning(f"Failed to trace {wtype} workflow: {e}")
+        
+        # Async workflow tracing if available
+        if 'has_async' in locals() and has_async:
+            import asyncio
+            from async_graph import get_async_workflow
+            
+            async def trace_async_workflows():
+                for wtype in ["basic", "iterative", "phased", "modular", "resumable", "implementation"]:
+                    try:
+                        logger.info(f"Running async_{wtype} workflow for LangSmith visualization")
+                        test_workflow = await get_async_workflow(wtype)
+                        # Create minimal state with required fields
+                        test_state = initialize_workflow_state()
+                        # Add minimal required content
+                        test_state["brd_content"] = "This is a test BRD for async tracing visualization."
+                        test_state["workflow_id"] = f"trace_async_{wtype}_{uuid.uuid4().hex[:8]}"
+                        test_state["workflow_start_time"] = time.time()
+                        test_state["temperature_strategy"] = temperature_strategy
+                        
+                        # Configure tracing
+                        configure_tracing(test_workflow, project_name="multi-ai-dev-system-async")
+                        
+                        # Run with minimal execution to generate trace
+                        logger.info(f"Executing trace for async_{wtype} workflow")
+                        await test_workflow.ainvoke(
+                            test_state,
+                            config={"configurable": configurable_components}
+                        )
+                        logger.info(f"✅ Generated trace for async_{wtype} workflow")
+                    except Exception as e:
+                        logger.warning(f"Failed to trace async_{wtype} workflow: {e}")
+            
+            try:
+                asyncio.run(trace_async_workflows())
+            except Exception as e:
+                logger.error(f"Failed to trace async workflows: {e}")
+    
+    return 0
+
+def initialize_workflow_state():
+    """Initialize the workflow state with default values."""
+    from agent_state import StateFields
+    
+    state = {}
+    
+    # Initialize revision counters
+    state[StateFields.ARCHITECTURE_REVISION_COUNT] = 0
+    state[StateFields.DATABASE_REVISION_COUNT] = 0
+    state[StateFields.BACKEND_REVISION_COUNT] = 0
+    state[StateFields.FRONTEND_REVISION_COUNT] = 0
+    state[StateFields.INTEGRATION_REVISION_COUNT] = 0
+    
+    # Add other necessary initialization
+    
+    return state
+
+# Only run if executed directly
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    main()

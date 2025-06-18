@@ -9,14 +9,15 @@ import os
 import sys
 import uvicorn
 import time
+import argparse
 from pathlib import Path
 
-# Add project root to Python path
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, PROJECT_ROOT)
-
 try:
-    from config import setup_langgraph_server
+    from config import (
+        AdvancedWorkflowConfig,
+        initialize_system_config,
+        setup_langgraph_server
+    )
     import json
     from monitoring import metrics_collector
 except ImportError as e:
@@ -28,6 +29,27 @@ except ImportError as e:
 def main():
     """Launch the LangServe API server for Multi-AI Development System."""
     start_time = time.time()
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Multi-AI Development System API Server")
+    parser.add_argument("--config-file", type=str, help="Path to configuration file")
+    parser.add_argument("--env", type=str, default="development", 
+                        help="Environment (development, staging, production)")
+    parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    args = parser.parse_args()
+    
+    # Load configuration - similar to main.py but with API-specific defaults
+    api_config = AdvancedWorkflowConfig.load_from_multiple_sources(
+        config_file=args.config_file,
+        args=args
+    )
+    # Apply any API-specific adjustments
+    api_config._validate_and_adjust()
+    api_config.print_detailed_summary()
+    
+    # Initialize global system configuration
+    initialize_system_config(api_config)
     
     # Initialize LangSmith for tracing
     langsmith_enabled = setup_langgraph_server(enable_server=True)
@@ -54,12 +76,11 @@ def main():
     def save_metrics_on_exit():
         print("\n📊 Saving API metrics...")
         metrics_collector.save_metrics_to_file()
-    
     import atexit
     atexit.register(save_metrics_on_exit)
     
-    # Use port 8001 consistently
-    port = 8001
+    # Use port from command line arguments or default
+    port = args.port
     
     # Start the FastAPI server
     print(f"🚀 Starting Multi-AI Development System API (startup: {time.time() - start_time:.2f}s)")

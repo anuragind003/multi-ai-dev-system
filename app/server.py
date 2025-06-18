@@ -8,9 +8,6 @@ import os
 import sys
 from fastapi.openapi.utils import get_openapi
 
-# Add the parent directory to sys.path to allow imports from the project root
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 # Import from the project
 from serve_chain import create_workflow_runnable
 from config import get_llm

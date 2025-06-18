@@ -2,10 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from rag_manager import ProjectRAGManager
 
 def check_rag_status():
@@ -14,6 +10,7 @@ def check_rag_status():
     print("=" * 40)
     
     # Check if .rag_store exists and what's in it
+    project_root = Path(__file__).parent.parent
     rag_store_path = project_root / ".rag_store"
     
     if rag_store_path.exists():
@@ -49,11 +46,11 @@ def check_rag_status():
                 
         else:
             print("📝 No metadata file found")
-    else:
-        print("📭 No RAG store found - will be created on first run")
+    else:        print("📭 No RAG store found - will be created on first run")
 
 def cleanup_rag_store():
     """Clean up the RAG store by removing it entirely."""
+    project_root = Path(__file__).parent.parent
     rag_store_path = project_root / ".rag_store"
     
     if rag_store_path.exists():

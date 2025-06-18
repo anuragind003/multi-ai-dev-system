@@ -1,0 +1,38 @@
+{
+  "architecture_pattern": "Layered Architecture",
+  "data_model": {
+    "entities": [
+      {
+        "name": "User",
+        "attributes": [
+          { "name": "id", "type": "INTEGER", "primary_key": true },
+          {
+            "name": "username",
+            "type": "VARCHAR(80)",
+            "unique": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "VARCHAR(120)",
+            "unique": true,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "Task",
+        "attributes": [
+          { "name": "id", "type": "INTEGER", "primary_key": true },
+          { "name": "title", "type": "VARCHAR(100)", "nullable": false },
+          { "name": "completed", "type": "BOOLEAN", "default": false },
+          { "name": "user_id", "type": "INTEGER", "foreign_key": "User.id" }
+        ]
+      }
+    ]
+  },
+  "api_endpoints": [
+    { "path": "/tasks", "method": "GET", "description": "Get all tasks" },
+    { "path": "/tasks", "method": "POST", "description": "Create a new task" }
+  ]
+}

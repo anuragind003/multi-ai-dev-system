@@ -1,29 +1,41 @@
-# Multi-AI Development System for Automated Software Engineering
+# Multi-AI Agent Software Engineering Automation System
 
-This project implements a comprehensive pipeline of temperature-optimized AI agents that automate the entire software development lifecycle from business requirements to deployable code.
+A modern, production-ready Python system that automates the entire software development lifecycle from business requirements to deployable code using a pipeline of temperature-optimized AI agents and LangGraph workflows.
 
-## System Overview
+---
 
-The system processes Business Requirements Documents (BRDs) through specialized agents, each optimized with specific temperature settings:
+## 🚀 Features
 
-1. **BRD Analyst Agent** (temp: 0.3): Analyzes and extracts structured requirements from BRD documents
-2. **Tech Stack Advisor Agent** (temp: 0.2): Recommends optimal technology stack based on requirements
-3. **System Designer Agent** (temp: 0.2): Creates detailed architecture and database schema
-4. **Planning Agent** (temp: 0.4): Develops implementation strategy and timelines
-5. **Code Generation Agent** (temp: 0.1): Produces deterministic, consistent code output
-6. **Test Case Generator Agent** (temp: 0.2): Creates comprehensive test suites
-7. **Code Quality Agent** (temp: 0.1): Performs quality analysis and linting
-8. **Test Validation Agent** (temp: 0.1): Validates test execution and coverage
+- **End-to-end automation:** From BRD to code, tests, docs, and deployment configs
+- **Specialized AI agents:** Each agent optimized for its task with temperature binding
+- **LangGraph workflow engine:** Unified, resumable, and visualizable workflows
+- **Multi-format BRD support:** PDF, DOCX, TXT, MD
+- **Real-time monitoring:** API call tracking, performance metrics, and error recovery
+- **RAG integration:** Vector store for context-aware code generation
+- **Extensible architecture:** Modular agents, tools, and workflows
 
-## Temperature Optimization Strategy
+---
 
-This system uses specialized agent temperatures to optimize different stages of the development workflow:
+## 🧩 Agent Pipeline & Temperature Strategy
 
-- **Analytical tasks (0.1-0.2)**: Code quality, test validation, tech recommendations
-- **Creative tasks (0.3-0.4)**: BRD analysis, planning, test case generation
-- **Code generation (0.1)**: Deterministic, consistent code output
+| Agent                 | Purpose                              | Temperature |
+| --------------------- | ------------------------------------ | ----------- |
+| BRD Analyst           | Extracts structured requirements     | 0.3         |
+| Tech Stack Advisor    | Recommends technology stack          | 0.2         |
+| System Designer       | Architecture & DB schema             | 0.2         |
+| Planning Agent        | Implementation strategy & timeline   | 0.4         |
+| Code Generation Agent | Deterministic code output            | 0.1         |
+| Test Case Generator   | Comprehensive test suites            | 0.2         |
+| Code Quality Agent    | Quality analysis & linting           | 0.1         |
+| Test Validation Agent | Test execution & coverage validation | 0.1         |
 
-## Setup Instructions
+- **Analytical tasks:** 0.1–0.2
+- **Creative tasks:** 0.3–0.4
+- **Code generation:** 0.1
+
+---
+
+## ⚡ Quickstart
 
 1. **Clone the repository:**
 
@@ -32,60 +44,50 @@ This system uses specialized agent temperatures to optimize different stages of 
    cd multi-ai-dev-system
    ```
 
-2. **Create a virtual environment (recommended):**
+2. **Create a virtual environment:**
 
    ```bash
    python -m venv venv
-   source venv/bin/activate # On Windows use `venv\Scripts\activate`
+   # On Windows:
+   venv\Scripts\activate
+   # On Unix/Mac:
+   source venv/bin/activate
    ```
 
 3. **Install dependencies:**
 
    ```bash
-   pip install -r requirements.txt # (We'll create this later, for now `pip install google-generativeai python-dotenv`)
+   pip install -r requirements.txt
+   # Or minimally:
+   pip install google-generativeai python-dotenv
    ```
 
-4. **Set up API Key:**
+4. **Configure environment variables:**
+   Create a `.env` file in the project root:
 
-   ```
-   GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
-   GEMINI_MODEL_NAME="gemini-2.5-flash-preview-05-20"
-   LANGCHAIN_API_KEY="YOUR_LANGSMITH_API_KEY" # Optional
-   LANGCHAIN_PROJECT="multi-ai-dev-system" # Optional
-   ```
-
-   ```
-   - **IMPORTANT:** Do NOT commit your `.env` file to version control! It's already ignored by the default `.gitignore` if you initialized your repo with Python templates.
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key
+   GEMINI_MODEL_NAME=gemini-2.5-flash-preview-05-20
+   LANGCHAIN_API_KEY=your_langsmith_api_key  # Optional
+   LANGCHAIN_PROJECT=multi-ai-dev-system     # Optional
    ```
 
-5. **Running the System:**
+   > **Do NOT commit your `.env` file!**
 
-# Basic usage
+5. **Run the system:**
+   ```bash
+   python main.py --workflow phased brds/sample.txt
+   # With options:
+   python main.py --workflow phased --output-dir custom_output brds/sample.txt
+   ```
 
-`python main.py --workflow phased brds/sample.txt`
+---
 
-# With advanced options
-
-`python main.py --workflow phased --output-dir custom_output brds/sample.txt`
-
-6. **Visual Development Mode (LangGraph Dev)**
-
-# Start the LangGraph development server
-
-langgraph dev
-
-# The UI will open at: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
-
-7. **Project Structure**
+## 🏗️ Project Structure
 
 ```
 multi_ai_dev_system/
 ├── agents/                 # Specialized AI agents
-│   ├── brd_analyst.py      # BRD analysis (temp: 0.3)
-│   ├── tech_advisor.py     # Tech recommendations (temp: 0.2)
-│   ├── system_designer.py  # Architecture design (temp: 0.2)
-│   ├── planning_agent.py   # Implementation planning (temp: 0.4)
-│   └── ...
 ├── tools/                  # Utility tools (code execution, parsing, RAG)
 ├── brds/                   # Sample BRD documents
 ├── output/                 # Generated artifacts
@@ -93,37 +95,86 @@ multi_ai_dev_system/
 ├── config.py               # LLM configuration and temperature settings
 ├── monitoring.py           # Real-time API monitoring
 ├── graph.py                # LangGraph workflow definition
-└── main.py                 # System entry point
+├── main.py                 # System entry point
+└── ...
 ```
 
-8. **Input Formats**
-   The system supports BRDs in multiple formats:
+---
 
-Plain text (.txt)
-Markdown (.md)
-PDF documents (.pdf)
-Word documents (.docx, .doc)
+## 📥 Input & 📤 Output
 
-9. **Output Artifacts**
-   Each run produces:
+- **Input:** BRD in `.txt`, `.md`, `.pdf`, `.docx`, or `.doc`
+- **Output:**
+  - Extracted requirements
+  - Technology recommendations
+  - System architecture diagrams
+  - Database schema
+  - API endpoint definitions
+  - Implementation code
+  - Test cases & validation reports
+  - Documentation & deployment configs
 
-Extracted requirements
-Technology recommendations
-System architecture diagrams
-Database schema
-API endpoint definitions
-Implementation code
-Test cases and validation reports
+---
 
-10. **Troubleshooting**
-    Port conflicts: If port 8001 is in use, modify the port in serve.py
-    Memory errors: For large projects, increase RAM allocation
-    RAG indexing errors: Ensure the output directory exists
-    API documentation issues: Access the API directly at /api/workflow
+## 🧠 Workflow Types
 
-11. **Contributing**
-    Contributions welcome! Please follow the established temperature strategy for agent development:
+| Workflow  | Best For                       | Features                                    |
+| --------- | ------------------------------ | ------------------------------------------- |
+| basic     | Prototyping, debugging         | Linear, fast, minimal overhead              |
+| phased    | Production, real-world dev     | Phase-based, quality checks, error recovery |
+| iterative | Complex, high-quality projects | Retry logic, quality threshold, validation  |
+| modular   | Education, subsystem focus     | Logical grouping, clear separation          |
+| resumable | Large/long projects            | Checkpointing, resume support               |
 
-BRD analysis: 0.3
-Technical planning: 0.2-0.4
-Code generation: 0.1
+**Example:**
+
+```bash
+python main.py --brd brds/sample.txt --workflow phased --quality-threshold 7.0
+```
+
+---
+
+## 🌐 API & Dev Server
+
+- **Production API:**
+  ```bash
+  python serve.py
+  # API at http://localhost:8001
+  ```
+- **LangGraph Dev UI:**
+  ```bash
+  langgraph dev
+  # UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+  ```
+
+---
+
+## 🛠️ Troubleshooting
+
+- **Port conflicts:** Change port in `serve.py` if 8001 is in use
+- **Memory errors:** Increase RAM for large projects
+- **RAG errors:** Ensure output directory exists
+- **API docs:** Access `/api/workflow` endpoint
+- **LangGraph errors:** Ensure all node names use `_node` suffix; check for missing function imports
+
+---
+
+## 🤝 Contributing
+
+- Follow the agent temperature strategy
+- Use type hints, error handling, and logging
+- See `CONTRIBUTING.md` for details (or open an issue)
+
+---
+
+## 📚 References
+
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [LangChain Documentation](https://python.langchain.com/)
+- [Gemini API](https://ai.google.dev/)
+
+---
+
+## License
+
+MIT

@@ -1,118 +1,405 @@
 """
 LangGraph Workflow Definition for Multi-AI Development System.
-ENHANCED: Integrated with AdvancedWorkflowConfig and simplified node structure.
+Implements consolidated Generate → Review → Revise cycle with optimized agent architecture.
 """
 
 from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.runnables import RunnableLambda  # Add this import
+import logging
+import warnings
 
 from agent_state import AgentState, StateFields
 from graph_nodes import (
+    # Core planning nodes
     brd_analysis_node,
     tech_stack_recommendation_node,
     system_design_node,
     planning_node,
-    code_generation_node,
-    test_case_generation_node,
-    code_quality_analysis_node,
-    test_validation_node,
-    finalize_workflow,
-    should_retry_code_generation,
-    should_retry_tests,
-    check_workflow_completion,
-    # Add these imports:
+    
+    # Phase control nodes
     phase_iterator_node,
-    phase_code_generation_node,
     phase_completion_node,
-    has_next_phase
+    increment_revision_count_node,
+    
+    # Consolidated generator and quality nodes
+    code_generation_dispatcher_node,
+    code_quality_analysis_node,
+    
+    # Testing and finalization
+    testing_module_node,
+    finalize_workflow,
+    
+    # Decision functions
+    has_next_phase,
+    should_retry_code_generation,
+    
+    # Initialization
+    initialize_workflow_state,
+    
+    # Legacy nodes (kept for backward compatibility)
+    project_analyzer_node,
+    timeline_estimator_node,
+    risk_assessor_node,
+    plan_compiler_node,
+    architecture_generator_node,
+    database_generator_node,
+    backend_generator_node,
+    frontend_generator_node,
+    integration_generator_node,
+    code_optimizer_node,
+    test_case_generation_node,
+    test_validation_node,
+    architecture_quality_node,
+    database_quality_node,
+    backend_quality_node,
+    frontend_quality_node,
+    integration_quality_node,
+    
+    # Legacy modules (kept for backward compatibility)
+    requirements_module,
+    design_module,
+    planning_module,
+    implementation_module,
+    testing_module,
+    
+    # Legacy decision functions
+    decide_on_architecture_quality,
+    decide_on_database_quality,
+    decide_on_backend_quality,
+    decide_on_frontend_quality,
+    decide_on_integration_quality,
+    check_workflow_completion,
+    should_retry_tests,
+    should_iterate_implementation,
+    determine_phase_generators,
+    
+    # Helper functions
+    checkpoint_state,
+    phase_dispatcher_node
 )
 import monitoring
 from platform_config import get_platform_client
 
+logger = logging.getLogger(__name__)
+
+def create_phased_workflow() -> StateGraph:
+    """
+    Create the streamlined phased workflow with a generic
+    'Generate -> Review -> Revise' cycle.
+    """
+    workflow = StateGraph(AgentState)
+
+    # --- 1. Define Nodes with Descriptions --- (added "_node" suffix to avoid state key conflicts)
+    workflow.add_node(
+        "initialize_state_node", 
+        RunnableLambda(initialize_workflow_state).with_config(
+            tags=["Initialization"], 
+            metadata={"description": "Initializes the state dictionary with default values."}
+        )
+    )
+    workflow.add_node(
+        "brd_analysis_node", 
+        RunnableLambda(brd_analysis_node).with_config(
+            tags=["Planning", "Analysis"], 
+            metadata={"description": "Analyzes the Business Requirements Document (BRD) to extract structured requirements."}
+        )
+    )
+    workflow.add_node(
+        "tech_stack_node", 
+        RunnableLambda(tech_stack_recommendation_node).with_config(
+            tags=["Planning", "Architecture"], 
+            metadata={"description": "Recommends an optimal technology stack based on the analyzed requirements."}
+        )
+    )
+    workflow.add_node(
+        "system_design_node", 
+        RunnableLambda(system_design_node).with_config(
+            tags=["Planning", "Architecture"], 
+            metadata={"description": "Creates a high-level system design and architecture."}
+        )
+    )
+    workflow.add_node(
+        "planning_node", 
+        RunnableLambda(planning_node).with_config(
+            tags=["Planning"],
+            metadata={"description": "Compiles all analyses into a detailed, phased implementation plan."}
+        )
+    )
+    workflow.add_node(
+        "phase_iterator_node", 
+        RunnableLambda(phase_iterator_node).with_config(
+            tags=["Control Flow"],
+            metadata={"description": "Sets the context for the current implementation phase or completes the workflow."}
+        )
+    )
+    workflow.add_node(
+        "generate_code_node", 
+        RunnableLambda(code_generation_dispatcher_node).with_config(
+            tags=["Implementation", "Code Generation"],
+            metadata={"description": "Dispatches to the correct code generator (Backend, Frontend, etc.) based on the current phase."}
+        )
+    )
+    workflow.add_node(
+        "review_code_node", 
+        RunnableLambda(code_quality_analysis_node).with_config(
+            tags=["Quality Assurance", "Review"],
+            metadata={"description": "Reviews the newly generated code for quality, bugs, and adherence to standards."}
+        )
+    )
+    workflow.add_node(
+        "increment_revision_node",
+        RunnableLambda(increment_revision_count_node).with_config(
+            tags=["Control Flow", "Revision"],
+            metadata={"description": "Increments the revision counter for the current phase before retrying generation."}
+        )
+    )
+    workflow.add_node(
+        "phase_complete_node", 
+        RunnableLambda(phase_completion_node).with_config(
+            tags=["Control Flow"],
+            metadata={"description": "Marks the current phase as complete and prepares for the next iteration."}
+        )
+    )
+    workflow.add_node(
+        "testing_module_node", 
+        RunnableLambda(testing_module_node).with_config(
+            tags=["Quality Assurance", "Testing"],
+            metadata={"description": "Generates and runs a full suite of tests (unit, integration) against the generated codebase."}
+        )
+    )
+    workflow.add_node(
+        "finalize_node", 
+        RunnableLambda(finalize_workflow).with_config(
+            tags=["Finalization"],
+            metadata={"description": "Compiles final results, generates a summary report, and concludes the workflow."}
+        )
+    )
+
+    # --- 2. Define Edges --- (updated references to match new node names)
+    workflow.set_entry_point("initialize_state_node")
+    
+    # Planning Phase
+    workflow.add_edge("initialize_state_node", "brd_analysis_node")
+    workflow.add_edge("brd_analysis_node", "tech_stack_node")
+    workflow.add_edge("tech_stack_node", "system_design_node")
+    workflow.add_edge("system_design_node", "planning_node")
+    workflow.add_edge("planning_node", "phase_iterator_node")
+
+    # Phased Implementation Loop
+    workflow.add_conditional_edges(
+        "phase_iterator_node",
+        has_next_phase,
+        {
+            StateFields.NEXT_PHASE: "generate_code_node",
+            StateFields.WORKFLOW_COMPLETE: "testing_module_node" 
+        }
+    )
+    
+    # The 'Generate -> Review -> Revise' Cycle
+    workflow.add_edge("generate_code_node", "review_code_node")
+    workflow.add_conditional_edges(
+        "review_code_node",
+        should_retry_code_generation,
+        {
+            StateFields.APPROVE: "phase_complete_node",
+            StateFields.REVISE: "increment_revision_node" 
+        }
+    )
+    
+    # Increment revision count before going back to generate code
+    workflow.add_edge("increment_revision_node", "generate_code_node")
+    
+    # After a phase is approved, go to the next phase
+    workflow.add_edge("phase_complete_node", "phase_iterator_node")
+
+    # Finalization
+    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("finalize_node", END)
+
+    return workflow
+
+def validate_agent_factory(config: Dict[str, Any]) -> List[str]:
+    """Validate the agent factory configuration."""
+    issues = []
+    
+    if "configurable" not in config:
+        return ["Missing 'configurable' section in config"]
+        
+    configurable = config.get("configurable", {})
+    
+    # Check essential components
+    if "llm" not in configurable:
+        issues.append("Missing 'llm' in configurable - required for agent creation")
+        
+    if "temperature_strategy" not in configurable:
+        issues.append("Missing 'temperature_strategy' - required for agent temperature optimization")
+    
+    # Check for common tools
+    if "code_execution_tool" not in configurable:
+        issues.append("Missing 'code_execution_tool' - recommended for code validation")
+    
+    if "rag_manager" not in configurable:
+        issues.append("Missing 'rag_manager' - recommended for context-aware generation")
+    
+    return issues
+
+def validate_workflow_configuration(config: Dict[str, Any]) -> List[str]:
+    """Validate workflow configuration including temperature management strategy."""
+    issues = []
+    
+    # Check required components in config
+    if "configurable" not in config:
+        return ["Missing 'configurable' section in config"]
+        
+    configurable = config.get("configurable", {})
+    
+    # Check essential components
+    required_components = ["llm", "memory", "run_output_dir"]
+    for component in required_components:
+        if component not in configurable:
+            issues.append(f"Missing required component '{component}' in configuration")
+
+    # Check temperature strategy
+    if "temperature_strategy" not in configurable:
+        issues.append("Missing 'temperature_strategy' in configuration")
+    else:
+        temp_strategy = configurable.get("temperature_strategy", {})
+        essential_agents = [
+            "BRD Analyst Agent", 
+            "Tech Stack Advisor Agent",
+            "System Designer Agent",
+            "Code Generation Agent",
+            "Code Quality Agent",
+            "Test Validation Agent"
+        ]
+        
+        for agent in essential_agents:
+            if agent not in temp_strategy:
+                issues.append(f"Missing temperature setting for essential agent: {agent}")
+    
+    # Validate agent factory if provided
+    agent_factory_issues = validate_agent_factory(config)
+    issues.extend(agent_factory_issues)
+    
+    return issues
+
+# Create legacy workflows using our refactored nodes where possible
+
 def create_basic_workflow() -> StateGraph:
     """Create a basic linear workflow with each agent executed once."""
     
-    from agent_state import AgentState
+    warnings.warn(
+        "The basic workflow is deprecated and will be removed in a future version. "
+        "Please use 'phased' workflow for better results.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
-    # Create workflow
     workflow = StateGraph(AgentState)
     
-    # Add nodes - Use distinct names with _step suffix
-    workflow.add_node("brd_analysis_step", brd_analysis_node)
-    workflow.add_node("tech_stack_recommendation_step", tech_stack_recommendation_node)  # FIXED
-    workflow.add_node("system_design_step", system_design_node)  # FIXED
-    workflow.add_node("planning_step", planning_node)  # FIXED
-    workflow.add_node("code_generation_step", code_generation_node)  # FIXED
-    workflow.add_node("test_case_generation_step", test_case_generation_node)  # FIXED
-    workflow.add_node("code_quality_analysis_step", code_quality_analysis_node)  # FIXED
-    workflow.add_node("test_validation_step", test_validation_node)  # FIXED
-    workflow.add_node("finalize_step", finalize_workflow)  # FIXED
+    # Add state initialization
+    workflow.add_node("initialize_state_node", initialize_workflow_state)
     
-    # Define linear flow - update to use new node names
-    workflow.set_entry_point("brd_analysis_step")
-    workflow.add_edge("brd_analysis_step", "tech_stack_recommendation_step")
-    workflow.add_edge("tech_stack_recommendation_step", "system_design_step")
-    workflow.add_edge("system_design_step", "planning_step")
-    workflow.add_edge("planning_step", "code_generation_step")
-    workflow.add_edge("code_generation_step", "test_case_generation_step")
-    workflow.add_edge("test_case_generation_step", "code_quality_analysis_step")
-    workflow.add_edge("code_quality_analysis_step", "test_validation_step")
-    workflow.add_edge("test_validation_step", "finalize_step")
-    workflow.add_edge("finalize_step", END)
+    # Add nodes - Use consistent _node suffix
+    workflow.add_node("brd_analysis_node", brd_analysis_node)
+    workflow.add_node("tech_stack_node", tech_stack_recommendation_node)
+    workflow.add_node("system_design_node", system_design_node)
+    workflow.add_node("planning_node", planning_node)
+    
+    # Add consolidated code generation node using our dispatcher
+    workflow.add_node("code_generation_node", code_generation_dispatcher_node)
+    
+    # Add consolidated quality review node
+    workflow.add_node("quality_review_node", code_quality_analysis_node)
+    
+    # Testing and finalization
+    workflow.add_node("testing_module_node", testing_module_node)
+    workflow.add_node("finalize_node", finalize_workflow)
+    
+    # Define linear flow
+    workflow.set_entry_point("initialize_state_node")
+    
+    # Connect initialization to first step
+    workflow.add_edge("initialize_state_node", "brd_analysis_node")
+    workflow.add_edge("brd_analysis_node", "tech_stack_node")
+    workflow.add_edge("tech_stack_node", "system_design_node")
+    workflow.add_edge("system_design_node", "planning_node")
+    workflow.add_edge("planning_node", "code_generation_node")
+    workflow.add_edge("code_generation_node", "quality_review_node")
+    workflow.add_edge("quality_review_node", "testing_module_node")
+    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("finalize_node", END)
     
     return workflow
 
-def create_iterative_workflow() -> StateGraph:
-    """Create an iterative workflow with retry capabilities for code and tests."""
-    from agent_state import AgentState
-
+def create_iterative_workflow(config: Dict[str, Any] = None) -> StateGraph:
+    """Create workflow with feedback loops for iteration."""
+    
+    warnings.warn(
+        "The iterative workflow is deprecated and will be removed in a future version. "
+        "Please use 'phased' workflow for better results.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     workflow = StateGraph(AgentState)
+    
+    # Add state initialization
+    workflow.add_node("initialize_state_node", initialize_workflow_state)
+    
+    # Add all nodes with specialized agents
+    workflow.add_node("brd_analysis_node", brd_analysis_node)
+    workflow.add_node("tech_stack_node", tech_stack_recommendation_node)
+    workflow.add_node("system_design_node", system_design_node)
+    
+    # Use planning node
+    workflow.add_node("planning_node", planning_node)
+    
+    # Complete sequence of specialized code generation nodes
+    workflow.add_node("architecture_generation_node", architecture_generator_node)
+    workflow.add_node("database_generation_node", database_generator_node)
+    workflow.add_node("backend_generation_node", backend_generator_node)
+    workflow.add_node("frontend_generation_node", frontend_generator_node)
+    workflow.add_node("integration_generation_node", integration_generator_node)
+    workflow.add_node("code_optimizer_node", code_optimizer_node)
+    
+    # Quality and testing nodes
+    workflow.add_node("quality_review_node", code_quality_analysis_node)
+    workflow.add_node("testing_module_node", testing_module_node)
+    workflow.add_node("finalize_node", finalize_workflow)
 
-    # Add all nodes
-    workflow.add_node("brd_analysis_step", brd_analysis_node)
-    workflow.add_node("tech_stack_recommendation_step", tech_stack_recommendation_node)
-    workflow.add_node("system_design_step", system_design_node)
-    workflow.add_node("planning_step", planning_node)
-    workflow.add_node("code_generation_step", code_generation_node)
-    workflow.add_node("code_quality_analysis_step", code_quality_analysis_node)
-    workflow.add_node("test_case_generation_step", test_case_generation_node)
-    workflow.add_node("test_validation_step", test_validation_node)
-    workflow.add_node("finalize_step", finalize_workflow)
-
-    workflow.set_entry_point("brd_analysis_step")
+    # Define flow
+    workflow.set_entry_point("initialize_state_node")
 
     # Core workflow path
-    workflow.add_edge("brd_analysis_step", "tech_stack_recommendation_step")
-    workflow.add_edge("tech_stack_recommendation_step", "system_design_step")
-    workflow.add_edge("system_design_step", "planning_step")
-    workflow.add_edge("planning_step", "code_generation_step")
-    workflow.add_edge("code_generation_step", "code_quality_analysis_step")  # Quality check after code gen
-
-    # Conditional path for code generation retry
+    workflow.add_edge("initialize_state_node", "brd_analysis_node")
+    workflow.add_edge("brd_analysis_node", "tech_stack_node")
+    workflow.add_edge("tech_stack_node", "system_design_node")
+    workflow.add_edge("system_design_node", "planning_node")
+    
+    # Code generation flow with full sequence of specialized generators
+    workflow.add_edge("planning_node", "architecture_generation_node")
+    workflow.add_edge("architecture_generation_node", "database_generation_node")
+    workflow.add_edge("database_generation_node", "backend_generation_node")
+    workflow.add_edge("backend_generation_node", "frontend_generation_node")
+    workflow.add_edge("frontend_generation_node", "integration_generation_node")
+    workflow.add_edge("integration_generation_node", "code_optimizer_node")
+    workflow.add_edge("code_optimizer_node", "quality_review_node")
+    
+    # Conditional path for testing - retry entire implementation if needed
     workflow.add_conditional_edges(
-        "code_quality_analysis_step",  # Source node is quality analysis
+        "quality_review_node",
         should_retry_code_generation,
         {
-            "retry_code_generation": "code_generation_step",  # Make sure this key matches
-            "continue": "test_case_generation_step"          # Continue workflow
-        }
-    )
-
-    # Test generation and validation path
-    workflow.add_edge("test_case_generation_step", "test_validation_step")
-    
-    # Conditional path for test validation retry
-    workflow.add_conditional_edges(
-        "test_validation_step",
-        should_retry_tests,
-        {
-            "retry_tests": "test_case_generation_step",
-            "continue": "finalize_step"
+            StateFields.REVISE: "architecture_generation_node",
+            StateFields.APPROVE: "testing_module_node"
         }
     )
     
-    workflow.add_edge("finalize_step", END)
+    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("finalize_node", END)
 
     return workflow
 
@@ -122,244 +409,230 @@ def create_modular_workflow() -> StateGraph:
     and enhanced error recovery.
     """
     
-    from agent_state import AgentState
+    warnings.warn(
+        "The modular workflow is deprecated and will be removed in a future version. "
+        "Please use 'phased' workflow for better results.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
-    # Create workflow
     workflow = StateGraph(AgentState)
     
+    # Add state initialization
+    workflow.add_node("initialize_state_node", initialize_workflow_state)
+    
     # Define module groups with distinct names
-    # Requirements phase
-    workflow.add_node("requirements_module_step", requirements_module)  # FIXED
+    workflow.add_node("requirements_module_node", requirements_module)
+    workflow.add_node("design_module_node", design_module)
+    workflow.add_node("implementation_module_node", implementation_module)
+    workflow.add_node("quality_module_node", code_quality_analysis_node)
+    workflow.add_node("planning_node", planning_node)
+    workflow.add_node("testing_module_node", testing_module_node)
+    workflow.add_node("finalize_node", finalize_workflow)
     
-    # Design phase
-    workflow.add_node("design_module_step", design_module)  # FIXED
+    # Set entry point to initialization
+    workflow.set_entry_point("initialize_state_node")
     
-    # Implementation phase
-    workflow.add_node("implementation_module_step", implementation_module)  # FIXED
-    
-    # Quality phase
-    workflow.add_node("quality_module_step", quality_module)  # FIXED
-    
-    # Finalization
-    workflow.add_node("finalize_step", finalize_workflow)  # FIXED
-    
-    # Set up the flow
-    workflow.set_entry_point("requirements_module_step")
+    # Connect initialization to first module
+    workflow.add_edge("initialize_state_node", "requirements_module_node")
     
     # Linear flow between major phases
-    workflow.add_edge("requirements_module_step", "design_module_step")
-    workflow.add_edge("design_module_step", "implementation_module_step")
-    workflow.add_edge("implementation_module_step", "quality_module_step")
+    workflow.add_edge("requirements_module_node", "design_module_node")
+    workflow.add_edge("design_module_node", "planning_node")
+    workflow.add_edge("planning_node", "implementation_module_node")
+    workflow.add_edge("implementation_module_node", "quality_module_node")
     
     # Add conditional edge from quality to implementation for iterations
     workflow.add_conditional_edges(
-        "quality_module_step",
-        should_iterate_implementation,
-        {
-            "iterate": "implementation_module_step",
-            "finalize": "finalize_step"
-        }
-    )
-    
-    workflow.add_edge("finalize_step", END)
-    
-    return workflow
-
-def create_resumable_workflow() -> StateGraph:
-    """
-    Create a workflow that can be interrupted and resumed.
-    Based on the iterative workflow with checkpointing.
-    """
-    # Get base iterative workflow
-    workflow = create_iterative_workflow()
-    
-    # Add checkpointing logic to each step (via conditional edges or node wrappers)
-    # This could be more complex in a real implementation
-    
-    return workflow
-
-def create_phased_workflow(platform_enabled=False) -> StateGraph:
-    """Create a workflow that implements code generation in phases."""
-    from agent_state import AgentState
-
-    workflow = StateGraph(AgentState)
-    
-    # Add all nodes
-    workflow.add_node("brd_analysis_step", brd_analysis_node)
-    workflow.add_node("tech_stack_recommendation_step", tech_stack_recommendation_node)
-    workflow.add_node("system_design_step", system_design_node)
-    workflow.add_node("planning_step", planning_node)
-    
-    # Phase-based code generation nodes
-    workflow.add_node("phase_iterator", phase_iterator_node)
-    workflow.add_node("phase_code_generation", phase_code_generation_node)
-    workflow.add_node("phase_quality_analysis", code_quality_analysis_node)
-    workflow.add_node("phase_completion", phase_completion_node)
-    
-    # Testing and finalization
-    workflow.add_node("test_case_generation_step", test_case_generation_node)
-    workflow.add_node("test_validation_step", test_validation_node)
-    workflow.add_node("finalize_step", finalize_workflow)
-    
-    # FIXED: Add passthrough node for phase iteration decision
-    workflow.add_node("phase_iteration_decision", lambda x: x)  # Simple passthrough node
-    
-    workflow.set_entry_point("brd_analysis_step")
-    
-    # Setup main workflow flow
-    workflow.add_edge("brd_analysis_step", "tech_stack_recommendation_step")
-    workflow.add_edge("tech_stack_recommendation_step", "system_design_step")
-    workflow.add_edge("system_design_step", "planning_step")
-    
-    # Phase iteration flow
-    workflow.add_edge("planning_step", "phase_iterator")
-    workflow.add_edge("phase_iterator", "phase_code_generation")
-    workflow.add_edge("phase_code_generation", "phase_quality_analysis")
-    
-    # Conditional flow for code generation retry
-    workflow.add_conditional_edges(
-        "phase_quality_analysis",
+        "quality_module_node",
         should_retry_code_generation,
         {
-            "retry_code_generation": "phase_code_generation",
-            "continue": "phase_completion"
+            StateFields.REVISE: "implementation_module_node",
+            StateFields.APPROVE: "testing_module_node"
         }
     )
     
-    # Phase completion leads to either next phase or test generation
-    workflow.add_edge("phase_completion", "phase_iteration_decision")
-    workflow.add_conditional_edges(
-        "phase_iteration_decision",
-        has_next_phase,
-        {
-            "next_phase": "phase_iterator",
-            "complete": "test_case_generation_step"
-        }
-    )
-    
-    # Testing workflow
-    workflow.add_edge("test_case_generation_step", "test_validation_step")
-    workflow.add_conditional_edges(
-        "test_validation_step",
-        should_retry_tests,
-        {
-            "retry_tests": "test_case_generation_step",
-            "continue": "finalize_step"
-        }
-    )
-    
-    workflow.add_edge("finalize_step", END)
-    
-    # After completing workflow setup
-    if platform_enabled:
-        try:
-            # Get the platform client
-            platform_config = get_platform_client()
-            
-            if platform_config and platform_config.get("enabled"):
-                monitoring.log_agent_activity(
-                    "Platform", 
-                    f"LangGraph Platform integration enabled at {platform_config.get('api_url')}", 
-                    "INFO"
-                )
-                
-                # No direct deployment needed - tracing will be enabled via environment variables
-        except Exception as e:
-            monitoring.log_agent_activity(
-                "Platform", 
-                f"Failed to enable platform integration: {str(e)}", 
-                "ERROR"
-            )
+    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("finalize_node", END)
     
     return workflow
 
-def get_workflow(workflow_type: str = "iterative", platform_enabled: bool = False) -> StateGraph:
+def create_resumable_workflow(config: Dict[str, Any] = None) -> StateGraph:
     """
-    ENHANCED: Factory function to get the specified workflow type with clean compilation logic.
-    
-    Args:
-        workflow_type: Type of workflow ("basic", "iterative", "phased", "modular", "resumable")
-        platform_enabled: Whether to enable LangGraph Platform integration
-        
-    Returns:
-        StateGraph: Compiled workflow graph
-        
-    Raises:
-        ValueError: If workflow_type is not supported
+    Create a workflow that can be interrupted and resumed.
+    Based on the phased workflow with checkpointing.
     """
     
+    # Create phased workflow as base
+    workflow = create_phased_workflow()
+    
+    # Ensure saver is created even when config is None
+    memory = MemorySaver()
+    
+    # Add memory-based checkpointing for this workflow
+    logger.info("Created resumable workflow with checkpoint support")
+    
+    # Return the workflow - checkpointer will be applied during compilation
+    return workflow
+
+def create_implementation_workflow() -> StateGraph:
+    """Create a workflow specifically for code implementation with quality feedback loops."""
+    
+    warnings.warn(
+        "The implementation workflow is deprecated and will be removed in a future version. "
+        "Please use 'phased' workflow for better results.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    workflow = StateGraph(AgentState)
+    
+    # Add state initialization
+    workflow.add_node("initialize_state_node", initialize_workflow_state)
+    
+    # Add code generation nodes
+    workflow.add_node("architecture_generation_node", architecture_generator_node)
+    workflow.add_node("architecture_quality_node", architecture_quality_node)
+    workflow.add_node("database_generation_node", database_generator_node)
+    workflow.add_node("database_quality_node", database_quality_node)
+    workflow.add_node("backend_generation_node", backend_generator_node)
+    workflow.add_node("backend_quality_node", backend_quality_node)
+    workflow.add_node("frontend_generation_node", frontend_generator_node)
+    workflow.add_node("frontend_quality_node", frontend_quality_node)
+    workflow.add_node("integration_generation_node", integration_generator_node)
+    workflow.add_node("integration_quality_node", integration_quality_node)
+    workflow.add_node("code_optimization_node", code_optimizer_node)
+    
+    # Set entry point to initialization
+    workflow.set_entry_point("initialize_state_node")
+    
+    # Connect initialization to first step
+    workflow.add_edge("initialize_state_node", "architecture_generation_node")
+    
+    # Architecture feedback loop
+    workflow.add_edge("architecture_generation_node", "architecture_quality_node")
+    workflow.add_conditional_edges(
+        "architecture_quality_node", 
+        decide_on_architecture_quality,
+        {
+            "approve": "database_generation_node",
+            "revise": "architecture_generation_node"
+        }
+    )
+    
+    # Database feedback loop
+    workflow.add_edge("database_generation_node", "database_quality_node")
+    workflow.add_conditional_edges(
+        "database_quality_node",
+        decide_on_database_quality,
+        {
+            "approve": "backend_generation_node",
+            "revise": "database_generation_node" 
+        }
+    )
+    
+    # Backend feedback loop
+    workflow.add_edge("backend_generation_node", "backend_quality_node")
+    workflow.add_conditional_edges(
+        "backend_quality_node",
+        decide_on_backend_quality,
+        {
+            "approve": "frontend_generation_node",
+            "revise": "backend_generation_node"
+        }
+    )
+    
+    # Frontend feedback loop
+    workflow.add_edge("frontend_generation_node", "frontend_quality_node")
+    workflow.add_conditional_edges(
+        "frontend_quality_node",
+        decide_on_frontend_quality,
+        {
+            "approve": "integration_generation_node",
+            "revise": "frontend_generation_node"
+        }
+    )
+    
+    # Integration feedback loop
+    workflow.add_edge("integration_generation_node", "integration_quality_node")
+    workflow.add_conditional_edges(
+        "integration_quality_node",
+        decide_on_integration_quality,
+        {
+            "approve": "code_optimization_node",
+            "revise": "integration_generation_node"
+        }
+    )
+    
+    # Final step
+    workflow.add_edge("code_optimization_node", END)
+    
+    return workflow
+
+def get_workflow(workflow_type: str = "phased", platform_enabled: bool = False) -> StateGraph:
+    """Get workflow based on type."""
     workflow_factories = {
         "basic": create_basic_workflow,
         "iterative": create_iterative_workflow,
+        "phased": create_phased_workflow,
         "modular": create_modular_workflow,
         "resumable": create_resumable_workflow,
-        "phased": create_phased_workflow
+        "implementation": create_implementation_workflow
     }
     
     if workflow_type not in workflow_factories:
-        available_types = ", ".join(workflow_factories.keys())
-        raise ValueError(f"Unsupported workflow type: {workflow_type}. Available types: {available_types}")
+        raise ValueError(f"Unknown workflow type: {workflow_type}")
     
+    # Default to phased workflow for deprecated types
+    if workflow_type in ["basic", "iterative", "modular", "implementation"]:
+        logger.warning(f"Workflow type '{workflow_type}' is deprecated. Consider using 'phased' workflow.")
+        
     try:
         monitoring.log_agent_activity("Workflow Builder", f"Building {workflow_type} workflow", "START")
         
-        # Create the workflow with platform support if enabled and available
+        # Create the workflow - for most types this ignores platform_enabled
         if workflow_type == "phased" and platform_enabled:
-            workflow_graph = workflow_factories[workflow_type](platform_enabled=platform_enabled)
+            workflow_graph = workflow_factories[workflow_type]()  # platform integration happens elsewhere
         else:
             workflow_graph = workflow_factories[workflow_type]()
         
-        # FIXED: Clean compilation logic - single compilation point
+        # Set recursion limit directly on graph object
+        if hasattr(workflow_graph, "set_recursion_limit"):
+            workflow_graph.set_recursion_limit(25)  # Use setter method if available
+        elif hasattr(workflow_graph, "recursion_limit"):
+            workflow_graph.recursion_limit = 25  # Use property if available
+        
+        # Add checkpointer only for resumable workflows
+        compile_kwargs = {}
         if workflow_type == "resumable":
-            # Compile with memory saver for resumable workflows
             memory = MemorySaver()
-            compiled_workflow = workflow_graph.compile(checkpointer=memory)
+            compile_kwargs["checkpointer"] = memory
             monitoring.log_agent_activity("Workflow Builder", "Added checkpoint support for resumable workflow", "INFO")
-        else:
-            # Standard compilation for other workflow types
-            compiled_workflow = workflow_graph.compile()
+        
+        # Compile with proper configuration
+        compiled_workflow = workflow_graph.compile(**compile_kwargs)
         
         monitoring.log_agent_activity("Workflow Builder", f"Successfully built {workflow_type} workflow", "SUCCESS")
         
         return compiled_workflow
         
     except Exception as e:
-        monitoring.log_agent_activity("Workflow Builder", f"Failed to build {workflow_type} workflow: {e}", "ERROR")
+        monitoring.log_agent_activity("Workflow Builder", f"Failed to build {workflow_type} workflow: {str(e)}", "ERROR")
         raise
 
-def validate_workflow_configuration(workflow_type: str, config: Dict[str, Any]) -> List[str]:
+def _initialize_workflow_components(workflow: StateGraph):
     """
-    NEW: Validate workflow configuration and return any issues.
+    DEPRECATED: This function is no longer used and will be removed in a future version.
     
-    Args:
-        workflow_type: Type of workflow to validate
-        config: Configuration dictionary
-        
-    Returns:
-        List[str]: List of validation issues (empty if valid)
+    Components are now initialized externally in main.py or serve_chain.py and passed
+    via config["configurable"] to workflow.invoke().
     """
-    issues = []
-    
-    # Check required components in config
-    required_components = ["llm", "memory"]
-    optional_components = ["rag_manager", "code_execution_tool", "run_output_dir"]
-    
-    configurable = config.get("configurable", {})
-    
-    for component in required_components:
-        if component not in configurable or configurable[component] is None:
-            issues.append(f"Required component '{component}' missing or None in workflow config")
-    
-    # Workflow-specific validations
-    if workflow_type in ["iterative", "modular"] and "code_execution_tool" not in configurable:
-        issues.append(f"Workflow type '{workflow_type}' requires 'code_execution_tool' for quality analysis")
-    
-    if workflow_type == "resumable" and "memory" not in configurable:
-        issues.append("Resumable workflow requires memory configuration for checkpoints")
-    
-    # Add phased-specific validation
-    if workflow_type == "phased" and "code_execution_tool" not in configurable:
-        issues.append(f"Workflow type 'phased' requires 'code_execution_tool' for quality analysis")
-    
-    return issues
+    warnings.warn(
+        "The _initialize_workflow_components function is deprecated and will be removed. "
+        "Components should be initialized externally and passed via config['configurable'].",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    # Empty implementation - components should be initialized externally
+    pass
 

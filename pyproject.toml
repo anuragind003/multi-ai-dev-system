@@ -1,13 +1,20 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "multi-ai-dev-system"
+name = "multi_ai_dev_system"
 version = "0.1.0"
 description = "Multi-AI Agent Software Development Automation System"
 readme = "README.md"
 requires-python = ">=3.9"
+authors = [
+    {name = "Your Name"}
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["multi_ai_dev_system*", "agents*", "tools*"]
 
 [tool.langchain]
 export = "serve_chain:chain_object"

@@ -7,6 +7,9 @@ from typing import Dict, Any, Optional, List
 from contextlib import contextmanager
 from collections import defaultdict
 import hashlib
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 class HighPerformanceSharedMemory:
     """Enhanced shared memory with batch operations and performance optimization."""
@@ -93,6 +96,25 @@ class HighPerformanceSharedMemory:
             cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_agent_name 
             ON agent_results(agent_name)
+            """)
+            
+            # Add agent_activities table for tracking agent activities
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agent_activities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT NOT NULL,
+                activity_type TEXT NOT NULL,
+                prompt TEXT,
+                response TEXT,
+                metadata TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            
+            # Index for faster agent activity lookups
+            cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_activity_agent_name 
+            ON agent_activities(agent_name)
             """)
             
             conn.commit()
@@ -231,6 +253,7 @@ class HighPerformanceSharedMemory:
             cursor = self._get_cursor()
             cursor.execute("DELETE FROM key_value_store")
             cursor.execute("DELETE FROM agent_results")
+            cursor.execute("DELETE FROM agent_activities")
             self._get_connection().commit()
     
     def close(self):
@@ -260,23 +283,43 @@ class SharedProjectMemory(HighPerformanceSharedMemory):
         
         print(f"✅ SharedProjectMemory initialized (DB: {self.db_path})")
     
-    def store_agent_result(self, agent_name: str, result: Dict[str, Any], execution_time: float = 0.0):
-        """Store agent execution result with metadata."""
-        # Store in memory for quick access
-        self._agent_results[agent_name] = result
+    def store_agent_result(self, agent_name, result, execution_time=None, metadata=None, prompt=None, response=None):
+        """Store agent execution result with extended metadata.
         
-        # Store in database for persistence
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO agent_results (agent_name, result, execution_time)
-                   VALUES (?, ?, ?)""",
-                (agent_name, json.dumps(result), execution_time)
-            )
-            conn.commit()
+        Args:
+            agent_name: Name of the agent
+            result: Result produced by the agent
+            execution_time: Time taken for execution (optional)
+            metadata: Additional metadata about the execution (optional)
+            prompt: The prompt sent to the agent (optional)
+            response: Raw response from the agent (optional)
+        """
+        from datetime import datetime
+        import logging
         
-        # Also store as a key-value pair for compatibility
-        self.set(f"agent_result_{agent_name}", result, immediate=True)
+        try:
+            # Create record
+            record = {
+                "agent": agent_name,
+                "timestamp": datetime.now().isoformat(),
+                "result": result
+            }
+            
+            # Add optional fields if provided
+            if execution_time is not None:
+                record["execution_time"] = execution_time
+            if metadata is not None:
+                record["metadata"] = metadata
+            if prompt is not None:
+                record["prompt"] = prompt
+            if response is not None:
+                record["response"] = response
+                
+            # Store in database
+            self._store_record("agent_results", record)
+            
+        except Exception as e:
+            logging.error(f"Error storing agent result: {e}")
     
     def get_agent_result(self, agent_name: str, default=None) -> Dict[str, Any]:
         """Get the latest result for a specific agent."""
@@ -402,7 +445,163 @@ class SharedProjectMemory(HighPerformanceSharedMemory):
                 
         except Exception as e:
             return {"error": str(e)}
+    
+    def store_agent_activity(self, agent_name: str, activity_type: str, prompt: str, response: str, metadata: dict = None):
+        """Store agent activity in the database."""
+        if metadata is None:
+            metadata = {}
+        
+        try:
+            # Get database connection for current thread
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Insert the activity
+            cursor.execute(
+                """
+                INSERT INTO agent_activities 
+                (agent_name, activity_type, prompt, response, metadata, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, 
+                (agent_name, activity_type, prompt, response, json.dumps(metadata), datetime.now().isoformat())
+            )
+            conn.commit()
+            
+            # Use self.logger instead of self.log
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"Stored {activity_type} activity for agent {agent_name}")
+            return cursor.lastrowid
+        except Exception as e:
+            # Use self.logger instead of self.log
+            if hasattr(self, 'logger'):
+                self.logger.error(f"Error storing agent activity: {e}")
+            else:
+                print(f"Error storing agent activity: {e}")
+            return None
+    
+    def _store_record(self, collection_name, record):
+        """Store a record in the specified collection.
+        
+        Args:
+            collection_name: Name of the collection to store record in
+            record: The record to store
+        """
+        try:
+            import json
+            import os
+            from datetime import datetime
+            
+            # Ensure records directory exists
+            records_dir = os.path.join(self.run_dir, "records")
+            os.makedirs(records_dir, exist_ok=True)
+            
+            # Create collection directory if it doesn't exist
+            collection_dir = os.path.join(records_dir, collection_name)
+            os.makedirs(collection_dir, exist_ok=True)
+            
+            # Generate a unique filename based on timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"{timestamp}.json"
+            filepath = os.path.join(collection_dir, filename)
+            
+            # Write record to file
+            with open(filepath, 'w') as f:
+                json.dump(record, f, indent=2, default=str)
+        except Exception as e:
+            import logging
+            logging.error(f"Error storing record: {e}")
 
 
 # Backward compatibility alias
 ProjectMemory = SharedProjectMemory
+
+class SharedMemory:
+    """
+    Legacy in-memory state management for the multi-agent system.
+    
+    NOTE: This provides a simpler in-memory dictionary-based implementation
+    that doesn't require SQLite or persistence. Consider using
+    SharedProjectMemory for new code that needs persistence and better
+    performance at scale.
+    """
+    
+    def __init__(self):
+        """Initialize shared memory store."""
+        self._memory: Dict[str, Any] = {}
+        self._history: List[Dict[str, Any]] = []
+        logger.info("SharedMemory initialized")
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a value from shared memory."""
+        return self._memory.get(key, default)
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set a value in shared memory."""
+        self._memory[key] = value
+        # Record change in history
+        self._history.append({
+            "action": "set",
+            "key": key,
+            "value_type": type(value).__name__
+        })
+        logger.debug(f"Memory updated: {key}")
+    
+    def update(self, data: Dict[str, Any]) -> None:
+        """Update multiple values in shared memory."""
+        self._memory.update(data)
+        self._history.append({
+            "action": "update",
+            "keys": list(data.keys())
+        })
+        logger.debug(f"Memory batch updated with {len(data)} keys")
+    
+    def delete(self, key: str) -> None:
+        """Delete a key from shared memory."""
+        if key in self._memory:
+            del self._memory[key]
+            self._history.append({
+                "action": "delete",
+                "key": key
+            })
+            logger.debug(f"Memory key deleted: {key}")
+    
+    def clear(self) -> None:
+        """Clear all shared memory."""
+        self._memory = {}
+        self._history.append({
+            "action": "clear"
+        })
+        logger.debug("Memory cleared")
+    
+    def get_all(self) -> Dict[str, Any]:
+        """Get all memory contents."""
+        return self._memory.copy()
+    
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Get memory operation history."""
+        return self._history.copy()
+    
+    def save_to_disk(self, filepath: str) -> None:
+        """Save memory state to disk."""
+        try:
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, 'w') as f:
+                json.dump(self._memory, f, indent=2, default=str)
+            logger.info(f"Memory saved to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to save memory to disk: {str(e)}")
+    
+    def load_from_disk(self, filepath: str) -> bool:
+        """Load memory state from disk."""
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    self._memory = json.load(f)
+                logger.info(f"Memory loaded from {filepath}")
+                return True
+            else:
+                logger.warning(f"Memory file not found: {filepath}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to load memory from disk: {str(e)}")
+            return False

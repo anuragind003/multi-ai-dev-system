@@ -1,0 +1,48 @@
+name: "Phased Development Workflow"
+version: "1.0"
+description: "End-to-end software development workflow with phased approach"
+
+phases:
+  - name: "requirements_analysis"
+    checkpoint: true
+    agents:
+      - type: "BRDAnalyst"
+        temperature: 0.3
+        inputs: ["brd_document"]
+        outputs: ["brd_analysis"]
+
+  - name: "technology_recommendation"
+    checkpoint: true
+    agents:
+      - type: "TechStackAdvisor"
+        temperature: 0.2
+        inputs: ["brd_analysis"]
+        outputs: ["tech_stack"]
+
+  - name: "system_design"
+    checkpoint: true
+    agents:
+      - type: "SystemDesigner"
+        temperature: 0.2
+        inputs: ["brd_analysis", "tech_stack"]
+        outputs: ["system_design"]
+
+  - name: "planning"
+    checkpoint: true
+    agents:
+      - type: "planning.ProjectAnalyzer"
+        temperature: 0.3
+        inputs: ["brd_analysis", "system_design"]
+        outputs: ["complexity_analysis"]
+      - type: "planning.TimelineEstimator"
+        temperature: 0.2
+        inputs: ["complexity_analysis", "tech_stack"]
+        outputs: ["project_timeline"]
+      - type: "planning.RiskAssessor"
+        temperature: 0.4
+        inputs: ["brd_analysis", "tech_stack", "complexity_analysis"]
+        outputs: ["risk_assessment"]
+      - type: "planning.PlanCompiler"
+        temperature: 0.3
+        inputs: ["complexity_analysis", "project_timeline", "risk_assessment"]
+        outputs: ["implementation_plan"]

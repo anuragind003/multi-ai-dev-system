@@ -4,6 +4,7 @@ LangGraph Platform configuration for the Multi-AI Development System.
 import os
 from dotenv import load_dotenv
 import logging
+from types import SimpleNamespace
 
 # Load environment variables
 load_dotenv()
@@ -25,7 +26,8 @@ def get_platform_client():
         os.environ["LANGCHAIN_ENDPOINT"] = api_url
         
         logging.info(f"LangGraph Platform integration configured with endpoint: {api_url}")
-        return {"enabled": True, "api_url": api_url}
+        # Return as an object with attributes instead of a dictionary
+        return SimpleNamespace(enabled=True, api_url=api_url)
         
     except Exception as e:
         logging.error(f"Failed to configure LangGraph Platform: {str(e)}")
