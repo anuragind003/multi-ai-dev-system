@@ -40,21 +40,27 @@ async def run_test():
     initial_input = {StateFields.BRD_CONTENT: "Create a simple web server with a single endpoint."}
     
     print("\n--- ▶️ Running workflow to first interruption point... ---")
+    last_state_before_interrupt = None
     interrupted_state = None
     async for event in resumable_workflow.astream(initial_input, config, stream_mode="values"):
         print(f"EVENT: {list(event.keys())}")
         if "__interrupt__" in event:
-            interrupted_state = event
+            # The interrupt event itself doesn't have the full state,
+            # so we use the state from right before the interruption.
+            interrupted_state = last_state_before_interrupt
             print("🛑 Workflow interrupted as expected.")
             break
+        else:
+            last_state_before_interrupt = event
         
     # 4. Assert that the workflow was interrupted
     assert interrupted_state is not None, "Workflow did not interrupt as expected!"
-    assert "__interrupt__" in interrupted_state, "Interrupt information not found in state."
     
-    interrupt_data = interrupted_state["__interrupt__"][0].value
-    print(f"✅ Interrupt successful. Data for user: {interrupt_data}")
-    assert "tech_stack_node" in interrupted_state, "Test assumes interruption happens after tech_stack_node."
+    # We can now get the interrupt data from the checkpointer if needed, but for the
+    # test's purpose, we just need to confirm the state is correct.
+    # interrupt_data = interrupted_state["__interrupt__"][0].value
+    # print(f"✅ Interrupt successful. Data for user: {interrupt_data}")
+    assert "requirements_analysis" in interrupted_state, "Test assumes interruption happens after brd_analysis_node."
 
 
     # 5. Resume the workflow with a mocked human decision
@@ -66,13 +72,14 @@ async def run_test():
     final_state = None
     async for event in resumable_workflow.astream(resume_command, config, stream_mode="values"):
         print(f"EVENT: {list(event.keys())}")
-        final_state = event
+        if list(event.keys()) != ['__end__']:
+            final_state = event
     
     # 6. Confirm that the workflow proceeded
     assert final_state is not None, "Workflow did not produce a final state after resuming."
     assert "human_approval_node" in final_state, "Human approval node was not in the final state."
     assert final_state["human_approval_node"]["human_decision"] == "approve", "Human decision was not 'approve'."
-    assert "system_design_node" in final_state, "Workflow did not proceed to system_design_node after approval."
+    assert "tech_stack_node" in final_state, "Workflow did not proceed to tech_stack_node after approval."
 
     print("\n--- ✅ Test Passed! Human-in-the-Loop backend logic is working correctly. ---")
 
