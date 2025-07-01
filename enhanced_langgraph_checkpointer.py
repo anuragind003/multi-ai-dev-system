@@ -10,13 +10,27 @@ import logging
 import time
 import uuid
 import asyncio
-from typing import Dict, Any, Optional, List, Tuple, Iterator
+import base64
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, List, Tuple, Iterator, AsyncIterator
 from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointMetadata, CheckpointTuple
 from langchain_core.runnables import RunnableConfig
 from langchain_core.load import dumpd
 from enhanced_memory_manager import EnhancedMemoryManager, MemoryConfig, MemoryBackend
 
 logger = logging.getLogger(__name__)
+
+# Custom JSON encoder/decoder for bytes
+class BytesEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytes):
+            return {"__bytes__": True, "value": base64.b64encode(obj).decode('utf-8')}
+        return super().default(obj)
+
+def bytes_decoder(dct):
+    if "__bytes__" in dct:
+        return base64.b64decode(dct["value"])
+    return dct
 
 class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
     """
@@ -59,22 +73,31 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
         
         logger.info(f"Enhanced Memory Checkpointer initialized with backend: {self.memory.stats.backend_type}")
     
-    def _dump(self, obj: Any) -> bytes:
-        """Dump the object to bytes using the new dumpd method."""
+    def _dump(self, obj: Any) -> str:
+        """Dump the object to a JSON string using the new dumpd method."""
         # Use the recommended dumpd function which correctly handles
         # LangChain's serializable objects.
-        return json.dumps(dumpd(obj), ensure_ascii=False).encode("utf-8")
+        return json.dumps(dumpd(obj), ensure_ascii=False, cls=BytesEncoder)
     
-    def put(self, 
-            config: RunnableConfig, 
-            checkpoint: Checkpoint,
-            *args, **kwargs) -> RunnableConfig:
-        """Save a checkpoint using enhanced memory."""
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
+        """Save a checkpoint and its metadata using enhanced memory."""
         try:
             thread_id = config["configurable"]["thread_id"]
             
-            checkpoint_bytes = self._dump(checkpoint)
-            self.memory.set(thread_id, checkpoint_bytes, context="checkpoints")
+            # Ensure metadata has required fields
+            if "step" not in metadata:
+                metadata["step"] = 0
+            
+            # Combine checkpoint and metadata for atomic storage
+            saved_data = {"checkpoint": checkpoint, "metadata": metadata}
+            
+            data_str = self._dump(saved_data)
+            self.memory.set(thread_id, data_str, context="checkpoints")
             
             return {
                 "configurable": {
@@ -91,14 +114,16 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
         """Get checkpoint tuple using enhanced memory."""
         try:
             thread_id = config["configurable"]["thread_id"]
-            checkpoint_bytes = self.memory.get(thread_id, context="checkpoints")
+            data_str = self.memory.get(thread_id, context="checkpoints")
 
-            if checkpoint_bytes is None:
+            if data_str is None:
                 return None
 
-            # Here we can just use standard json.loads since dumpd creates a simple dict
-            checkpoint_dict = json.loads(checkpoint_bytes.decode("utf-8"))
+            saved_data = json.loads(data_str, object_hook=bytes_decoder)
             
+            checkpoint_dict = saved_data["checkpoint"]
+            metadata = saved_data.get("metadata")
+
             # Manually reconstruct the Checkpoint and CheckpointTuple
             checkpoint = Checkpoint(
                 v=checkpoint_dict.get("v", 1),
@@ -107,11 +132,22 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
                 channel_versions=checkpoint_dict["channel_versions"],
                 versions_seen=checkpoint_dict["versions_seen"],
             )
+            # The 'id' is crucial for resuming, but not part of the base Checkpoint TypedDict.
+            # We need to add it back in manually.
+            if "id" in checkpoint_dict:
+                checkpoint["id"] = checkpoint_dict["id"]
+            # Also preserve other fields like 'pending_sends' that LangGraph expects.
+            if "pending_sends" in checkpoint_dict:
+                checkpoint["pending_sends"] = checkpoint_dict["pending_sends"]
 
             parent_config_dict = checkpoint_dict.get("parent_config")
-            parent_config = {"configurable": parent_config_dict.get("configurable", {})} if parent_config_dict else None
+            parent_config = (
+                {"configurable": parent_config_dict.get("configurable", {})}
+                if parent_config_dict
+                else None
+            )
 
-            return CheckpointTuple(config, checkpoint, parent_config)
+            return CheckpointTuple(config, checkpoint, metadata, parent_config)
             
         except Exception as e:
             logger.error(f"Error getting checkpoint: {e}")
@@ -203,10 +239,65 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
             "last_cleanup": memory_stats.last_cleanup
         }
 
-    async def aput(self, config: RunnableConfig, checkpoint: Checkpoint, *args, **kwargs) -> RunnableConfig:
+    async def aput(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        *args, **kwargs
+    ) -> RunnableConfig:
         """Async version of put method."""
-        return await asyncio.to_thread(self.put, config, checkpoint, *args, **kwargs)
+        return await asyncio.to_thread(self.put, config, checkpoint, metadata)
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Async version of get_tuple method."""
         return await asyncio.to_thread(self.get_tuple, config)
+
+    async def aput_writes(
+        self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+    ) -> RunnableConfig:
+        """Async version of put_writes method to update a checkpoint."""
+        checkpoint_tuple = await self.aget_tuple(config)
+
+        if checkpoint_tuple:
+            checkpoint = checkpoint_tuple.checkpoint
+            metadata = checkpoint_tuple.metadata or {}
+        else:
+            checkpoint = Checkpoint(
+                v=1,
+                ts=datetime.now(timezone.utc).isoformat(),
+                channel_values={},
+                channel_versions={},
+                versions_seen={},
+            )
+            metadata = {}
+
+        # Apply writes to the checkpoint
+        for channel, value in writes:
+            checkpoint["channel_values"][channel] = value
+        
+        # Update metadata
+        metadata["source"] = "update"
+        metadata["writes"] = {chan: val for chan, val in writes}
+        metadata["task_id"] = task_id
+        if "step" not in metadata:
+            metadata["step"] = 0
+
+        return await self.aput(config, checkpoint, metadata)
+
+    async def alist(
+        self,
+        config: RunnableConfig,
+        *,
+        filter: Optional[Dict[str, Any]] = None,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """Async version of list method."""
+        # This is a simplified async wrapper.
+        loop = asyncio.get_event_loop()
+        iterator = await loop.run_in_executor(
+            None, self.list, config, filter=filter, before=before, limit=limit
+        )
+        for item in iterator:
+            yield item
