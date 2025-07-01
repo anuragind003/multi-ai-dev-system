@@ -33,13 +33,111 @@ from agent_temperatures import get_agent_temperature
 from message_bus import MessageBus
 from tools.json_handler import JsonHandler
 
+# Enhanced Memory Management
+try:
+    from enhanced_memory_manager import EnhancedSharedProjectMemory, create_memory_manager
+    ENHANCED_MEMORY_AVAILABLE = True
+except ImportError:
+    ENHANCED_MEMORY_AVAILABLE = False
+    
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
 
-class BaseAgent(ABC):
+class EnhancedMemoryMixin:
+    """
+    Mixin to provide enhanced memory operations for agents.
+    Provides high-performance memory operations with fallback to original memory.
+    """
+    
+    def _init_enhanced_memory(self):
+        """Initialize enhanced memory capabilities with fallback."""
+        self._enhanced_memory = None
+        
+        try:
+            # First check if the agent already has enhanced memory through its passed memory object
+            if hasattr(self.memory, 'backend_type'):
+                # The memory object is already enhanced - use it directly
+                self._enhanced_memory = self.memory
+                self.logger.info(f"Using shared enhanced memory for {self.agent_name}")
+                return
+                
+            # Use the GLOBAL shared memory hub to prevent data isolation
+            from utils.shared_memory_hub import get_shared_memory_hub
+            self._enhanced_memory = get_shared_memory_hub()
+            
+            if self._enhanced_memory:
+                self.logger.info(f"Using GLOBAL shared memory hub for {self.agent_name}")
+            else:
+                self.logger.warning(f"Shared memory hub not available for {self.agent_name}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize shared memory hub: {e}")
+            # Graceful fallback - agent will work with basic memory
+            self._enhanced_memory = None
+    
+    def enhanced_set(self, key: str, value: Any, context: str = None, ttl: int = None):
+        """Set a value with enhanced performance and cross-tool access."""
+        context = context or self.agent_name
+        
+        # Store in both enhanced and original memory for compatibility
+        if self._enhanced_memory:
+            try:
+                self._enhanced_memory.set(key, value, context=context, ttl=ttl)
+            except Exception as e:
+                self.logger.warning(f"Enhanced memory set failed: {e}")
+        
+        # Always store in original memory for backward compatibility
+        if hasattr(self, 'memory') and self.memory:
+            try:
+                if hasattr(self.memory, 'set'):
+                    self.memory.set(key, value)
+                elif hasattr(self.memory, 'store'):
+                    self.memory.store(key, value)
+            except Exception as e:
+                self.logger.warning(f"Original memory set failed: {e}")
+    
+    def enhanced_get(self, key: str, default: Any = None, context: str = None) -> Any:
+        """Get a value with enhanced performance and cross-tool access."""
+        context = context or self.agent_name
+        
+        # Try enhanced memory first (faster)
+        if self._enhanced_memory:
+            try:
+                value = self._enhanced_memory.get(key, None, context=context)
+                if value is not None:
+                    return value
+            except Exception as e:
+                self.logger.warning(f"Enhanced memory get failed: {e}")
+        
+        # Fallback to original memory
+        if hasattr(self, 'memory') and self.memory:
+            try:
+                if hasattr(self.memory, 'get'):
+                    return self.memory.get(key, default)
+                elif hasattr(self.memory, 'retrieve'):
+                    return self.memory.retrieve(key, default)
+            except Exception as e:
+                self.logger.warning(f"Original memory get failed: {e}")
+        
+        return default
+    
+    def store_cross_tool_data(self, key: str, value: Any, description: str = ""):
+        """Store data that needs to be accessible across tools and agents."""
+        if self._enhanced_memory:
+            try:
+                # Store in global context for cross-tool access
+                self._enhanced_memory.set(key, value, context="cross_tool")
+                self.logger.info(f"Stored cross-tool data: {key} - {description}")
+            except Exception as e:
+                self.logger.warning(f"Failed to store cross-tool data: {e}")
+        
+        # Also store in agent's regular memory
+        self.enhanced_set(key, value, context=self.agent_name)
+
+class BaseAgent(ABC, EnhancedMemoryMixin):
     """
     Abstract base class for all AI agents in the system.
-    Provides standardized LLM interaction, error handling, and monitoring.
+    Provides standardized LLM interaction, error handling, monitoring, and enhanced memory management.
     
     Enhanced with:
     - Adaptive RAG integration with query optimization
@@ -48,6 +146,7 @@ class BaseAgent(ABC):
     - Improved error recovery with graceful degradation
     - Performance analysis and optimization
     - Pydantic-based structured output generation
+    - High-performance memory management with cross-tool communication
     """
     
     def __init__(
@@ -71,6 +170,9 @@ class BaseAgent(ABC):
         # Ensure logger is initialized
         import logging
         self.logger = logging.getLogger(f"{self.__class__.__name__}")
+        
+        # Initialize enhanced memory capabilities
+        self._init_enhanced_memory()
         
         # Execution tracking
         self.execution_stats = {
@@ -154,12 +256,34 @@ class BaseAgent(ABC):
             # Store result in agent's memory if available
             if hasattr(self, "memory") and self.memory is not None:
                 try:
-                    self.memory.store_agent_result(
-                        agent_name=self.agent_name,
-                        result=result,
-                        execution_time=execution_time,
-                        metadata={"task_name": task_name, "status": "success"}
-                    )
+                    # Use enhanced memory operations if available
+                    if hasattr(self, '_enhanced_memory') and self._enhanced_memory:
+                        # Store in enhanced memory for better performance and cross-agent access
+                        self.enhanced_set(f"agent_result_{task_name}", result, context="agent_results")
+                        self.enhanced_set("last_execution_result", result, context=self.agent_name)
+                        
+                        # Also store execution metadata
+                        execution_metadata = {
+                            "agent_name": self.agent_name,
+                            "task_name": task_name,
+                            "execution_time": execution_time,
+                            "status": "success",
+                            "timestamp": time.time()
+                        }
+                        self.enhanced_set(f"execution_metadata_{task_name}", execution_metadata, context="execution_logs")
+                    
+                    # Always store in original memory for backward compatibility
+                    if hasattr(self.memory, 'store_agent_result'):
+                        self.memory.store_agent_result(
+                            agent_name=self.agent_name,
+                            result=result,
+                            execution_time=execution_time,
+                            metadata={"task_name": task_name, "status": "success"}
+                        )
+                    else:
+                        # Fallback for basic memory types
+                        self.enhanced_set(f"agent_{self.agent_name}_result", result)
+                        
                 except Exception as e:
                     self.log_warning(f"Failed to store agent result for '{task_name}': {e}")
             
@@ -181,12 +305,32 @@ class BaseAgent(ABC):
 
             if hasattr(self, "memory") and self.memory is not None:
                 try:
-                    self.memory.store_agent_result(
-                        agent_name=self.agent_name,
-                        result={"error": str(e), "task_name": task_name, "status": "failure"},
-                        execution_time=execution_time,
-                        metadata={"task_name": task_name, "status": "failure", "error_message": str(e)}
-                    )
+                    # Use enhanced memory for error storage
+                    if hasattr(self, '_enhanced_memory') and self._enhanced_memory:
+                        error_metadata = {
+                            "agent_name": self.agent_name,
+                            "task_name": task_name,
+                            "execution_time": execution_time,
+                            "error": str(e),
+                            "status": "failure",
+                            "timestamp": time.time(),
+                            "traceback": tb_str
+                        }
+                        self.enhanced_set(f"error_{task_name}", error_metadata, context="error_logs")
+                        self.enhanced_set("last_execution_error", error_metadata, context=self.agent_name)
+                    
+                    # Store in original memory for backward compatibility
+                    if hasattr(self.memory, 'store_agent_result'):
+                        self.memory.store_agent_result(
+                            agent_name=self.agent_name,
+                            result={"error": str(e), "task_name": task_name, "status": "failure"},
+                            execution_time=execution_time,
+                            metadata={"task_name": task_name, "status": "failure", "error_message": str(e)}
+                        )
+                    else:
+                        # Fallback for basic memory types  
+                        self.enhanced_set(f"agent_{self.agent_name}_error", {"error": str(e), "task_name": task_name})
+                        
                 except Exception as mem_error:
                     self.log_warning(f"Failed to store error result: {mem_error}")
             
@@ -971,7 +1115,7 @@ class BaseAgent(ABC):
         """Optimize RAG queries using LLM to improve retrieval quality."""
         try:
             # Use analytical temperature for query optimization (always low)
-            llm_analytical = self.llm.bind(temperature=0.1)
+            llm_analytical = self._get_llm_with_temperature(0.1)
             
             # Generate optimized queries
             prompt = self.query_optimization_template.format(
@@ -1192,7 +1336,7 @@ class BaseAgent(ABC):
             self.log_info("Performing agent self-reflection")
             
             # Use analytical temperature for reflection (always low)
-            llm_analytical = self.llm.bind(temperature=0.1)
+            llm_analytical = self._get_llm_with_temperature(0.1)
             
             # Format error information
             error_info = f"Error encountered: {error}" if error else "No errors encountered"
@@ -1389,7 +1533,7 @@ class BaseAgent(ABC):
                 prompt_with_context = f"You are {self.agent_name}. Review this: {all_params['previous_attempt']}"
     
         # Use analytical temperature for reflection
-            reflection_llm = self.llm.bind(temperature=0.1)
+            reflection_llm = self._get_llm_with_temperature(0.1)
             reflection_response = reflection_llm.invoke(prompt_with_context)
             return reflection_response.content if hasattr(reflection_response, 'content') else reflection_response
         except Exception as e:

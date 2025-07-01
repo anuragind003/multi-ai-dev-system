@@ -27,9 +27,11 @@ import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from agent_temperatures import get_agent_temperature
-from multi_ai_dev_system.tools.json_handler import JsonHandler
+from tools.json_handler import JsonHandler
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
-from agents.models import (
+from models.data_contracts import (
     RiskAssessmentOutput,
     RiskAssessmentInput,
     ExecutiveSummaryRisk,
@@ -60,6 +62,16 @@ class RiskAssessorAgent(BaseAgent):
             temperature=temperature,
             rag_retriever=rag_retriever
         )
+        
+        # Initialize enhanced memory
+        self._init_enhanced_memory()
+
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for risk assessment patterns")
+        else:
+            self.logger.warning("RAG manager not available")
         
         # Initialize prompt template
         self._initialize_prompt_template()
@@ -275,6 +287,18 @@ class RiskAssessorAgent(BaseAgent):
                     "assessment_approach": "comprehensive_analysis",
                     "confidence_level": "high"
                 }
+            
+            # Store risk assessment results in enhanced memory
+            if isinstance(risk_assessment, dict):
+                risk_summary = {
+                    "overall_risk_level": risk_assessment.get("executive_summary", {}).get("overall_risk_level", "Unknown"),
+                    "total_risks": len(risk_assessment.get("project_risks", [])),
+                    "high_priority_risks": len(risk_assessment.get("high_priority_risks", [])),
+                    "assessment_timestamp": datetime.now().isoformat()
+                }
+                self.enhanced_set("risk_assessment_summary", risk_summary, context="risk_assessment")
+                self.store_cross_tool_data("risk_assessment_results", risk_assessment, 
+                                         "Comprehensive risk assessment results for project planning")
             
             # Log execution summary
             self.log_execution_summary(risk_assessment)

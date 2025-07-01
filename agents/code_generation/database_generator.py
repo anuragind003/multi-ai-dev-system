@@ -13,8 +13,12 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import ChatPromptTemplate
 
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
-from agents.code_generation.models import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput
 from tools.code_generation_utils import parse_llm_output_into_files
+
+# Enhanced memory and RAG imports
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,15 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
             message_bus=message_bus
         )
         
+        # Enhanced memory is already initialized in BaseCodeGeneratorAgent
+        # Initialize RAG context if not already done by parent
+        if not hasattr(self, 'rag_manager'):
+            self.rag_manager = get_rag_manager()
+            if self.rag_manager:
+                self.logger.info("RAG manager available for enhanced database generation")
+            else:
+                self.logger.warning("RAG manager not available - proceeding with basic database generation")
+        
         # Maximum tokens and context limits
         self.max_tokens = 8192  # Adequate for multi-file generation
         self.max_context_chars = 2000
@@ -69,36 +82,191 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
         2. Migration files with up/down scripts
         3. Query files with optimized CRUD operations
         4. Any necessary ORM model definitions if appropriate
-        
+        5. Performance monitoring and optimization scripts
+        6. Security and backup configurations
+        7. Database testing and validation scripts
+        8. DevOps and deployment configurations
         Be thorough and include all necessary files to fully implement the database layer.
         """
-
+        
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system",
-             "You are a database expert specializing in schema design, migrations, and query optimization. "
-             "Your task is to generate all necessary database files based on system design and tech stack. "
-             "The files should be production-ready, follow best practices, include proper indexes, "
-             "and be optimized for performance. Use appropriate parameterization to prevent SQL injection."),
+             "You are an expert database architect specializing in enterprise-grade database implementations. "
+             "Your task is to generate PRODUCTION-READY, ENTERPRISE-SCALE database systems with comprehensive "
+             "security, monitoring, performance optimization, and operational excellence.\n\n"
+             
+             "**MANDATORY ENTERPRISE REQUIREMENTS:**\n"
+             "You MUST include ALL of the following in every database implementation:\n\n"
+             
+             "1. **SECURITY & COMPLIANCE:**\n"
+             "   - Row-Level Security (RLS) policies and roles\n"
+             "   - Column-level encryption for sensitive data\n"
+             "   - Audit trails with immutable logging\n"
+             "   - Access control matrices and user roles\n"
+             "   - Data masking for non-production environments\n"
+             "   - Security vulnerability scanning scripts\n"
+             "   - Compliance validation (GDPR, HIPAA, SOX, PCI-DSS)\n\n"
+             
+             "2. **PERFORMANCE & SCALABILITY:**\n"
+             "   - Advanced indexing strategies (partial, functional, covering)\n"
+             "   - Query performance monitoring and optimization\n"
+             "   - Connection pooling and resource management\n"
+             "   - Database partitioning and sharding strategies\n"
+             "   - Read replicas and load balancing configuration\n"
+             "   - Query plan analysis and optimization scripts\n"
+             "   - Performance benchmarking and load testing\n\n"
+             
+             "3. **MONITORING & OBSERVABILITY:**\n"
+             "   - Comprehensive database monitoring dashboards\n"
+             "   - Real-time performance metrics collection\n"
+             "   - Automated alerting for critical thresholds\n"
+             "   - Slow query logging and analysis\n"
+             "   - Resource utilization monitoring\n"
+             "   - Database health checks and diagnostics\n"
+             "   - Business metrics and KPI tracking\n\n"
+             
+             "4. **BACKUP & DISASTER RECOVERY:**\n"
+             "   - Automated backup strategies (full, incremental, differential)\n"
+             "   - Point-in-time recovery procedures\n"
+             "   - Cross-region backup replication\n"
+             "   - Disaster recovery testing and validation\n"
+             "   - Data corruption detection and repair\n"
+             "   - Backup encryption and security\n"
+             "   - Recovery time objective (RTO) optimization\n\n"
+             
+             "5. **DATA GOVERNANCE & QUALITY:**\n"
+             "   - Data validation rules and constraints\n"
+             "   - Data lineage and metadata management\n"
+             "   - Data quality monitoring and reporting\n"
+             "   - Schema evolution and migration strategies\n"
+             "   - Data retention and archival policies\n"
+             "   - Data catalog and documentation\n"
+             "   - Referential integrity enforcement\n\n"
+             
+             "6. **DEVOPS & AUTOMATION:**\n"
+             "   - Infrastructure as Code (Terraform, CloudFormation)\n"
+             "   - CI/CD pipeline integration for database changes\n"
+             "   - Automated testing frameworks for database logic\n"
+             "   - Environment provisioning and configuration\n"
+             "   - Database schema version control\n"
+             "   - Deployment automation and rollback procedures\n"
+             "   - Configuration management and secrets handling\n\n"
+             
+             "**DOMAIN AND DATABASE AWARENESS:**\n"
+             "- Healthcare: HIPAA compliance, audit trails, data encryption, patient privacy patterns\n"
+             "- Financial: PCI-DSS compliance, transaction integrity, fraud detection, secure payment data\n"
+             "- IoT: Time-series optimization, device data patterns, real-time ingestion, edge data handling\n"
+             "- E-commerce: Product catalogs, inventory tracking, cart optimization, order management\n"
+             "- Analytics: OLAP patterns, data warehousing, aggregation tables, reporting optimization\n"
+             "- Real-time: Streaming data, cache patterns, session management, low-latency access\n\n"
+             
+             "**DATABASE-SPECIFIC PATTERNS:**\n"
+             "- PostgreSQL/MySQL: ACID transactions, normalized schemas, foreign keys, advanced indexing\n"
+             "- MongoDB: Document schemas, embedded vs referenced data, compound indexes, aggregation pipelines\n"
+             "- Redis: Key-value patterns, data structures, expiration policies, pub/sub patterns\n"
+             "- InfluxDB: Time-series schemas, retention policies, continuous queries, measurement organization\n"
+             "- Neo4j: Graph relationships, node properties, path queries, graph algorithms\n"
+             "- Cassandra: Partition keys, clustering columns, materialized views, time-based data\n\n"
+             
+             "Generate enterprise-grade database implementations that are immediately deployable to production "
+             "with comprehensive security, monitoring, and operational excellence built-in."),
             ("human",
-             "Generate a complete set of database artifacts for a {db_type} database using {migration_tool} for migrations. "
+             "Generate a COMPLETE ENTERPRISE-GRADE database implementation for **{db_type}** with **{migration_tool}** "
+             "for migrations, optimized for the **{project_domain}** domain. This must be immediately deployable "
+             "to production with enterprise security, monitoring, and operational excellence.\n\n"
              
              "## Project Context\n"
-             "Tech Stack: {tech_stack_info}\n\n"
-             "System Design: {system_design}\n\n"
+             "Domain: {project_domain}\n"
+             "Tech Stack: {tech_stack_info}\n"
+             "System Design: {system_design}\n"
              "Data Model: {data_model}\n\n"
              
-             "## Requirements\n"
-             "1. Schema Definition: Create a complete database schema with tables/collections, columns, "
-             "constraints, indexes, and proper relationships.\n"
-             "2. Migrations: Generate migration files for schema creation with both up and down migrations.\n"
-             "3. Queries: Create optimized query templates for common CRUD operations and important business "
-             "operations identified in the system design.\n"
-             "4. ORM Models: If appropriate for the tech stack, include ORM model definitions.\n\n"
+             "## MANDATORY ENTERPRISE REQUIREMENTS\n"
+             "You MUST generate ALL of the following categories of files:\n\n"
              
-             "## Best Practices\n"
+             "### 1. **CORE SCHEMA & MIGRATIONS**\n"
+             "   - Complete database schema with all entities, relationships, and constraints\n"
+             "   - Migration scripts with proper up/down migration support\n"
+             "   - Data seeding scripts for initial setup and testing\n"
+             "   - Schema validation and consistency checks\n"
+             "   - Index creation optimized for query patterns\n\n"
+             
+             "### 2. **SECURITY & COMPLIANCE**\n"
+             "   - Row-Level Security (RLS) policies for data access control\n"
+             "   - User roles and permissions matrix\n"
+             "   - Audit trail tables and triggers for all data changes\n"
+             "   - Data encryption configuration (at-rest and in-transit)\n"
+             "   - Compliance validation scripts for {project_domain} regulations\n"
+             "   - Security vulnerability assessment queries\n"
+             "   - Data masking scripts for non-production environments\n\n"
+             
+             "### 3. **PERFORMANCE & OPTIMIZATION**\n"
+             "   - Advanced indexing strategies (covering, partial, functional indexes)\n"
+             "   - Query optimization and performance tuning scripts\n"
+             "   - Database partitioning and sharding configuration\n"
+             "   - Connection pooling and resource management setup\n"
+             "   - Slow query analysis and monitoring\n"
+             "   - Performance benchmarking and load testing scripts\n"
+             "   - Query plan analysis tools\n\n"
+             
+             "### 4. **MONITORING & OBSERVABILITY**\n"
+             "   - Database monitoring dashboard configuration\n"
+             "   - Real-time metrics collection scripts\n"
+             "   - Automated alerting rules for critical thresholds\n"
+             "   - Health check and diagnostic queries\n"
+             "   - Resource utilization monitoring\n"
+             "   - Business metrics and KPI tracking queries\n"
+             "   - Log analysis and reporting tools\n\n"
+             
+             "### 5. **BACKUP & DISASTER RECOVERY**\n"
+             "   - Automated backup scripts (full, incremental, differential)\n"
+             "   - Point-in-time recovery procedures and scripts\n"
+             "   - Disaster recovery testing and validation\n"
+             "   - Cross-region backup replication configuration\n"
+             "   - Data corruption detection and repair procedures\n"
+             "   - Backup verification and integrity checking\n"
+             "   - Recovery time optimization strategies\n\n"
+             
+             "### 6. **DATA GOVERNANCE & QUALITY**\n"
+             "   - Data validation rules and constraint enforcement\n"
+             "   - Data quality monitoring and reporting queries\n"
+             "   - Data lineage tracking and metadata management\n"
+             "   - Schema evolution and migration strategies\n"
+             "   - Data retention and archival policies\n"
+             "   - Referential integrity validation scripts\n"
+             "   - Data catalog and documentation generation\n\n"
+             
+             "### 7. **DEVOPS & AUTOMATION**\n"
+             "   - Infrastructure as Code (Terraform/CloudFormation) templates\n"
+             "   - CI/CD pipeline configuration for database changes\n"
+             "   - Automated testing framework for database logic\n"
+             "   - Environment provisioning and configuration scripts\n"
+             "   - Database schema version control integration\n"
+             "   - Deployment automation and rollback procedures\n"
+             "   - Configuration management and secrets handling\n\n"
+             
+             "### 8. **OPERATIONAL QUERIES & PROCEDURES**\n"
+             "   - Optimized CRUD operations for all entities\n"
+             "   - Domain-specific business logic queries\n"
+             "   - Reporting and analytics query templates\n"
+             "   - Maintenance and housekeeping procedures\n"
+             "   - Data migration and ETL scripts\n"
+             "   - Performance troubleshooting queries\n"
+             "   - Administrative and operational procedures\n\n"
+             
+             "## Domain-Specific Requirements\n"
+             "{domain_specific_requirements}\n\n"
+             
+             "## Best Practices Context\n"
              "{rag_context}\n\n"
              
              "{code_review_feedback}\n\n"
+             
+             "## OUTPUT REQUIREMENTS\n"
+             "Generate a MINIMUM of 20+ files covering all enterprise requirements above. "
+             "Include proper file organization with directories for different concerns "
+             "(schema/, migrations/, security/, monitoring/, backup/, etc.). "
+             "Each file must be production-ready with comprehensive documentation.\n\n"
              
              "Follow this multi-file output format EXACTLY:\n{format_instructions}")
         ])
@@ -177,14 +345,19 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                     code_review_section += "Suggestions:\n"
                     for suggestion in code_review_feedback["suggestions"]:
                         code_review_section += f"- {suggestion}\n"
+              # Detect project domain for domain-specific requirements
+            project_domain = self._detect_project_domain(tech_stack)
+            domain_requirements = self._get_domain_specific_requirements(project_domain)
             
             # Create the prompt with all necessary inputs
             prompt = self.prompt_template.format(
                 db_type=db_type,
                 migration_tool=migration_tool,
+                project_domain=project_domain,
                 tech_stack_info=tech_stack_info,
                 system_design=json.dumps(pruned_design, indent=2),
                 data_model=json.dumps(data_model, indent=2),
+                domain_specific_requirements=domain_requirements,
                 rag_context=rag_context,
                 code_review_feedback=code_review_section
             )
@@ -227,10 +400,17 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                     "temperature": adjusted_temp,
                     "is_revision": is_revision
                 }
-            )
-            
-            # Parse the multi-file output
-            generated_files = parse_llm_output_into_files(content)
+            )            # Parse the multi-file output
+            parsed_files = parse_llm_output_into_files(content)
+              # Convert GeneratedFile objects to CodeFile objects
+            generated_files = []
+            for parsed_file in parsed_files:
+                from models.data_contracts import CodeFile
+                code_file = CodeFile(
+                    file_path=parsed_file.file_path,
+                    code=parsed_file.content  # GeneratedFile uses 'content', CodeFile uses 'code'
+                )
+                generated_files.append(code_file)
             
             # Handle case where parsing fails
             if not generated_files:
@@ -238,26 +418,22 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                 # Try to salvage content as a single schema file
                 schema_content = self._extract_code_blocks(content)
                 schema_file_path = f"db/schema.{self._get_file_extension_for_db(db_type)}"
-                
                 if schema_content:
+                    from models.data_contracts import CodeFile
                     generated_files = [
-                        GeneratedFile(
+                        CodeFile(
                             file_path=schema_file_path,
-                            content=schema_content,
-                            purpose="Database schema definition",
-                            status="generated"
+                            code=schema_content
                         )
                     ]
             
-            # Set all files to success (validation could be added in the future)
-            for file in generated_files:
-                file.status = "success"
+            # The generated_files list already contains CodeFile objects, no need to convert
+            code_files = generated_files
             
             # Create structured output
             output = CodeGenerationOutput(
-                generated_files=generated_files,
-                summary=f"Generated {len(generated_files)} database artifacts for {db_type} using {migration_tool}",
-                status="success" if generated_files else "error",
+                files=code_files,                summary=f"Generated {len(code_files)} database artifacts for {db_type} using {migration_tool}",
+                status="success" if code_files else "error",
                 metadata={
                     "db_type": db_type,
                     "migration_tool": migration_tool,
@@ -269,32 +445,53 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                     "execution_time": time.time() - start_time
                 }
             )
-            
-            # Log success message
+              # Log success message
             self.log_success(
-                f"Database {generation_type} complete: {len(generated_files)} files generated"
+                f"Database {generation_type} complete: {len(code_files)} files generated"
             )
             
             # Save files to disk
-            self._save_files(generated_files)
+            self._save_files(code_files)
             
             # Publish event if message bus is available
             if self.message_bus:
                 self.message_bus.publish("database.generated", {
                     "db_type": db_type,
-                    "file_count": len(generated_files),
+                    "file_count": len(code_files),
                     "is_revision": is_revision,
                     "status": "success"
                 })
             
+            # Store result in enhanced memory for cross-tool access
+            output_dict = output.dict()
+            self.enhanced_set("database_generation_result", output_dict, context="database_generation")
+            
+            # Convert CodeFile objects to dictionaries before storing to avoid JSON serialization errors
+            code_files_dict = [
+                {
+                    "file_path": cf.file_path,
+                    "code": cf.code,
+                    "file_type": "database"
+                } for cf in code_files
+            ]
+            self.store_cross_tool_data("database_files", code_files_dict, f"Database files for {db_type}")
+            
+            # Store database patterns for reuse
+            self.enhanced_set("database_patterns", {
+                "db_type": db_type,
+                "migration_tool": migration_tool,
+                "file_count": len(code_files),
+                "domain": self._detect_project_domain(tech_stack),
+                "generation_type": generation_type
+            }, context="database_patterns")
+            
             # Return as dictionary
-            return output.dict()
+            return output_dict
             
         except Exception as e:
-            self.log_error(f"Database generation failed: {str(e)}", exc_info=True)
-            # Return error output using the standardized format
+            self.log_error(f"Database generation failed: {str(e)}", exc_info=True)            # Return error output using the standardized format
             error_output = CodeGenerationOutput(
-                generated_files=[],
+                files=[],
                 summary=f"Error generating database code: {str(e)}",
                 status="error",
                 metadata={
@@ -304,29 +501,112 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                     "timestamp": datetime.now().isoformat()
                 }
             )
-            return error_output.dict()
-    
+            return error_output.dict()    
     # --- Helper methods for database generation ---
     
     def _extract_database_type(self, tech_stack: Dict[str, Any]) -> str:
-        """Extract database type from tech stack with sensible defaults."""
-        db_type = "postgresql"  # Default to PostgreSQL
-        
+        """Extract database type from tech stack with intelligent domain-aware defaults."""
         try:
+            # First, try to extract from tech stack recommendations
             if "database" in tech_stack:
                 db_info = tech_stack["database"]
-                if isinstance(db_info, dict) and "type" in db_info:
-                    db_type = db_info["type"].lower()
+                if isinstance(db_info, dict):
+                    # Handle different database info formats
+                    db_type = (db_info.get("primary") or 
+                              db_info.get("type") or 
+                              db_info.get("name") or 
+                              db_info.get("technology"))
+                    if db_type:
+                        return db_type.lower()
                 elif isinstance(db_info, list) and len(db_info) > 0:
                     first_db = db_info[0]
-                    if isinstance(first_db, dict) and "name" in first_db:
-                        db_type = first_db["name"].lower()
+                    if isinstance(first_db, dict):
+                        db_type = (first_db.get("name") or 
+                                  first_db.get("type") or 
+                                  first_db.get("technology"))
+                        if db_type:
+                            return db_type.lower()
                     elif isinstance(first_db, str):
-                        db_type = first_db.lower()
+                        return first_db.lower()
+                elif isinstance(db_info, str):
+                    return db_info.lower()
+            
+            # Fallback: Intelligent domain-aware default selection
+            return self._get_domain_appropriate_database(tech_stack)
+            
         except Exception as e:
             self.log_warning(f"Error extracting database type: {e}")
+            return self._get_domain_appropriate_database(tech_stack)
+    
+    def _get_domain_appropriate_database(self, tech_stack: Dict[str, Any]) -> str:
+        """Get domain-appropriate database based on project context."""
+        try:
+            # Try to detect domain from various sources
+            domain = self._detect_project_domain(tech_stack)
             
-        return db_type
+            # Domain-specific database recommendations
+            domain_databases = {
+                "healthcare": "postgresql",  # ACID compliance, audit trails
+                "financial": "postgresql",   # Transaction integrity, ACID
+                "iot": "influxdb",          # Time-series data
+                "ecommerce": "postgresql",   # Transaction support, JSON
+                "analytics": "clickhouse",   # Analytics workloads
+                "realtime": "redis",        # Real-time data
+                "content": "mongodb",       # Document storage
+                "social": "neo4j",          # Graph relationships
+                "startup": "sqlite",        # Simple, lightweight
+                "enterprise": "postgresql"  # Mature, scalable
+            }
+            
+            return domain_databases.get(domain, "postgresql")
+            
+        except Exception as e:
+            self.log_warning(f"Error determining domain-appropriate database: {e}")
+            return "postgresql"  # Conservative fallback
+    
+    def _detect_project_domain(self, tech_stack: Dict[str, Any]) -> str:
+        """Detect project domain from tech stack and context."""
+        try:
+            # Check for domain hints in tech stack
+            if isinstance(tech_stack, dict):
+                domain = tech_stack.get("domain") or tech_stack.get("project_domain")
+                if domain:
+                    return domain.lower()
+                
+                # Look for domain indicators in project context
+                project_name = tech_stack.get("project_name", "").lower()
+                requirements = str(tech_stack.get("requirements", "")).lower()
+                
+                # Domain detection keywords
+                if any(keyword in project_name or keyword in requirements 
+                       for keyword in ["patient", "medical", "health", "hospital"]):
+                    return "healthcare"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["payment", "bank", "finance", "trading"]):
+                    return "financial"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["device", "sensor", "iot", "telemetry"]):
+                    return "iot"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["shop", "cart", "product", "ecommerce"]):
+                    return "ecommerce"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["analytics", "data", "report"]):
+                    return "analytics"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["real-time", "live", "streaming"]):
+                    return "realtime"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["content", "cms", "blog", "article"]):
+                    return "content"
+                elif any(keyword in project_name or keyword in requirements 
+                         for keyword in ["social", "network", "friend", "follow"]):
+                    return "social"
+            
+            return "generic"
+            
+        except Exception:
+            return "generic"
     
     def _determine_migration_tool(self, tech_stack: Dict[str, Any]) -> str:
         """Determine which migration tool to use based on tech stack."""
@@ -462,13 +742,12 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
             queries = [
                 f"{db_type} database schema best practices",
                 f"{db_type} indexing and query optimization",
-                f"{db_type} data modeling patterns"
-            ]
+                f"{db_type} data modeling patterns"            ]
             
             combined_context = []
             for query in queries:
                 try:
-                    docs = self.rag_retriever.get_relevant_documents(query)
+                    docs = self.rag_retriever.invoke(query)
                     if docs:
                         context = "\n\n".join([doc.page_content for doc in docs[:self.max_rag_docs]])
                         combined_context.append(f"# {query.title()}\n{context}")
@@ -504,24 +783,55 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                     continue
             
             if in_block:
-                current_block.append(line)
-        
+                current_block.append(line)        
         return "\n\n".join(code_blocks)
     
     def _get_file_extension_for_db(self, db_type: str) -> str:
-        """Get appropriate file extension for database type."""
+        """Get appropriate file extension for database type with comprehensive support."""
         extensions = {
+            # SQL Databases
             "postgresql": "sql",
-            "mysql": "sql",
+            "mysql": "sql", 
             "sqlite": "sql",
             "mariadb": "sql",
             "oracle": "sql",
             "sql server": "sql",
+            "sqlserver": "sql",
+            "mssql": "sql",
+            "h2": "sql",
+            "hsqldb": "sql",
+            
+            # NoSQL Document Databases
             "mongodb": "js",
             "cosmosdb": "js",
+            "couchdb": "js",
+            "documentdb": "js",
+            
+            # Key-Value Stores
+            "redis": "txt",
             "dynamodb": "json",
             "cassandra": "cql",
-            "neo4j": "cypher"
+            "scylladb": "cql",
+            
+            # Graph Databases
+            "neo4j": "cypher",
+            "arangodb": "js",
+            "orientdb": "sql",
+            
+            # Time-Series Databases
+            "influxdb": "flux",
+            "timescaledb": "sql",
+            "prometheus": "promql",
+            
+            # Analytics Databases
+            "clickhouse": "sql",
+            "bigquery": "sql",
+            "snowflake": "sql",
+            "redshift": "sql",
+            
+            # Multi-Model
+            "arangodb": "js",
+            "orientdb": "sql"
         }
         
         return extensions.get(db_type.lower(), "sql")
@@ -626,3 +936,74 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
                 }
             ]
         }
+    
+    def _get_domain_specific_requirements(self, domain: str) -> str:
+        """Get domain-specific database requirements and patterns."""
+        domain_requirements = {
+            "healthcare": """
+**Healthcare Domain Requirements:**
+- HIPAA compliance: Include audit tables, data encryption fields, access logging
+- Patient data privacy: Separate PII into secure tables with access controls
+- Medical data integrity: Add data validation constraints for medical values
+- Audit trails: Create audit tables for all patient data modifications
+- Data retention: Include soft delete patterns and data archival strategies
+- Security: Implement row-level security and column-level encryption
+""",
+            "financial": """
+**Financial Domain Requirements:**
+- PCI-DSS compliance: Secure payment data storage with tokenization
+- Transaction integrity: ACID compliance, double-entry bookkeeping patterns
+- Fraud detection: Include transaction scoring and anomaly detection fields
+- Regulatory compliance: Add fields for SOX compliance and financial reporting
+- Audit trails: Complete transaction audit logs with immutable records
+- Security: Multi-layer encryption, secure key management, access controls
+""",
+            "iot": """
+**IoT Domain Requirements:**
+- Time-series optimization: Partition by time, optimize for time-based queries
+- Device data patterns: Include device metadata, sensor readings, telemetry
+- Real-time ingestion: Optimize for high-frequency data insertion
+- Data retention: Implement time-based data archival and compression
+- Scalability: Design for horizontal scaling and data partitioning
+- Edge data: Consider offline synchronization and data batching patterns
+""",
+            "ecommerce": """
+**E-commerce Domain Requirements:**
+- **Product Management**: Optimized product search, category hierarchies, variants, pricing tiers, inventory tracking
+- **Order Processing**: ACID-compliant order transactions, payment processing, fraud detection, order state management
+- **Customer Experience**: User profiles, wish lists, reviews, recommendations, purchase history analytics
+- **Inventory & Fulfillment**: Multi-warehouse inventory, real-time stock tracking, reservation systems, supplier management
+- **Security & Compliance**: PCI-DSS compliance for payments, fraud detection algorithms, secure customer data storage
+- **Performance & Scale**: Read-heavy optimization, search indexing, caching for product catalogs, traffic spike handling
+- **Analytics & Reporting**: Sales analytics, customer behavior tracking, inventory reports, financial reconciliation
+- **Business Intelligence**: Revenue tracking, conversion analytics, A/B testing data, marketing attribution
+""",
+            "analytics": """
+**Analytics Domain Requirements:**
+- OLAP patterns: Star/snowflake schemas, fact and dimension tables
+- Data warehousing: ETL optimization, aggregation tables, data marts
+- Reporting: Pre-computed metrics, materialized views, query optimization
+- Data lineage: Track data transformations and source attribution
+- Performance: Columnstore indexes, partitioning, query acceleration
+- Scalability: Design for large data volumes and complex analytical queries
+""",
+            "realtime": """
+**Real-time Domain Requirements:**
+- Low latency: Optimize for quick reads/writes, minimal joins
+- Caching patterns: Redis integration, session management, temporary data
+- Streaming data: Design for continuous data ingestion and processing
+- Session management: User state tracking, real-time updates
+- Performance: In-memory patterns, connection pooling, query optimization
+- Scalability: Horizontal scaling, load distribution, replication strategies
+""",
+            "generic": """
+**General Requirements:**
+- Follow database best practices for the selected database type
+- Include proper indexing strategies for common query patterns
+- Implement basic security measures and access controls
+- Design for maintainability and future scalability
+- Include standard CRUD operations and common business queries
+"""
+        }
+        
+        return domain_requirements.get(domain, domain_requirements["generic"])

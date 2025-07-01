@@ -88,13 +88,15 @@ def start_trace_span(name: str, metadata: Optional[Dict[str, Any]] = None) -> Ge
         )
 
 # Import agent classes
-from agents.brd_analyst import BRDAnalystAgent
+from agents.brd_analyst import BRDAnalystAgent  # Keep original for backward compatibility
+from agents.brd_analyst_react import BRDAnalystReActAgent  # New ReAct-based BRD Analyst
 from agents.tech_stack_advisor_react import TechStackAdvisorReActAgent
 from agents.system_designer_react import SystemDesignerReActAgent
+
 from agents.planning.plan_compiler_react import PlanCompilerReActAgent
 from agents.code_generation.architecture_generator import ArchitectureGeneratorAgent
 from agents.code_generation.database_generator import DatabaseGeneratorAgent
-from agents.code_generation.backend_generator import BackendGeneratorAgent
+from agents.code_generation.backend_orchestrator import BackendOrchestratorAgent
 from agents.code_generation.frontend_generator import FrontendGeneratorAgent
 from agents.code_generation.integration_generator import IntegrationGeneratorAgent
 from agents.code_generation.code_optimizer import CodeOptimizerAgent
@@ -133,11 +135,11 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
 
     # Add RAG retriever if the agent accepts it and it's available
     if "rag_retriever" in agent_class.__init__.__code__.co_varnames and "rag_manager" in config["configurable"]:
-        agent_args["rag_retriever"] = config["configurable"].get("rag_manager").get_retriever()
-
-    # Add output directory if the agent accepts it and it's available
+        agent_args["rag_retriever"] = config["configurable"].get("rag_manager").get_retriever()    # Add output directory if the agent accepts it and it's available
     if "output_dir" in agent_class.__init__.__code__.co_varnames and "run_output_dir" in config["configurable"]:
         agent_args["output_dir"] = config["configurable"]["run_output_dir"]
+    elif "run_output_dir" in agent_class.__init__.__code__.co_varnames and "run_output_dir" in config["configurable"]:
+        agent_args["run_output_dir"] = config["configurable"]["run_output_dir"]
 
     # Add code execution tool if the agent accepts it and it's available
     if "code_execution_tool" in agent_class.__init__.__code__.co_varnames and "code_execution_tool" in config["configurable"]:
@@ -150,11 +152,10 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
 
     # Create and return the agent instance
     agent_instance = agent_class(**agent_args)
-    
-    # --- THIS IS THE CHANGE ---
-    # Add a small delay to prevent hitting API rate limits
-    # We will make this configurable later, but a static delay is fine for now.
-    time.sleep(1.5)  # Wait for 1.5 seconds
+      # --- UPDATED DELAY ---
+    # Add a substantial delay to prevent hitting API rate limits (15 requests/minute = 1 request every 4 seconds)
+    logger.info("Pausing for 4.0 seconds to respect API rate limits...")
+    time.sleep(4.0)  # Increased from 1.5 to 4.0 seconds to strictly enforce the limit
     # --- END OF CHANGE ---
     
     return agent_instance
@@ -162,11 +163,16 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
 # --- Planning & Analysis Nodes ---
 
 def brd_analysis_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Parse the BRD to extract requirements and convert to a structured format."""
+    """Parse the BRD to extract requirements and convert to a structured format.
+    Uses the ReAct-based BRD Analyst for improved accuracy and reasoning."""
     logger.info("Executing BRD analysis node")
     
-    agent = create_agent_with_temperature(BRDAnalystAgent, "BRD Analyst Agent", config)
-    requirements = agent.run(state[StateFields.BRD_CONTENT])
+    # Use the new ReAct-based agent
+    agent = create_agent_with_temperature(BRDAnalystReActAgent, "BRD Analyst Agent", config)
+    
+    # Get session_id from config if available for WebSocket monitoring
+    session_id = config.get("session_id")
+    requirements = agent.run(state[StateFields.BRD_CONTENT], session_id=session_id)
     
     return {StateFields.REQUIREMENTS_ANALYSIS: requirements}
 
@@ -175,7 +181,10 @@ def tech_stack_recommendation_node(state: AgentState, config: dict) -> Dict[str,
     logger.info("Executing tech stack recommendation node")
     
     agent = create_agent_with_temperature(TechStackAdvisorReActAgent, "Tech Stack Advisor Agent", config)
-    tech_stack = agent.run(state[StateFields.REQUIREMENTS_ANALYSIS])
+    
+    # Get session_id from config if available for WebSocket monitoring
+    session_id = config.get("session_id")
+    tech_stack = agent.run(state[StateFields.REQUIREMENTS_ANALYSIS], session_id=session_id)
     
     return {StateFields.TECH_STACK_RECOMMENDATION: tech_stack}
 
@@ -218,14 +227,25 @@ def phase_iterator_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Iterate through implementation phases and set up the current phase context."""
     logger.info("Executing phase iterator node")
     
-    # Get implementation plan
+    # Get implementation plan - check both top level and nested structure
     plan = state.get(StateFields.IMPLEMENTATION_PLAN, {})
-    phases = plan.get("development_phases", [])
+    
+    # Try to get phases from nested structure first (ComprehensivePlanOutput format)
+    if "implementation_plan" in plan:
+        nested_plan = plan["implementation_plan"]
+        phases = nested_plan.get("development_phases", [])
+        logger.info(f"Found nested implementation plan with {len(phases)} phases")
+    else:
+        # Fallback to direct structure
+        phases = plan.get("development_phases", [])
+        logger.info(f"Found direct implementation plan with {len(phases)} phases")
+    
     current_index = state.get(StateFields.CURRENT_PHASE_INDEX, 0)
     
     # Check if we have phases to process
     if not phases:
-        logger.warning("No development phases found in implementation plan")
+        logger.warning(f"No development phases found in implementation plan. Plan structure: {list(plan.keys())}")
+        logger.info(f"Plan content preview: {str(plan)[:200]}...")
         return {"is_complete": True}
     
     # Get the current phase if available
@@ -261,9 +281,9 @@ def code_generation_dispatcher_node(state: AgentState, config: dict) -> Dict[str
         "setup": ArchitectureGeneratorAgent,
         "database": DatabaseGeneratorAgent,
         "data": DatabaseGeneratorAgent,
-        "backend": BackendGeneratorAgent,
-        "api": BackendGeneratorAgent,
-        "server": BackendGeneratorAgent,
+        "backend": BackendOrchestratorAgent,  # Use new orchestrator for industrial backend
+        "api": BackendOrchestratorAgent,     # Use orchestrator for API generation
+        "server": BackendOrchestratorAgent,  # Use orchestrator for server generation
         "frontend": FrontendGeneratorAgent,
         "ui": FrontendGeneratorAgent,
         "client": FrontendGeneratorAgent,
@@ -271,11 +291,12 @@ def code_generation_dispatcher_node(state: AgentState, config: dict) -> Dict[str
         "connect": IntegrationGeneratorAgent,
         "optimization": CodeOptimizerAgent,
         "refactor": CodeOptimizerAgent,
-        # Default to backend if type is unclear
-        "implementation": BackendGeneratorAgent,
+        # Default to backend orchestrator if type is unclear
+        "implementation": BackendOrchestratorAgent,
     }
     
-    agent_class = generator_map.get(phase_type, BackendGeneratorAgent)
+    agent_class = generator_map.get(phase_type, BackendOrchestratorAgent)
+    
     agent = create_agent_with_temperature(agent_class, f"{agent_class.__name__}", config)
     
     # Check if we're processing a revision
@@ -456,7 +477,15 @@ def finalize_workflow(state: AgentState, config: dict) -> Dict[str, Any]:
 def has_next_phase(state: AgentState) -> str:
     """Check if there are more development phases to process."""
     plan = state.get(StateFields.IMPLEMENTATION_PLAN, {})
-    phases = plan.get("development_phases", [])
+    
+    # Try to get phases from nested structure first (ComprehensivePlanOutput format)
+    if "implementation_plan" in plan:
+        nested_plan = plan["implementation_plan"]
+        phases = nested_plan.get("development_phases", [])
+    else:
+        # Fallback to direct structure
+        phases = plan.get("development_phases", [])
+    
     current_index = state.get(StateFields.CURRENT_PHASE_INDEX, 0)
     
     if current_index < len(phases):
@@ -947,4 +976,7 @@ def code_optimizer_node(state: AgentState, config: dict) -> Dict[str, Any]:
     
     # Call dispatcher with the modified state
     return code_generation_dispatcher_node(state_with_phase, config)
+
+# Enhanced LangGraph-based node functions for better reliability
+# End of graph_nodes.py
 

@@ -53,144 +53,118 @@ from async_graph_nodes import (
     async_planning_module,
     async_testing_module,
     async_checkpoint_state,
-    async_attempt_recovery
+    async_attempt_recovery,
+    human_approval_node,
+    decide_after_brd_approval
 )
 import monitoring
 from platform_config import get_platform_client
+from langgraph.checkpoint.memory import MemorySaver
+
+def validate_agent_factory(config: Dict[str, Any]) -> List[str]:
+    """Validate the agent factory configuration."""
+    issues = []
+    
+    if "configurable" not in config:
+        return ["Missing 'configurable' section in config"]
+        
+    configurable = config.get("configurable", {})
+    
+    # Check essential components
+    if "llm" not in configurable:
+        issues.append("Missing 'llm' in configurable - required for agent creation")
+        
+    if "temperature_strategy" not in configurable:
+        issues.append("Missing 'temperature_strategy' - required for agent temperature optimization")
+    
+    # Check for common tools
+    if "code_execution_tool" not in configurable:
+        issues.append("Missing 'code_execution_tool' - recommended for code validation")
+    
+    if "rag_manager" not in configurable:
+        issues.append("Missing 'rag_manager' - recommended for context-aware generation")
+    
+    return issues
+
+def validate_workflow_configuration(config: Dict[str, Any]) -> List[str]:
+    """Validate workflow configuration including temperature management strategy."""
+    issues = []
+    
+    # Check required components in config
+    if "configurable" not in config:
+        return ["Missing 'configurable' section in config"]
+        
+    configurable = config.get("configurable", {})
+    
+    # Check essential components
+    required_components = ["llm", "memory", "run_output_dir"]
+    for component in required_components:
+        if component not in configurable:
+            issues.append(f"Missing required component '{component}' in configuration")
+
+    # Check temperature strategy
+    if "temperature_strategy" not in configurable:
+        issues.append("Missing 'temperature_strategy' in configuration")
+    else:
+        temp_strategy = configurable.get("temperature_strategy", {})
+        essential_agents = [
+            "BRD Analyst Agent", 
+            "Tech Stack Advisor Agent",
+            "System Designer Agent",
+            "Code Generation Agent",
+            "Code Quality Agent",
+            "Test Validation Agent"
+        ]
+        
+        for agent in essential_agents:
+            if agent not in temp_strategy:
+                issues.append(f"Missing temperature setting for essential agent: {agent}")
+    
+    # Validate agent factory if provided
+    agent_factory_issues = validate_agent_factory(config)
+    issues.extend(agent_factory_issues)
+    
+    return issues
 
 async def create_async_phased_workflow() -> StateGraph:
     """
-    The definitive, refactored, async-compatible phased workflow with a generic
-    'Generate -> Review -> Revise' cycle. Now with descriptive node metadata for LangGraph Studio.
+    Create a phased development workflow with human-in-the-loop approval gates.
     """
     workflow = StateGraph(AgentState)
 
-    # --- 1. Define Nodes with Descriptions --- (added "_node" suffix to avoid state key conflicts)
-    workflow.add_node(
-        "initialize_state_node", 
-        RunnableLambda(async_initialize_workflow_state).with_config(
-            tags=["Initialization"], 
-            metadata={"description": "Initializes the state dictionary with default values."}
-        )
-    )
-    workflow.add_node(
-        "brd_analysis_node", 
-        RunnableLambda(async_brd_analysis_node).with_config(
-            tags=["Planning", "Analysis"], 
-            metadata={"description": "Analyzes the Business Requirements Document (BRD) to extract structured requirements."}
-        )
-    )
-    workflow.add_node(
-        "tech_stack_node", 
-        RunnableLambda(async_tech_stack_recommendation_node).with_config(
-            tags=["Planning", "Architecture"], 
-            metadata={"description": "Recommends an optimal technology stack based on the analyzed requirements."}
-        )
-    )
-    workflow.add_node(
-        "system_design_node", 
-        RunnableLambda(async_system_design_node).with_config(
-            tags=["Planning", "Architecture"], 
-            metadata={"description": "Creates a high-level system design and architecture."}
-        )
-    )
-    workflow.add_node(
-        "planning_node", 
-        RunnableLambda(async_planning_node).with_config(
-            tags=["Planning"],
-            metadata={"description": "Compiles all analyses into a detailed, phased implementation plan."}
-        )
-    )
-    workflow.add_node(
-        "phase_iterator_node", 
-        RunnableLambda(async_phase_iterator_node).with_config(
-            tags=["Control Flow"],
-            metadata={"description": "Sets the context for the current implementation phase or completes the workflow."}
-        )
-    )
-    workflow.add_node(
-        "generate_code_node", 
-        RunnableLambda(async_code_generation_dispatcher_node).with_config(
-            tags=["Implementation", "Code Generation"],
-            metadata={"description": "Dispatches to the correct code generator (Backend, Frontend, etc.) based on the current phase."}
-        )
-    )
-    workflow.add_node(
-        "review_code_node", 
-        RunnableLambda(async_code_quality_analysis_node).with_config(
-            tags=["Quality Assurance", "Review"],
-            metadata={"description": "Reviews the newly generated code for quality, bugs, and adherence to standards."}
-        )
-    )
-    workflow.add_node(
-        "increment_revision_node",
-        RunnableLambda(async_increment_revision_count_node).with_config(
-            tags=["Control Flow", "Revision"],
-            metadata={"description": "Increments the revision counter for the current phase before retrying generation."}
-        )
-    )
-    workflow.add_node(
-        "phase_complete_node", 
-        RunnableLambda(async_phase_completion_node).with_config(
-            tags=["Control Flow"],
-            metadata={"description": "Marks the current phase as complete and prepares for the next iteration."}
-        )
-    )
-    workflow.add_node(
-        "testing_module_node", 
-        RunnableLambda(async_testing_module_node).with_config(
-            tags=["Quality Assurance", "Testing"],
-            metadata={"description": "Generates and runs a full suite of tests (unit, integration) against the generated codebase."}
-        )
-    )
-    workflow.add_node(
-        "finalize_node", 
-        RunnableLambda(async_finalize_workflow).with_config(
-            tags=["Finalization"],
-            metadata={"description": "Compiles final results, generates a summary report, and concludes the workflow."}
-        )
-    )
+    # Add state initialization
+    workflow.add_node("initialize_state_node", async_initialize_workflow_state)
 
-    # --- 2. Define Edges --- (updated references to match new node names)
+    # Add agent nodes with a "_node" suffix to avoid state key conflicts
+    workflow.add_node("brd_analysis_node", async_brd_analysis_node)
+    workflow.add_node("tech_stack_recommendation_node", async_tech_stack_recommendation_node)
+    workflow.add_node("human_approval_brd_node", human_approval_node)
+    workflow.add_node("system_design_node", async_system_design_node)
+    workflow.add_node("planning_node", async_planning_node)
+    workflow.add_node("code_generation_node", async_code_generation_dispatcher_node)
+
+    # Define workflow edges using the new node names
     workflow.set_entry_point("initialize_state_node")
-    
-    # Planning Phase
     workflow.add_edge("initialize_state_node", "brd_analysis_node")
-    workflow.add_edge("brd_analysis_node", "tech_stack_node")
-    workflow.add_edge("tech_stack_node", "system_design_node")
+    
+    # REWIRED: Go to human approval after BRD analysis
+    workflow.add_edge("brd_analysis_node", "human_approval_brd_node")
+
+    # ADD: Add the conditional logic after human approval
+    workflow.add_conditional_edges(
+        "human_approval_brd_node",
+        decide_after_brd_approval,
+        {
+            "proceed": "tech_stack_recommendation_node",
+            "revise": "brd_analysis_node",
+            "end": END
+        }
+    )
+    
+    workflow.add_edge("tech_stack_recommendation_node", "system_design_node")
     workflow.add_edge("system_design_node", "planning_node")
-    workflow.add_edge("planning_node", "phase_iterator_node")
-
-    # Phased Implementation Loop
-    workflow.add_conditional_edges(
-        "phase_iterator_node",
-        async_has_next_phase,
-        {
-            StateFields.NEXT_PHASE: "generate_code_node",
-            StateFields.WORKFLOW_COMPLETE: "testing_module_node"
-        }
-    )
-    
-    # The 'Generate -> Review -> Revise' Cycle
-    workflow.add_edge("generate_code_node", "review_code_node")
-    workflow.add_conditional_edges(
-        "review_code_node",
-        async_should_retry_code_generation,
-        {
-            StateFields.APPROVE: "phase_complete_node",
-            StateFields.REVISE: "increment_revision_node"
-        }
-    )
-    
-    # Increment revision count before going back to generate code
-    workflow.add_edge("increment_revision_node", "generate_code_node")
-    
-    # After a phase is approved, go to the next phase
-    workflow.add_edge("phase_complete_node", "phase_iterator_node")
-
-    # Finalization
-    workflow.add_edge("testing_module_node", "finalize_node")
-    workflow.add_edge("finalize_node", END)
+    workflow.add_edge("planning_node", "code_generation_node")
+    workflow.add_edge("code_generation_node", END)
 
     return workflow
 
@@ -257,8 +231,8 @@ async def create_async_iterative_workflow() -> StateGraph:
         "quality_module_node",
         async_should_retry_code_generation,
         {
-            "retry_code_generation": "architecture_generation_node",
-            "continue": "testing_module_node"
+            StateFields.REVISE: "architecture_generation_node",
+            StateFields.APPROVE: "testing_module_node"
         }
     )
 
@@ -371,8 +345,8 @@ async def create_async_modular_workflow() -> StateGraph:
         "quality_module_node",
         async_should_retry_code_generation,
         {
-            "retry_code_generation": "architecture_generation_node",
-            "continue": "testing_module_node"
+            StateFields.REVISE: "architecture_generation_node",
+            StateFields.APPROVE: "testing_module_node"
         }
     )
     
@@ -384,77 +358,13 @@ async def create_async_modular_workflow() -> StateGraph:
 async def create_async_resumable_workflow() -> StateGraph:
     """
     Create an async-compatible workflow that can be interrupted and resumed.
-    Based on the async iterative workflow with checkpointing.
+    Based on the async phased workflow with checkpointing.
     """
-    workflow = StateGraph(AgentState)
+    # Create the async phased workflow as the base
+    workflow = await create_async_phased_workflow()
     
-    # Add state initialization node first
-    workflow.add_node("initialize_state_node", async_initialize_workflow_state)
-    
-    # Add all nodes with specialized agents
-    workflow.add_node("brd_analysis_node", async_brd_analysis_node)
-    workflow.add_node("checkpoint_after_brd", async_checkpoint_state)
-    workflow.add_node("tech_stack_recommendation_node", async_tech_stack_recommendation_node)
-    workflow.add_node("checkpoint_after_tech_stack", async_checkpoint_state)
-    workflow.add_node("system_design_node", async_system_design_node)
-    workflow.add_node("checkpoint_after_system_design", async_checkpoint_state)
-    
-    # Use consolidated planning module
-    workflow.add_node("planning_module_node", async_planning_module)
-    workflow.add_node("checkpoint_after_planning", async_checkpoint_state)
-    
-    # Recovery node
-    workflow.add_node("recovery_node", async_attempt_recovery)
-    
-    # Complete sequence of specialized code generation nodes
-    workflow.add_node("architecture_generation_node", async_architecture_generator_node)
-    workflow.add_node("database_generation_node", async_database_generator_node)
-    workflow.add_node("backend_generation_node", async_backend_generator_node)
-    workflow.add_node("frontend_generation_node", async_frontend_generator_node)
-    workflow.add_node("integration_generation_node", async_integration_generator_node)
-    workflow.add_node("code_optimizer_node", async_code_optimizer_node)
-    workflow.add_node("checkpoint_after_implementation", async_checkpoint_state)
-    
-    # Testing and quality modules
-    workflow.add_node("quality_module_node", async_quality_module)
-    workflow.add_node("testing_module_node", async_testing_module)
-    workflow.add_node("finalize_node", async_finalize_workflow)
-
-    # Define flow - REQUIRED: Set entry point first
-    workflow.set_entry_point("brd_analysis_node")
-
-    # Core workflow path with checkpoints
-    workflow.add_edge("brd_analysis_node", "checkpoint_after_brd")
-    workflow.add_edge("checkpoint_after_brd", "tech_stack_recommendation_node")
-    workflow.add_edge("tech_stack_recommendation_node", "checkpoint_after_tech_stack")
-    workflow.add_edge("checkpoint_after_tech_stack", "system_design_node")
-    workflow.add_edge("system_design_node", "checkpoint_after_system_design")
-    workflow.add_edge("checkpoint_after_system_design", "planning_module_node")
-    workflow.add_edge("planning_module_node", "checkpoint_after_planning")
-    
-    # Code generation flow
-    workflow.add_edge("checkpoint_after_planning", "architecture_generation_node")
-    workflow.add_edge("architecture_generation_node", "database_generation_node")
-    workflow.add_edge("database_generation_node", "backend_generation_node")
-    workflow.add_edge("backend_generation_node", "frontend_generation_node")
-    workflow.add_edge("frontend_generation_node", "integration_generation_node")
-    workflow.add_edge("integration_generation_node", "code_optimizer_node")
-    workflow.add_edge("code_optimizer_node", "checkpoint_after_implementation")
-    
-    # Quality and testing path
-    workflow.add_edge("checkpoint_after_implementation", "quality_module_node")
-    workflow.add_conditional_edges(
-        "quality_module_node",
-        async_should_retry_code_generation,
-        {
-            "retry_code_generation": "architecture_generation_node",
-            "continue": "testing_module_node"
-        }
-    )
-
-    workflow.add_edge("testing_module_node", "finalize_node")
-    workflow.add_edge("finalize_node", END)
-
+    # The checkpointer is added during compilation in the main script
+    # This function just needs to return the base graph
     return workflow
 
 async def create_async_implementation_workflow() -> StateGraph:
@@ -543,13 +453,21 @@ async def create_async_implementation_workflow() -> StateGraph:
     
     return workflow
 
-# Helper function for async workflow routing
+async def create_async_enhanced_phased_workflow() -> StateGraph:
+    """
+    Create an enhanced, async-compatible phased workflow.
+    This version will use standard nodes until enhanced async nodes are implemented.
+    The "enhanced" aspect comes from configuration passed during invocation.
+    """
+    return await create_async_phased_workflow()
+
 async def get_async_workflow(workflow_type: str) -> StateGraph:
-    """Get async workflow based on type."""
+    """Get async workflow based on type. Returns an uncompiled graph."""
     workflow_factories = {
         "basic": create_async_basic_workflow,
         "iterative": create_async_iterative_workflow,
         "phased": create_async_phased_workflow,
+        "enhanced": create_async_enhanced_phased_workflow,
         "modular": create_async_modular_workflow,
         "resumable": create_async_resumable_workflow,
         "implementation": create_async_implementation_workflow
@@ -558,4 +476,59 @@ async def get_async_workflow(workflow_type: str) -> StateGraph:
     if workflow_type not in workflow_factories:
         raise ValueError(f"Unknown workflow type: {workflow_type}")
     
-    return await workflow_factories[workflow_type]()
+    # Add warnings for deprecated workflow types
+    if workflow_type in ["basic", "iterative", "modular", "implementation"]:
+        import warnings
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Async workflow type '{workflow_type}' is deprecated. Consider using 'phased' workflow.")
+        
+    try:
+        monitoring.log_agent_activity("Async Workflow Builder", f"Building {workflow_type} async workflow", "START")
+        
+        # Create the workflow
+        workflow_graph = await workflow_factories[workflow_type]()
+        
+        # Set recursion limit directly on graph object
+        if hasattr(workflow_graph, "set_recursion_limit"):
+            workflow_graph.set_recursion_limit(50)  # Increase from 25 to 50
+        elif hasattr(workflow_graph, "recursion_limit"):
+            workflow_graph.recursion_limit = 50  # Increase from 25 to 50
+        
+        monitoring.log_agent_activity("Async Workflow Builder", f"Successfully created {workflow_type} async workflow definition", "SUCCESS")
+        
+        # Return the uncompiled graph. Compilation will happen at the point of use.
+        return workflow_graph
+        
+    except Exception as e:
+        monitoring.log_agent_activity("Async Workflow Builder", f"Failed to build {workflow_type} async workflow: {str(e)}", "ERROR")
+        raise
+
+# Deprecated initialization function for consistency with sync version
+def _initialize_async_workflow_components(workflow: StateGraph):
+    """
+    DEPRECATED: This function is no longer used and will be removed in a future version.
+    
+    Components are now initialized externally in main.py or serve_chain.py and passed
+    via config["configurable"] to workflow.invoke().
+    """
+    import warnings
+    warnings.warn(
+        "The _initialize_async_workflow_components function is deprecated and will be removed. "
+        "Components should be initialized externally and passed via config['configurable'].",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    # Empty implementation - components should be initialized externally
+    pass
+
+# New: Conditional edge for human approval
+async def check_human_approval(state: AgentState) -> str:
+    """Routes based on the human_decision field."""
+    decision = state.get("human_decision", "reject")
+    if decision == "approve":
+        return "continue"
+    else:
+        # For now, we'll just end the workflow on rejection or edit.
+        # Later, we can add more complex logic (e.g., go to a revision node).
+        return "end"

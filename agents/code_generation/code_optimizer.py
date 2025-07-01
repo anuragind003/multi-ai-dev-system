@@ -23,12 +23,14 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # Import proper dependencies
-from agents.code_generation.models import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput
 from tools.code_generation_utils import parse_llm_output_into_files
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
 class CodeOptimizerAgent(BaseCodeGeneratorAgent):
     """
@@ -84,6 +86,16 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
             "code_file": 8000,
             "tech_stack": 1000,
         }
+        
+        # Initialize enhanced memory
+        self._init_enhanced_memory()
+
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for code optimization patterns")
+        else:
+            self.logger.warning("RAG manager not available")
         
         # Subscribe to relevant messages if message bus is available
         if self.message_bus:
@@ -346,12 +358,31 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
                         "agent": self.agent_name,
                         "is_revision": is_revision,
                         "execution_time": time.time() - start_time
-                    }
-                )
+                    }                )
+                
+                # Store optimization results in enhanced memory
+                optimization_results = {
+                    "optimized_files_count": len(optimized_files),
+                    "languages_optimized": list(languages),
+                    "optimization_time": time.time() - start_time,
+                    "files_optimized": [file.file_path for file in optimized_files]
+                }
+                self.enhanced_set("optimization_results", optimization_results, context="code_optimization")
+                self.store_cross_tool_data("optimization_results", optimization_results, 
+                                         "Code optimization results for use by other agents")
+                
+                # Publish optimization completion message
+                if self.message_bus:
+                    self.message_bus.publish("code.optimization.complete", {
+                        "agent": self.agent_name,
+                        "optimized_files": [file.file_path for file in optimized_files],
+                        "languages": list(languages),
+                        "timestamp": datetime.now().isoformat()
+                    })
                 
                 self.log_success(f"Code optimization complete: {len(optimized_files)} files optimized")
                 return output.dict()
-
+                
             except Exception as e:
                 self.log_error(f"Code optimization failed: {e}", exc_info=True)
                 return self._create_empty_output(f"Error during code optimization: {str(e)}")
@@ -362,6 +393,8 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
             self.message_bus.subscribe('code_generation.complete', self._handle_code_generation_complete)
             self.message_bus.subscribe('tech_stack.updated', self._handle_tech_stack_updated)
             self.message_bus.subscribe('optimization.priority.update', self._handle_optimization_priority)
+            self.message_bus.subscribe('code.quality.analysis.completed', self._handle_quality_analysis_completed)
+            self.message_bus.subscribe('implementation_plan_created', self._handle_implementation_plan_created)
             self.log_info(f"{self.agent_name} subscribed to relevant messages")
     
     def _handle_code_generation_complete(self, message: Dict[str, Any]) -> None:
@@ -397,6 +430,24 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
         if "priority_files" in message:
             self.log_info(f"Received optimization priority for {len(message['priority_files'])} files")
             self.working_memory["priority_files"] = message["priority_files"]
+    
+    def _handle_quality_analysis_completed(self, message: Dict[str, Any]) -> None:
+        """Handle quality analysis completion messages"""
+        self.log_info("Received quality analysis completion message")
+        
+        payload = message.get("payload", {})
+        if payload.get("quality_score", 10) < 7:  # If quality is below 7/10
+            self.log_info(f"Quality analysis shows room for improvement (score: {payload.get('quality_score', 'unknown')})")
+            # Could trigger additional optimization here
+    
+    def _handle_implementation_plan_created(self, message: Dict[str, Any]) -> None:
+        """Handle implementation plan creation messages"""
+        self.log_info("Received implementation plan creation message")
+        
+        payload = message.get("payload", {})
+        if "plan" in payload:
+            self.working_memory["implementation_plan"] = payload["plan"]
+            self.log_info("Stored implementation plan for optimization context")
     
     def _start_optimization_job(self) -> None:
         """Start optimization job with pending files and tech stack"""

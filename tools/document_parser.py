@@ -1,6 +1,10 @@
 import os
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 # Use modern pypdf instead of PyPDF2
 try:
@@ -10,7 +14,7 @@ except ImportError:
     try:
         from PyPDF2 import PdfReader
         PDF_LIBRARY = "PyPDF2"
-        print("⚠️ Using legacy PyPDF2. Consider upgrading to pypdf: pip install pypdf")
+        logger.warning("Using legacy PyPDF2. Consider upgrading to pypdf: pip install pypdf")
     except ImportError:
         PDF_LIBRARY = None
 
@@ -34,9 +38,9 @@ class DocumentParser:
         # Always support text files
         self.supported_formats.extend(['.txt', '.md', '.rst', '.rtf'])
         
-        print(f"📄 Document Parser initialized with support for: {', '.join(self.supported_formats)}")
+        logger.info(f"Document Parser initialized with support for: {', '.join(self.supported_formats)}")
         if PDF_LIBRARY:
-            print(f"   PDF support: {PDF_LIBRARY}")
+            logger.info(f"PDF support: {PDF_LIBRARY}")
     
     def parse(self, file_path: str) -> str:
         """Alias for parse_document to maintain API compatibility."""

@@ -203,7 +203,7 @@ class CodeExecutionTool:
                     "execution_mode": "local_rejected"
                 }
                 
-            logger.warning(f"⚠️ Executing locally (NO SANDBOX): {command}")
+            logger.warning(f"[!!] Executing locally (NO SANDBOX): {command}")
             
             # Change to working directory for execution
             original_dir = os.getcwd()

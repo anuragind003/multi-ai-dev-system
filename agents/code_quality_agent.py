@@ -18,7 +18,7 @@ import monitoring
 from agent_temperatures import get_agent_temperature
 from .base_agent import BaseAgent
 from tools.code_execution_tool import CodeExecutionTool
-from .models import (
+from models.data_contracts import (
     CodeQualityAnalysisInput, 
     CodeQualityAnalysisOutput,
     CodeQualityReviewInput,
@@ -26,6 +26,10 @@ from .models import (
     CodeIssue,
     SecurityVulnerability
 )
+
+# Enhanced memory and RAG imports
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
 
 class CodeQualityAgent(BaseAgent):
@@ -48,12 +52,24 @@ class CodeQualityAgent(BaseAgent):
         self.json_parser = JsonOutputParser()
         self.message_bus = message_bus
         
+        # Initialize enhanced memory (inherits from BaseAgent)
+        self._init_enhanced_memory()
+        
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for enhanced code quality analysis")
+        else:
+            self.logger.warning("RAG manager not available - proceeding with basic code quality analysis")
+        
         # Initialize Pydantic output parsers
         self.analysis_output_parser = PydanticOutputParser(pydantic_object=CodeQualityAnalysisOutput)
         self.review_output_parser = PydanticOutputParser(pydantic_object=CodeQualityReviewOutput)
-        
-        # Initialize templates first
+          # Initialize templates first
         self._initialize_prompt_templates()
+        
+        # Setup message bus subscriptions
+        self._setup_message_subscriptions()
 
     def _initialize_prompt_templates(self):
         """Initialize all prompt templates with consistent format instructions from Pydantic models."""
@@ -249,8 +265,8 @@ class CodeQualityAgent(BaseAgent):
         
         try:
             # Initialize analysis stages with proper temperature binding
-            llm_analytical = self.llm.bind(temperature=0.1, max_output_tokens=2048)
-            llm_summary = self.llm.bind(temperature=0.2, max_output_tokens=4096)
+            llm_analytical = self._get_llm_with_temperature(0.1).bind(max_output_tokens=2048)
+            llm_summary = self._get_llm_with_temperature(0.2).bind(max_output_tokens=4096)
             
             # STAGE 1: Run automated tools first (token efficient - doesn't use LLM)
             self.log_info("Stage 1: Running automated quality checks")
@@ -310,8 +326,7 @@ class CodeQualityAgent(BaseAgent):
                 
                 self.log_success(f"Multi-stage code quality analysis completed - Overall score: {validated_result.overall_quality_score}/10")
                 self.log_execution_summary(validated_result.dict())
-                
-                # Add message bus publishing
+                  # Add message bus publishing
                 if hasattr(self, "message_bus") and self.message_bus:
                     self.message_bus.publish("code.quality.analysis.completed", {
                         "quality_score": validated_result.overall_quality_score,
@@ -320,6 +335,25 @@ class CodeQualityAgent(BaseAgent):
                         "timestamp": datetime.now().isoformat(),
                         "execution_time": execution_time
                     })
+                    
+                    # Publish optimization priority update if critical issues found
+                    critical_issues = [issue for issue in validated_result.specific_issues 
+                                     if issue.get("severity", "").lower() in ["critical", "high"]]
+                    
+                    if critical_issues or validated_result.overall_quality_score < 6:
+                        priority_files = []
+                        for issue in critical_issues:
+                            if "file" in issue:
+                                priority_files.append(issue["file"])
+                        
+                        self.message_bus.publish("optimization.priority.update", {
+                            "priority_files": list(set(priority_files)),  # Remove duplicates
+                            "critical_issues_count": len(critical_issues),
+                            "quality_score": validated_result.overall_quality_score,
+                            "urgency": "high" if validated_result.overall_quality_score < 5 else "medium",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        self.log_info(f"Published optimization priority update for {len(priority_files)} files with critical issues")
                 
                 return validated_result.dict()
                 
@@ -446,7 +480,7 @@ class CodeQualityAgent(BaseAgent):
                         format_instructions=format_instructions
                     )
                     
-                    response = llm.bind(temperature=adjusted_temp).invoke(prompt, config=invoke_config)
+                    response = self._get_llm_with_temperature(adjusted_temp).invoke(prompt, config=invoke_config)
                     analysis = self.json_parser.parse(response.content)
                     return {"file": file_path, "analysis": analysis}
                 except Exception as e:
@@ -557,9 +591,8 @@ class CodeQualityAgent(BaseAgent):
         key_files = self._select_security_critical_files(generated_files)
         tech_stack_summary = self.prune_tech_stack(tech_stack)
         
-        try:
-            # For security, use very low temperature for deterministic results
-            security_llm = llm.bind(temperature=0.1, max_output_tokens=2048)
+        try:            # For security, use very low temperature for deterministic results
+            security_llm = self._get_llm_with_temperature(0.1).bind(max_output_tokens=2048)
             
             for file_path, content in key_files:
                 # Determine language for syntax highlighting
@@ -730,6 +763,33 @@ class CodeQualityAgent(BaseAgent):
             context = "\n\n".join(selected_paragraphs)
             
         return context
+    
+    def _determine_language(self, code_type: str, tech_stack: Dict[str, Any]) -> str:
+        """Determine the primary language based on code type and tech stack"""
+        if not tech_stack:
+            return "python"  # Default
+            
+        # Extract language from tech stack
+        if code_type == "backend" and "backend" in tech_stack:
+            backend = tech_stack["backend"]
+            if isinstance(backend, dict):
+                return backend.get("language", "python").lower()
+            elif isinstance(backend, list) and backend:
+                return backend[0].get("language", "python").lower()
+        elif code_type == "frontend" and "frontend" in tech_stack:
+            frontend = tech_stack["frontend"]
+            if isinstance(frontend, dict):
+                return frontend.get("language", "javascript").lower()
+            elif isinstance(frontend, list) and frontend:
+                return frontend[0].get("language", "javascript").lower()
+        
+        # Fallback to common defaults
+        if code_type in ["backend", "database"]:
+            return "python"
+        elif code_type == "frontend":
+            return "javascript"
+        else:
+            return "python"
     
     def _determine_file_language(self, file_path: str) -> str:
         """Determine file language from extension"""
@@ -919,31 +979,37 @@ class CodeQualityAgent(BaseAgent):
         Returns:
             Dict with approval status and actionable feedback for revision
         """
+        # Extract generated files first, then validate
+        generated_files = generated_code.get("generated_files", {})
+        if isinstance(generated_code.get("files"), dict):
+            # Handle case where files are stored under "files" key
+            generated_files = generated_code.get("files", {})
+        
         # Validate input with Pydantic
         try:
             input_data = CodeQualityReviewInput(
-                generated_code=generated_code,
+                code_files=generated_files,
                 tech_stack=tech_stack,
                 code_type=code_type
             )
         except Exception as e:
             self.log_warning(f"Invalid input data: {e}")
             default_output = CodeQualityReviewOutput(
-                approved=False,
-                suggestions=[f"Invalid input format: {str(e)}"],
-                critical_issues=[]
+                overall_score=0.0,
+                has_critical_issues=True,
+                critical_issues=[{"issue": f"Invalid input format: {str(e)}", "severity": "High"}]
             )
             return default_output.dict()
             
         self.log_start(f"Starting code quality review for {input_data.code_type} code")
         
-        # Extract generated files
-        generated_files = input_data.generated_code.get("generated_files", {})
+        # Use the validated generated files
+        generated_files = input_data.code_files
         if not generated_files:
             self.log_warning("No files provided for quality review")
             default_output = CodeQualityReviewOutput(
-                approved=True,
-                suggestions=[],
+                overall_score=10.0,
+                has_critical_issues=False,
                 critical_issues=[]
             )
             return default_output.dict()  # Approve empty set by default
@@ -984,54 +1050,79 @@ class CodeQualityAgent(BaseAgent):
                     # Try direct parsing if no explicit JSON block
                     review_result = json.loads(response_text)
                     
-                # Ensure required fields are present
-                if "approved" not in review_result:
-                    review_result["approved"] = False
-                if "suggestions" not in review_result:
-                    review_result["suggestions"] = []
+                # Ensure required fields are present and convert old format to new
+                if "overall_score" not in review_result:
+                    review_result["overall_score"] = 5.0  # Default score
+                if "has_critical_issues" not in review_result:
+                    review_result["has_critical_issues"] = len(review_result.get("critical_issues", [])) > 0
                 if "critical_issues" not in review_result:
                     review_result["critical_issues"] = []
+                    
+                # Handle legacy format conversion
+                if "approved" in review_result:
+                    if not review_result["approved"] and "overall_score" not in review_result:
+                        review_result["overall_score"] = 3.0  # Low score for disapproved code
+                    elif review_result["approved"] and "overall_score" not in review_result:
+                        review_result["overall_score"] = 8.0  # High score for approved code
+                        
             except Exception as json_err:
                 self.log_warning(f"Failed to parse review response as JSON: {json_err}")
                 review_result = {
-                    "approved": False,
-                    "suggestions": ["The code review generated invalid output format"],
-                    "critical_issues": []
+                    "overall_score": 0.0,
+                    "has_critical_issues": True,
+                    "critical_issues": [{"issue": "The code review generated invalid output format", "severity": "High"}]
                 }
         
             # Log review outcome
-            approval_status = "APPROVED" if review_result["approved"] else "NEEDS REVISION" 
-            suggestion_count = len(review_result["suggestions"])
+            approval_status = "APPROVED" if not review_result.get("has_critical_issues", True) else "NEEDS REVISION" 
+            overall_score = review_result.get("overall_score", 0.0)
             critical_count = len(review_result["critical_issues"])
-            self.log_info(f"Code review complete: {approval_status} with {suggestion_count} suggestions and {critical_count} critical issues")
+            self.log_info(f"Code review complete: {approval_status} with score {overall_score}/10 and {critical_count} critical issues")
             
             # Ensure result matches the Pydantic model
             try:
                 validated_result = CodeQualityReviewOutput(**review_result)
                 
                 # Log review outcome
-                approval_status = "APPROVED" if validated_result.approved else "NEEDS REVISION" 
-                suggestion_count = len(validated_result.suggestions)
+                approval_status = "APPROVED" if not validated_result.has_critical_issues else "NEEDS REVISION" 
+                overall_score = validated_result.overall_score
                 critical_count = len(validated_result.critical_issues)
-                self.log_info(f"Code review complete: {approval_status} with {suggestion_count} suggestions and {critical_count} critical issues")
+                self.log_info(f"Code review complete: {approval_status} with score {overall_score}/10 and {critical_count} critical issues")
                 
-                return validated_result.dict()
+                # Store result in enhanced memory for cross-tool access
+                result_dict = validated_result.dict()
+                self.enhanced_set("code_quality_review_result", result_dict, context="code_quality_review")
+                self.store_cross_tool_data("quality_metrics", {
+                    "overall_score": validated_result.overall_score,
+                    "has_critical_issues": validated_result.has_critical_issues,
+                    "critical_count": critical_count,
+                    "code_type": code_type,
+                    "language": language
+                }, f"Code quality metrics for {code_type}")
+                
+                return result_dict
             except Exception as validation_error:
                 self.log_warning(f"Result validation error: {validation_error}")
                 # Ensure we return something that matches the expected structure
                 default_output = CodeQualityReviewOutput(
-                    approved=False,
-                    suggestions=[f"Output validation error: {str(validation_error)}", "Please review code manually"],
-                    critical_issues=[]
+                    overall_score=0.0,
+                    has_critical_issues=True,
+                    critical_issues=[{
+                        "issue": f"Output validation error: {str(validation_error)}",
+                        "severity": "High"
+                    }]
                 )
                 return default_output.dict()
             
         except Exception as e:
             self.log_error(f"Code quality review failed: {str(e)}")
             default_output = CodeQualityReviewOutput(
-                approved=False,
-                suggestions=[f"Error in code review process: {str(e)}"],
-                critical_issues=[]
+                overall_score=0.0,
+                has_critical_issues=True,
+                critical_issues=[{
+                    "issue": f"Error in code review process: {str(e)}",
+                    "severity": "High"
+                }]
             )
             return default_output.dict()
     
@@ -1069,11 +1160,8 @@ class CodeQualityAgent(BaseAgent):
         
         # Example JSON structure for the LLM to follow
         json_format_example = """{
-  "approved": false,
-  "suggestions": [
-    "Suggestion 1: Add error handling in module X",
-    "Suggestion 2: Improve naming conventions in class Y"
-  ],
+  "overall_score": 6.5,
+  "has_critical_issues": true,
   "critical_issues": [
     {
       "file": "path/to/file.py",
@@ -1081,6 +1169,14 @@ class CodeQualityAgent(BaseAgent):
       "severity": "High",
       "fix": "Recommended fix for the issue"
     }
+  ],
+  "code_structure_analysis": {
+    "organization": "Good",
+    "maintainability": "Needs improvement"
+  },
+  "important_recommendations": [
+    "Add error handling in module X",
+    "Improve naming conventions in class Y"
   ]
 }"""
 
@@ -1097,13 +1193,10 @@ REVIEW CRITERIA:
 {review_criteria}
 
 Your task is to act as a strict code reviewer. Analyze the code and provide structured feedback:
-1. Determine if the code can be approved or needs revision:
-   - APPROVE (set "approved": true) if the code has minor or no issues
-   - REJECT (set "approved": false) if the code has critical issues that must be fixed
-
-2. Provide SPECIFIC, ACTIONABLE suggestions for improvement.
-
-3. For critical issues, include file path, issue description, severity, and a clear fix.
+1. Provide an overall quality score (0-10) based on code quality, security, maintainability
+2. Set "has_critical_issues" to true if there are issues that must be fixed before deployment
+3. List all critical issues with file path, description, severity, and recommended fix
+4. Provide code structure analysis and important recommendations for improvement
 
 RESPOND WITH ONLY A VALID JSON OBJECT using this exact format:
 {json_format_example}
@@ -1334,3 +1427,38 @@ DO NOT include any text before or after the JSON.
                 Provide concrete examples of how to improve the code.
             """)
         ])
+    
+    def _setup_message_subscriptions(self) -> None:
+        """Set up message bus subscriptions if available"""
+        if self.message_bus:
+            # Subscribe to all code generation events to trigger quality analysis
+            self.message_bus.subscribe("architecture.generated", self._handle_code_generated)
+            self.message_bus.subscribe("database.generated", self._handle_code_generated)
+            self.message_bus.subscribe("backend.generated", self._handle_code_generated)
+            self.message_bus.subscribe("frontend.generated", self._handle_code_generated)
+            self.message_bus.subscribe("integration.generated", self._handle_code_generated)
+            self.log_info(f"{self.agent_name} subscribed to all *.generated events for proactive quality analysis")
+    
+    def _handle_code_generated(self, message: Dict[str, Any]) -> None:
+        """Handle code generation completion messages for proactive quality analysis"""
+        message_type = message.get("type", "unknown")
+        self.log_info(f"Received {message_type} event for quality analysis")
+        
+        payload = message.get("payload", {})
+        if payload.get("status") == "success" and "files" in payload:
+            # Queue files for quality analysis
+            if "pending_quality_analysis" not in self.working_memory:
+                self.working_memory["pending_quality_analysis"] = []
+            
+            # Add files with metadata about their source
+            file_batch = {
+                "files": payload["files"],
+                "source": message_type,
+                "timestamp": payload.get("timestamp", "unknown"),
+                "agent": payload.get("agent", "unknown")
+            }
+            self.working_memory["pending_quality_analysis"].append(file_batch)
+            
+            self.log_info(f"Queued {len(payload['files'])} files from {message_type} for quality analysis")
+        else:
+            self.log_warning(f"Received {message_type} event but no files to analyze")

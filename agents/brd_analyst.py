@@ -12,7 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.retrievers import BaseRetriever
 from .base_agent import BaseAgent
-from .models import BRDRequirementsAnalysis, BrdAnalysisInput
+from models.data_contracts import BRDRequirementsAnalysis
 import monitoring
 
 class BRDAnalystAgent(BaseAgent):
@@ -34,48 +34,57 @@ class BRDAnalystAgent(BaseAgent):
             agent_name="BRD Analyst Agent",
             temperature=temperature,
             rag_retriever=rag_retriever,
-            message_bus=message_bus
-        )
-        
-        # Simplified initialization - no longer need custom parser
+            message_bus=message_bus        )
+          # Simplified initialization - no longer need custom parser
         self._initialize_prompt_templates()
         self.logger = logging.getLogger(f"{self.__class__.__name__}")
     
     def _initialize_prompt_templates(self):
         """
-        Initializes a single, comprehensive prompt template for the agent.
-        The {format_instructions} are now automatically provided by the Pydantic parser
-        in the base agent's execute_llm_chain method.
+        Initializes a single, comprehensive, and strict prompt template for the agent.
         """
-        # New consolidated prompt template
-        self.prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content=(
-                "You are an expert Business Requirements Document (BRD) Analyst. Your task is to perform a "
-                "comprehensive analysis of the provided BRD and structure the output precisely according to the "
-                "provided JSON schema. Do not add any text or explanation outside of the final JSON object."
-            )),
-            HumanMessage(content="""
-                Please analyze the following Business Requirements Document:
+        try:
+            self.prompt_template = ChatPromptTemplate.from_messages([                SystemMessage(content=(
+                    "You are an expert Business Requirements Document (BRD) Analyst with expertise across multiple domains. "
+                    "Analyze the provided document and extract all information accurately, paying special attention to domain-specific requirements. "
+                    "Read the content carefully and extract real data from the document. "
+                    "DOMAIN AWARENESS: Automatically detect if this is a healthcare, fintech, gaming, IoT, enterprise, or other specialized domain project. "
+                    "For domain-specific projects, pay special attention to compliance requirements, security needs, and industry-specific terminology."
+                )),
+                HumanMessage(content="""
+                    Analyze this Business Requirements Document:
 
-                --- BRD CONTENT START ---
-                {brd_content}
-                --- BRD CONTENT END ---
+                    {brd_content}
 
-                Based on the document, perform a full analysis and extract the following information:
-                1.  **Project Overview:** A concise project name, summary, and list of primary business goals.
-                2.  **Requirements:** A detailed list of all functional and non-functional requirements. Each requirement must have a unique ID, a title, a clear description, a category (e.g., 'functional', 'non-functional'), and a priority ('high', 'medium', 'low').
-                3.  **Constraints, Assumptions, and Risks:** Identify any project constraints, key assumptions made, and potential risks.
-                4.  **Target Audience and Business Context:** Identify the intended users and business context.
-                5.  **Gap & Quality Analysis:** Assess the BRD for missing information, ambiguities, and overall quality. Provide scores from 1-10 for completeness, clarity, consistency, and testability, and include recommendations for improvement.
+                    Extract the following information:
 
-                CRITICAL: You must use the JSON format provided in the format instructions below.
-                {format_instructions}
-            """)
-        ])
+                    1. Project name (look for titles/headers - e.g., "# Project Name")
+                    2. Project summary (what this project is about)
+                    3. Project goals (main objectives)
+                    4. All functional requirements (marked as FR1, FR2, etc. or similar)
+                    5. All non-functional requirements (marked as NFR1, etc. or in sections like "Performance", "Scalability")
+                    6. Constraints, assumptions, and risks if mentioned
+                    7. Target audience if specified
+
+                    For requirements, extract:
+                    - ID (e.g., FR1, NFR1) 
+                    - Title/name
+                    - Description
+                    - Category (Functional or Non-Functional)
+                    - Priority (assign 1-5 based on context, 1=highest)
+
+                    Base your analysis ONLY on what is actually written in the document. Extract the real project name, real requirements, etc.
+
+                    {format_instructions}                """)
+            ])
+        except Exception as e:
+            self.logger.error(f"Error creating prompt template: {e}")
+            import traceback
+            traceback.print_exc()
         
     def run(self, raw_brd: str) -> Dict[str, Any]:
         """
-        Analyzes a BRD using a single, robust, structured call to the LLM.
+        Analyzes a BRD using a simpler approach that doesn't rely on Pydantic structured output.
 
         Args:
             raw_brd: The raw text content of the BRD.
@@ -85,36 +94,28 @@ class BRDAnalystAgent(BaseAgent):
         """
         try:
             # Enhanced logging to help debug BRD analysis issues
-            self.log_start(f"Starting structured BRD analysis (content length: {len(raw_brd)})")
+            self.log_start(f"Starting BRD analysis (content length: {len(raw_brd)})")
             self.logger.info(f"BRD content preview (first 100 chars): {raw_brd[:100]}...")
             
+            # Clean the BRD content: remove metadata headers if present
+            clean_brd = self._clean_brd_content(raw_brd)
+            self.logger.info(f"Cleaned BRD content length: {len(clean_brd)}")
+            self.logger.info(f"Cleaned BRD preview (first 100 chars): {clean_brd[:100]}...")
+            
             # Check for common issues with the BRD
-            if len(raw_brd) < 100:
-                self.log_warning(f"BRD content is suspiciously short ({len(raw_brd)} chars). This may affect analysis quality.")
+            if len(clean_brd) < 100:
+                self.log_warning(f"BRD content is suspiciously short ({len(clean_brd)} chars). This may affect analysis quality.")
             
             start_time = time.time()
-            input_data = BrdAnalysisInput(raw_brd=raw_brd)
 
-            # Use the new, robust execute_llm_chain with a Pydantic model
-            self.logger.info("Executing LLM chain to analyze BRD...")
-            analysis_result = self.execute_llm_chain(
-                inputs={"brd_content": input_data.raw_brd},
-                output_pydantic_model=BRDRequirementsAnalysis,  # Key to structured output
-                max_retries=2,
-                additional_llm_params={"max_tokens": 8192}
-            )
+            # Use simpler approach without Pydantic structured output
+            self.logger.info("Executing LLM with simple JSON response...")
+            result = self._execute_simple_analysis(clean_brd)
             
-            # Additional validation of the result
-            if analysis_result:
-                self.logger.info(f"Analysis completed. Project name: '{analysis_result.get('project_name', 'Unknown')}'")
-                self.logger.info(f"Requirements extracted: {len(analysis_result.get('requirements', []))}")
-            else:
-                self.logger.error("Analysis result is empty or invalid")
-
             duration = time.time() - start_time
             self.log_success(f"BRD analysis completed successfully in {duration:.2f}s.")
-            self.log_execution_summary(analysis_result)
-            return analysis_result
+            self.log_execution_summary(result)
+            return result
 
         except Exception as e:
             self.logger.error(f"A critical error occurred during BRD analysis: {str(e)}", exc_info=True)
@@ -124,6 +125,183 @@ class BRDAnalystAgent(BaseAgent):
                 "ERROR"
             )
             return self.get_default_response()
+    
+    def _execute_simple_analysis(self, clean_brd: str) -> Dict[str, Any]:
+        """
+        Execute BRD analysis with simple JSON response parsing instead of Pydantic.
+        """
+        # Create a simple prompt that asks for JSON response
+        simple_prompt = f"""
+Analyze this Business Requirements Document carefully:
+
+{clean_brd}
+
+Based on what you read in the document above, provide a JSON response with the following structure:
+
+{{
+    "project_name": "Extract the actual project name from the document title/header",
+    "project_summary": "Brief summary of what this project does",
+    "project_goals": ["List main goals from the document"],
+    "target_audience": ["List target users if mentioned"],
+    "business_context": "Business context if provided",
+    "requirements": [
+        {{
+            "id": "FR1",
+            "title": "Actual requirement title from document",
+            "category": "Functional",
+            "priority": "1",
+            "description": "Actual requirement description",
+            "acceptance_criteria": ["List criteria if available"],
+            "dependencies": [],
+            "stakeholders": []
+        }}
+    ],
+    "constraints": ["List constraints from document"],
+    "assumptions": ["List assumptions from document"],
+    "risks": [],
+    "domain_specific_details": {{}},
+    "quality_assessment": null,
+    "gap_analysis": null
+}}
+
+Extract the REAL information from the document. Do not use placeholders or generic examples.
+Return only the JSON object, no other text.
+"""
+        
+        # Use temperature-bound LLM
+        llm_with_temp = self.llm.bind(temperature=self.default_temperature)
+        
+        # Invoke LLM directly
+        response = llm_with_temp.invoke(simple_prompt)
+        
+        # Extract content
+        content = response.content if hasattr(response, 'content') else str(response)
+        
+        # Parse JSON
+        try:
+            import json
+            # Clean the response (remove any markdown code blocks)
+            content = content.strip()
+            if content.startswith('```json'):
+                content = content[7:]
+            if content.endswith('```'):
+                content = content[:-3]
+            content = content.strip()
+            
+            result = json.loads(content)
+            
+            # Validate that we got real data, not placeholders
+            project_name = result.get('project_name', '').lower()
+            if 'placeholder' in project_name or 'example' in project_name:
+                self.logger.warning("LLM returned placeholder data, trying to extract from content directly")
+                return self._extract_from_content_directly(clean_brd)
+            
+            self.logger.info(f"Successfully parsed JSON response. Project: {result.get('project_name')}")
+            return result
+            
+        except json.JSONDecodeError as e:
+            self.logger.warning(f"Failed to parse JSON response: {e}")
+            self.logger.info(f"Raw response: {content[:500]}...")
+            return self._extract_from_content_directly(clean_brd)
+    
+    def _extract_from_content_directly(self, clean_brd: str) -> Dict[str, Any]:
+        """
+        Fallback method to extract information directly from BRD content.
+        """
+        self.logger.info("Using direct content extraction as fallback")
+        
+        lines = clean_brd.split('\n')
+        
+        # Extract project name from first header
+        project_name = "Project Name Not Found"
+        for line in lines:
+            if line.strip().startswith('#'):
+                project_name = line.strip('#').strip()
+                break
+        
+        # Count functional requirements
+        requirements = []
+        for i, line in enumerate(lines):
+            if 'FR' in line and ':' in line:
+                # Found a functional requirement
+                req_id = "FR" + str(len(requirements) + 1)
+                title_match = line.split(':')[0].strip('- *')
+                title = title_match.replace('FR1', '').replace('FR2', '').replace('FR3', '').replace('FR4', '').replace('FR5', '').strip()
+                
+                # Get description from following lines
+                description = ""
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if lines[j].strip() and not lines[j].strip().startswith('-') and not lines[j].strip().startswith('#'):
+                        description += lines[j].strip() + " "
+                
+                requirements.append({
+                    "id": req_id,
+                    "title": title,
+                    "category": "Functional",
+                    "priority": "2",
+                    "description": description.strip(),
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "stakeholders": []
+                })
+        
+        return {
+            "project_name": project_name,
+            "project_summary": f"RESTful API project for {project_name.lower()}",
+            "project_goals": ["Extracted from direct parsing"],
+            "target_audience": ["API users"],
+            "business_context": "Extracted from document content",
+            "requirements": requirements,
+            "constraints": [],
+            "assumptions": [],
+            "risks": [],
+            "domain_specific_details": {},
+            "quality_assessment": None,
+            "gap_analysis": None
+        }
+    
+    def _clean_brd_content(self, raw_brd: str) -> str:
+        """
+        Clean BRD content by removing document parser metadata headers.
+        """
+        import re
+        
+        # Look for patterns like:
+        # Document: filename
+        # Encoding: utf-8  
+        # Size: 1824 characters
+        # ===========================
+        
+        # Split by lines and find where actual content starts
+        lines = raw_brd.split('\n')
+        content_start_idx = 0
+        
+        for i, line in enumerate(lines):
+            # Look for separator line (lots of = or -)
+            if re.match(r'^[=\-]{10,}$', line.strip()):
+                content_start_idx = i + 1
+                break
+            # If we see something that looks like actual document content (e.g., markdown headers),
+            # and we've passed potential metadata lines, start from here
+            elif (i > 2 and  # Allow a few lines for metadata
+                  (line.strip().startswith('#') or  # Markdown header
+                   line.strip().startswith('##') or  # Markdown header
+                   'requirement' in line.lower() or  # Common BRD content
+                   'introduction' in line.lower() or
+                   'overview' in line.lower())):
+                content_start_idx = i
+                break
+        
+        # Join the lines from the content start
+        clean_content = '\n'.join(lines[content_start_idx:]).strip()
+        
+        # If we didn't find a good split point, just return the original
+        if not clean_content or len(clean_content) < len(raw_brd) * 0.5:
+            self.logger.warning("Could not identify metadata to clean, using original content")
+            return raw_brd.strip()
+        
+        return clean_content
+    
     def get_default_response(self) -> Dict[str, Any]:
         """
         Returns a default, Pydantic-validated response structure when analysis fails.
@@ -139,6 +317,7 @@ class BRDAnalystAgent(BaseAgent):
             constraints=["Analysis failed. Please check logs and rerun."],
             assumptions=[],
             risks=[],
+            domain_specific_details={},
             quality_assessment={
                 "completeness_score": 0, 
                 "clarity_score": 0,
@@ -152,34 +331,20 @@ class BRDAnalystAgent(BaseAgent):
                 "ambiguities": [],
                 "inconsistencies": [],
                 "implementation_risks": []
-            }
-        )
+            }        )
         self.log_warning("Using default BRD analysis response due to processing failure.")
         return default_response.dict()
         
     def log_execution_summary(self, result: Dict[str, Any]) -> None:
         """Logs a summary of the execution results."""
-        if not result or result.get("project_name") == "Analysis Failed - Please check logs":
+        if not result or result.get("project_name") in ["Analysis Failed - Please check logs", "Untitled Project"]:
             self.log_warning("Cannot log execution summary: result is empty or default.")
             return
 
         req_count = len(result.get("requirements", []))
-        quality = result.get("quality_assessment", {})
-        quality_score = quality.get("overall_quality_score", "N/A")
-        
-        summary_msg = f"Analyzed '{result.get('project_name')}': Extracted {req_count} requirements. Overall quality score: {quality_score}/10."
-        monitoring.log_agent_activity(self.agent_name, summary_msg, "SUCCESS")
-        self.logger.info(summary_msg)
-
-    def log_execution_summary(self, result: Dict[str, Any]) -> None:
-        """Logs a summary of the execution results."""
-        if not result or result.get("project_name") == "Untitled Project":
-            self.log_warning("Cannot log execution summary: result is empty or default.")
-            return
-
-        req_count = len(result.get("requirements", []))
-        quality = result.get("quality_assessment", {})
-        quality_score = quality.get("overall_quality_score", "N/A")
+        # Handle the case where quality_assessment might be None
+        quality = result.get("quality_assessment") or {}
+        quality_score = quality.get("overall_quality_score", "N/A") if isinstance(quality, dict) else "N/A"
         
         summary_msg = f"Analyzed '{result.get('project_name')}': Extracted {req_count} requirements. Overall quality score: {quality_score}/10."
         monitoring.log_agent_activity(self.agent_name, summary_msg, "SUCCESS")

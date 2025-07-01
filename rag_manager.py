@@ -10,7 +10,6 @@ import time
 import base64
 from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
-import faiss
 import numpy as np
 from datetime import datetime
 import fnmatch
@@ -19,7 +18,6 @@ import logging
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
-from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     TextLoader, 
@@ -37,7 +35,75 @@ except ImportError:
     SECURITY_AVAILABLE = False
 
 import monitoring
-from config import get_embedding_model
+try:
+    from config import get_embedding_model
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+    get_embedding_model = None
+
+# FAISS vector store functionality with graceful fallback
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    # Create a mock FAISS for graceful degradation
+    class MockFAISS:
+        """Mock FAISS implementation for graceful degradation when FAISS is not available."""
+        def __init__(self):
+            self.documents = []
+            self.metadata = []
+        
+        def similarity_search(self, query, k=5):
+            """Mock similarity search that returns empty results."""
+            return []
+        
+        def add_documents(self, documents):
+            """Mock document addition."""
+            self.documents.extend(documents)
+            return True
+        
+        def is_initialized(self):
+            """Always return False for mock."""
+            return False
+    
+    faiss = None
+
+# Import FAISS with fallback handling
+if FAISS_AVAILABLE:
+    from langchain_community.vectorstores import FAISS
+else:
+    # Use mock FAISS when not available
+    FAISS = MockFAISS
+
+def get_fallback_embedding_model():
+    """Fallback embedding model when config is not available."""
+    try:
+        # Try HuggingFace embeddings as a fallback
+        from langchain_huggingface import HuggingFaceEmbeddings
+        return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    except ImportError:
+        try:
+            # Try OpenAI as another fallback
+            from langchain_openai import OpenAIEmbeddings
+            return OpenAIEmbeddings()
+        except ImportError:
+            # If nothing else works, use a mock embeddings class
+            return MockEmbeddings()
+
+class MockEmbeddings:
+    """Mock embeddings class for testing when no real embeddings are available."""
+    
+    def embed_documents(self, texts):
+        """Return random embeddings for documents."""
+        import random
+        return [[random.random() for _ in range(384)] for _ in texts]
+    
+    def embed_query(self, text):
+        """Return random embedding for query."""
+        import random
+        return [random.random() for _ in range(384)]
 
 class SecurityError(Exception):
     """Custom exception for security-related errors."""
@@ -253,7 +319,23 @@ class RAGManager:
     
     def __init__(self, vector_store_path: str, embeddings: Optional[Embeddings] = None):
         self.vector_store_path = Path(vector_store_path)
-        self.embeddings = embeddings or get_embedding_model()
+        
+        # Handle embedding model initialization with fallbacks
+        if embeddings:
+            self.embeddings = embeddings
+        elif CONFIG_AVAILABLE and get_embedding_model:
+            try:
+                self.embeddings = get_embedding_model()
+            except RuntimeError as e:
+                if "SystemConfig accessed before initialization" in str(e):
+                    print("⚠️ System config not initialized, using fallback embeddings")
+                    self.embeddings = get_fallback_embedding_model()
+                else:
+                    raise e
+        else:
+            print("⚠️ Config not available, using fallback embeddings")
+            self.embeddings = get_fallback_embedding_model()
+            
         self.vector_store: Optional[FAISS] = None
         self.metadata_file = self.vector_store_path / "metadata.json"
         self.documents_metadata: Dict[str, Any] = {}
@@ -945,7 +1027,117 @@ class ProjectRAGManager(RAGManager):
         except Exception as e:
             self.logger.error(f"Error creating retriever from vector store: {e}")
             return None
+
+    def similarity_search(self, query: str, k: int = 4, **kwargs):
+        """
+        Perform similarity search on the vector store.
+        
+        Args:
+            query: Text query to search for
+            k: Number of documents to return
+            **kwargs: Additional search arguments
+            
+        Returns:
+            List of Document objects or empty list if search fails
+        """
+        if not self.vector_store:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                "Cannot perform similarity search - vector store not initialized",
+                "WARNING"
+            )
+            return []
+            
+        try:
+            documents = self.vector_store.similarity_search(query, k=k, **kwargs)
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Similarity search returned {len(documents)} documents for query: {query[:50]}...",
+                "INFO"
+            )
+            return documents
+        except Exception as e:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Error during similarity search: {e}",
+                "ERROR"
+            )
+            return []
+
+    def similarity_search_with_score(self, query: str, k: int = 4, **kwargs):
+        """
+        Perform similarity search with scores on the vector store.
+        
+        Args:
+            query: Text query to search for
+            k: Number of documents to return
+            **kwargs: Additional search arguments
+            
+        Returns:
+            List of (Document, score) tuples or empty list if search fails
+        """
+        if not self.vector_store:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                "Cannot perform similarity search with score - vector store not initialized",
+                "WARNING"
+            )
+            return []
+            
+        try:
+            documents_with_scores = self.vector_store.similarity_search_with_score(query, k=k, **kwargs)
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Similarity search with score returned {len(documents_with_scores)} documents for query: {query[:50]}...",
+                "INFO"
+            )
+            return documents_with_scores
+        except Exception as e:
+            monitoring.log_agent_activity(
+                self.agent_name,
+                f"Error during similarity search with score: {e}",
+                "ERROR"
+            )
+            return []
     
+    def is_initialized(self) -> bool:
+        """
+        Check if the vector store is properly initialized and ready for operations.
+        
+        Returns:
+            bool: True if vector store is initialized, False otherwise
+        """
+        return self.vector_store is not None
+    
+    def get_vector_store_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current vector store state.
+        
+        Returns:
+            dict: Information about the vector store including initialization status, document count, etc.
+        """
+        info = {
+            "initialized": self.is_initialized(),
+            "vector_store_path": str(self.vector_store_path),
+            "environment": self.environment,
+            "document_count": 0,
+            "metadata_count": len(self.documents_metadata)
+        }
+        
+        if self.vector_store:
+            try:
+                # Try to get document count from the vector store
+                if hasattr(self.vector_store, 'index'):
+                    info["document_count"] = self.vector_store.index.ntotal if hasattr(self.vector_store.index, 'ntotal') else 0
+            except Exception as e:
+                monitoring.log_agent_activity(
+                    self.agent_name,
+                    f"Error getting vector store info: {e}",
+                    "WARNING"
+                )
+        
+        return info
+
     def initialize_index_from_project(self, project_dir: str = None) -> bool:
         """Initialize vector index from project code files."""
         try:
@@ -1464,4 +1656,27 @@ def _shutdown_rag_managers():
 
 # Register the shutdown function
 atexit.register(_shutdown_rag_managers)
+
+# Global RAG manager instance
+_global_rag_manager = None
+
+def get_rag_manager():
+    """
+    Get the global RAG manager instance.
+    
+    Returns:
+        ProjectRAGManager instance or None if not initialized
+    """
+    global _global_rag_manager
+    return _global_rag_manager
+
+def set_rag_manager(rag_manager):
+    """
+    Set the global RAG manager instance.
+    
+    Args:
+        rag_manager: ProjectRAGManager instance to set as global
+    """
+    global _global_rag_manager
+    _global_rag_manager = rag_manager
 

@@ -9,9 +9,124 @@ from collections import defaultdict
 import hashlib
 from datetime import datetime
 
+from abc import ABC, abstractmethod
+
+class UnifiedMemoryInterface(ABC):
+    """
+    Unified interface for all memory operations across agents.
+    This provides a consistent API regardless of the underlying storage mechanism.
+    """
+    
+    @abstractmethod
+    def store(self, key: str, value: Any, context: Optional[str] = None) -> bool:
+        """
+        Store data with optional context.
+        
+        Args:
+            key: Unique identifier for the data
+            value: Data to store (will be JSON serialized)
+            context: Optional context for grouping (e.g., agent name, session)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    def retrieve(self, key: str, context: Optional[str] = None, default: Any = None) -> Any:
+        """
+        Retrieve data with optional context.
+        
+        Args:
+            key: Unique identifier for the data
+            context: Optional context for grouping
+            default: Default value if key not found
+            
+        Returns:
+            Retrieved data or default value
+        """
+        pass
+    
+    @abstractmethod
+    def exists(self, key: str, context: Optional[str] = None) -> bool:
+        """
+        Check if key exists.
+        
+        Args:
+            key: Unique identifier to check
+            context: Optional context for grouping
+            
+        Returns:
+            True if key exists, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    def clear_context(self, context: str) -> bool:
+        """
+        Clear all data for a specific context.
+        
+        Args:
+            context: Context to clear (e.g., agent name, session)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    def list_keys(self, context: Optional[str] = None) -> List[str]:
+        """
+        List all keys, optionally filtered by context.
+        
+        Args:
+            context: Optional context filter
+            
+        Returns:
+            List of keys
+        """
+        pass
+
+
 logger = logging.getLogger(__name__)
 
-class HighPerformanceSharedMemory:
+# OPTIMIZATION: Unified Memory Interface for consistency across agents
+from abc import ABC, abstractmethod
+
+class UnifiedMemoryInterface(ABC):
+    """
+    Unified interface for all memory operations across agents.
+    This ensures consistent memory access patterns and reduces fragmentation.
+    """
+    
+    @abstractmethod
+    def store(self, key: str, value: Any, context: Optional[str] = None) -> bool:
+        """Store data with optional context namespace."""
+        pass
+    
+    @abstractmethod 
+    def retrieve(self, key: str, context: Optional[str] = None, default: Any = None) -> Any:
+        """Retrieve data with optional context namespace."""
+        pass
+    
+    @abstractmethod
+    def exists(self, key: str, context: Optional[str] = None) -> bool:
+        """Check if key exists in optional context."""
+        pass
+    
+    @abstractmethod
+    def clear_context(self, context: str) -> bool:
+        """Clear all data for a specific context."""
+        pass
+    
+    @abstractmethod
+    def list_keys(self, context: Optional[str] = None) -> List[str]:
+        """List all keys in optional context."""
+        pass
+
+
+
+class HighPerformanceSharedMemory(UnifiedMemoryInterface):
     """Enhanced shared memory with batch operations and performance optimization."""
     
     def __init__(self, run_dir: str = None, batch_size: int = 100):
@@ -262,7 +377,72 @@ class HighPerformanceSharedMemory:
             for conn in self._connection_pool.values():
                 conn.close()
             self._connection_pool.clear()
-            self.logger.debug("All database connections closed")
+            self.logger.debug("All database connections closed")    # Unified Memory Interface Implementation
+    
+    def store(self, key: str, value: Any, context: Optional[str] = None) -> bool:
+        """Store data with optional context using unified interface."""
+        try:
+            full_key = f"{context}:{key}" if context else key
+            self.set(full_key, value)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to store {full_key}: {e}")
+            return False
+    
+    def retrieve(self, key: str, context: Optional[str] = None, default: Any = None) -> Any:
+        """Retrieve data with optional context using unified interface."""
+        try:
+            full_key = f"{context}:{key}" if context else key
+            return self.get(full_key, default)
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve {full_key}: {e}")
+            return default
+    
+    def exists(self, key: str, context: Optional[str] = None) -> bool:
+        """Check if key exists using unified interface."""
+        try:
+            full_key = f"{context}:{key}" if context else key
+            return self.has_key(full_key)
+        except Exception as e:
+            self.logger.error(f"Failed to check existence of {full_key}: {e}")
+            return False
+    
+    def has_key(self, key: str) -> bool:
+        """Check if a key exists in the store."""
+        cursor = self._get_cursor()
+        cursor.execute("SELECT 1 FROM key_value_store WHERE key = ? LIMIT 1", (key,))
+        return cursor.fetchone() is not None
+    
+    def clear_context(self, context: str) -> bool:
+        """Clear all data for a specific context."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM key_value_store WHERE key LIKE ?", (f"{context}:%",))
+                conn.commit()
+                deleted_count = cursor.rowcount
+                self.logger.info(f"Cleared {deleted_count} keys for context: {context}")
+                return True
+        except Exception as e:
+            self.logger.error(f"Failed to clear context {context}: {e}")
+            return False
+    
+    def list_keys(self, context: Optional[str] = None) -> List[str]:
+        """List all keys, optionally filtered by context."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if context:
+                    cursor.execute("SELECT key FROM key_value_store WHERE key LIKE ?", (f"{context}:%",))
+                    # Strip context prefix from results
+                    keys = [row[0][len(context)+1:] for row in cursor.fetchall()]
+                else:
+                    cursor.execute("SELECT key FROM key_value_store")
+                    keys = [row[0] for row in cursor.fetchall()]
+                return keys
+        except Exception as e:
+            self.logger.error(f"Failed to list keys for context {context}: {e}")
+            return []
 
 
 class SharedProjectMemory(HighPerformanceSharedMemory):
@@ -281,7 +461,8 @@ class SharedProjectMemory(HighPerformanceSharedMemory):
         self._agent_results = {}
         self._execution_metadata = {}
         
-        print(f"✅ SharedProjectMemory initialized (DB: {self.db_path})")
+        # Removed print statement to avoid I/O errors
+        # SharedProjectMemory initialized successfully
     
     def store_agent_result(self, agent_name, result, execution_time=None, metadata=None, prompt=None, response=None):
         """Store agent execution result with extended metadata.
@@ -476,7 +657,8 @@ class SharedProjectMemory(HighPerformanceSharedMemory):
             if hasattr(self, 'logger'):
                 self.logger.error(f"Error storing agent activity: {e}")
             else:
-                print(f"Error storing agent activity: {e}")
+                # Removed print statement to avoid I/O errors
+                pass
             return None
     
     def _store_record(self, collection_name, record):
@@ -605,3 +787,32 @@ class SharedMemory:
         except Exception as e:
             logger.error(f"Failed to load memory from disk: {str(e)}")
             return False
+    
+    def store_agent_activity(self, agent_name: str, activity_type: str, prompt: str, response: str, metadata: dict = None):
+        """Store agent activity (simplified version for in-memory storage)."""
+        if metadata is None:
+            metadata = {}
+        
+        activity_record = {
+            "agent_name": agent_name,
+            "activity_type": activity_type,
+            "prompt": prompt,
+            "response": response,
+            "metadata": metadata,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Store in memory under agent activities
+        if "agent_activities" not in self._memory:
+            self._memory["agent_activities"] = []
+        
+        self._memory["agent_activities"].append(activity_record)
+        
+        # Record in history
+        self._history.append({
+            "action": "store_agent_activity",
+            "agent_name": agent_name,
+            "activity_type": activity_type
+        })
+        
+        logger.debug(f"Stored activity for agent {agent_name}: {activity_type}")

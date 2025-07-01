@@ -16,7 +16,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.retrievers import BaseRetriever
 
 # Import JsonHandler for robust JSON handling
-from multi_ai_dev_system.tools.json_handler import JsonHandler
+from tools.json_handler import JsonHandler
 
 # MODIFIED: Fix import paths - use absolute imports instead of relative imports
 import os
@@ -30,7 +30,9 @@ import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from agent_temperatures import get_agent_temperature
-from agents.models import (
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
+from models.data_contracts import (
     TimelineEstimationOutput,
     TimelineEstimationInput
 )
@@ -62,6 +64,16 @@ class TimelineEstimatorAgent(BaseAgent):
             temperature=temperature,
             rag_retriever=rag_retriever
         )
+        
+        # Initialize enhanced memory
+        self._init_enhanced_memory()
+
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for timeline estimation patterns")
+        else:
+            self.logger.warning("RAG manager not available")
         
         # Initialize single comprehensive prompt template
         self._initialize_prompt_templates()
@@ -329,6 +341,19 @@ class TimelineEstimatorAgent(BaseAgent):
                     "estimation_approach": "comprehensive_single_step",
                     "confidence_level": "high"
                 }
+            
+            # Store timeline estimation results in enhanced memory
+            if isinstance(timeline_estimation, dict):
+                timeline_summary = {
+                    "estimated_duration_weeks": timeline_estimation.get("project_timeline", {}).get("estimated_duration_weeks", 0),
+                    "total_phases": len(timeline_estimation.get("development_phases", [])),
+                    "critical_path_duration": timeline_estimation.get("project_timeline", {}).get("critical_path_duration", 0),
+                    "milestones_count": len(timeline_estimation.get("milestones", [])),
+                    "estimation_timestamp": datetime.now().isoformat()
+                }
+                self.enhanced_set("timeline_estimation_summary", timeline_summary, context="timeline_estimation")
+                self.store_cross_tool_data("timeline_estimation_results", timeline_estimation, 
+                                         "Comprehensive timeline estimation results for project planning")
             
             # Log execution summary
             self.log_execution_summary(timeline_estimation)

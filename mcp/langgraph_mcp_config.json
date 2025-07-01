@@ -1,0 +1,73 @@
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "server_type": "filesystem",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "enabled": true,
+      "timeout": 30,
+      "max_retries": 3
+    },
+    {
+      "name": "git",
+      "server_type": "git",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "."],
+      "enabled": true,
+      "timeout": 30,
+      "max_retries": 3
+    },
+    {
+      "name": "sqlite",
+      "server_type": "database",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "--db-path",
+        "./data/project.db"
+      ],
+      "enabled": false,
+      "timeout": 30,
+      "max_retries": 3,
+      "note": "Enable this when you need database operations. Requires sqlite database file."
+    },
+    {
+      "name": "browser",
+      "server_type": "browser",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "enabled": false,
+      "timeout": 60,
+      "max_retries": 2,
+      "note": "Enable for web automation tasks. Requires additional setup."
+    },
+    {
+      "name": "terminal",
+      "server_type": "terminal",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "enabled": false,
+      "timeout": 45,
+      "max_retries": 2,
+      "note": "Enable for terminal/shell operations. Use with caution."
+    }
+  ],
+  "default_settings": {
+    "log_level": "INFO",
+    "connection_timeout": 30,
+    "operation_timeout": 60,
+    "max_concurrent_operations": 5,
+    "retry_delays": [1, 2, 4]
+  },
+  "security": {
+    "allowed_paths": ["."],
+    "restricted_commands": ["rm", "del", "format", "fdisk"],
+    "require_confirmation_for": [
+      "git push",
+      "git reset --hard",
+      "database drop"
+    ]
+  }
+}
