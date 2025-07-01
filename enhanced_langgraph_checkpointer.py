@@ -67,7 +67,8 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
     
     def put(self, 
             config: RunnableConfig, 
-            checkpoint: Checkpoint) -> RunnableConfig:
+            checkpoint: Checkpoint,
+            *args, **kwargs) -> RunnableConfig:
         """Save a checkpoint using enhanced memory."""
         try:
             thread_id = config["configurable"]["thread_id"]
@@ -202,19 +203,10 @@ class EnhancedMemoryCheckpointer(BaseCheckpointSaver):
             "last_cleanup": memory_stats.last_cleanup
         }
 
-    async def aput(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    async def aput(self, config: RunnableConfig, checkpoint: Checkpoint, *args, **kwargs) -> RunnableConfig:
         """Async version of put method."""
-        return await asyncio.to_thread(self.put, config, checkpoint)
+        return await asyncio.to_thread(self.put, config, checkpoint, *args, **kwargs)
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Async version of get_tuple method."""
         return await asyncio.to_thread(self.get_tuple, config)
-
-    def list(self, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """List all checkpoints for a given thread."""
-        checkpoints = self.memory.list_checkpoints(config["configurable"]["thread_id"])
-        return [{"configurable": {"thread_id": config["configurable"]["thread_id"], "thread_ts": c["checkpoint_id"]}} for c in checkpoints]
-        
-    async def alist(self, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Async version of list method."""
-        return await asyncio.to_thread(self.list, config)
