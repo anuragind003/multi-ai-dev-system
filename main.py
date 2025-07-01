@@ -3,8 +3,45 @@
 Multi-AI Development System - Command line interface
 """
 
-import os
+# Fix Windows Unicode logging issues FIRST before any other imports
 import sys
+import os
+
+# Configure Windows-safe console output immediately
+from utils.windows_safe_console import configure_safe_console
+configure_safe_console()
+
+# Apply Windows console encoding fix immediately (improved version)
+if sys.platform.startswith('win'):
+    import io
+    import codecs
+    
+    # Only apply encoding fix if stdout/stderr are not already wrapped or redirected
+    try:
+        # Check if stdout needs encoding fix
+        if (hasattr(sys.stdout, 'buffer') and 
+            not isinstance(sys.stdout, io.TextIOWrapper) and
+            sys.stdout.isatty()):
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer,
+                encoding='utf-8',
+                errors='replace'
+            )
+        
+        # Check if stderr needs encoding fix
+        if (hasattr(sys.stderr, 'buffer') and 
+            not isinstance(sys.stderr, io.TextIOWrapper) and
+            sys.stderr.isatty()):
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer,
+                encoding='utf-8',
+                errors='replace'
+            )
+    except (AttributeError, OSError):
+        # If encoding fix fails, continue without it
+        pass
+
+# Now safe to import other modules
 import logging
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
@@ -12,11 +49,22 @@ from dotenv import load_dotenv
 # Load .env file at the very beginning
 load_dotenv()
 
+# Initialize Windows-compatible logging
+try:
+    from utils.windows_logging_fix import setup_windows_compatible_logging
+    setup_windows_compatible_logging()
+    logging.info("Windows-compatible logging initialized")
+except ImportError:
+    logging.warning("Windows logging fix not available")
+except Exception as e:
+    logging.warning(f"Failed to setup Windows logging fix: {e}")
+
 # Verify LangSmith variables are loaded
 for key in ["LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "LANGCHAIN_TRACING_V2", "LANGCHAIN_PROJECT"]:
     if key in os.environ:
         logging.info(f"{key} found in environment variables")
-    else:        logging.warning(f"{key} NOT found in environment variables")
+    else:
+        logging.warning(f"{key} NOT found in environment variables")
 
 # Now import project modules
 from utils.langsmith_utils import configure_logging
@@ -44,9 +92,25 @@ from config import (
 )
 from tools.document_parser import DocumentParser
 from graph import get_workflow, create_phased_workflow, create_iterative_workflow, validate_workflow_configuration  # Added validate_workflow_configuration
+
+# Enhanced A2A Communication imports
+try:
+    from enhanced_workflow_integration import (
+        create_enhanced_workflow, 
+        get_default_enhancement_config,
+        get_conservative_enhancement_config,
+        get_aggressive_enhancement_config
+    )
+    ENHANCED_A2A_AVAILABLE = True
+except ImportError:
+    # Use logging module directly since logger isn't defined yet
+    import logging
+    logging.getLogger(__name__).warning("Enhanced A2A communication not available. Using standard workflows.")
+    ENHANCED_A2A_AVAILABLE = False
+
 import monitoring
 from agent_state import create_initial_agent_state, StateFields  # Add this import
-from shared_memory import SharedProjectMemory
+from enhanced_memory_manager import EnhancedSharedProjectMemory as SharedProjectMemory
 from checkpoint_manager import CheckpointManager
 from rag_manager import ProjectRAGManager
 from message_bus import MessageBus
@@ -203,7 +267,7 @@ def main():
     parser.add_argument('--brd', type=str, help='Path to Business Requirements Document')
     parser.add_argument('--workflow', type=str, default='phased', 
                         choices=['basic', 'iterative', 'phased', 'modular', 'resumable'],
-                        help='Workflow type to use')
+                        help='Workflow type to use (default: phased with robust fallback logic)')
     parser.add_argument('--output', type=str, help='Output directory')
     parser.add_argument('--config', type=str, help='Path to configuration file')
     parser.add_argument('--platform', action='store_true', 
@@ -213,14 +277,27 @@ def main():
                         help='Register workflows with LangGraph Dev visualization console')
     # Add argument for tracing
     parser.add_argument('--trace-all', action='store_true',
-                   help='Execute all workflow types with tracing for LangSmith visibility')
-    # Add to the existing argument parser
+                   help='Execute all workflow types with tracing for LangSmith visibility')    # Add to the existing argument parser
     parser.add_argument('--rate-limit', type=float, default=4.0,
                    help='Minimum delay between API calls in seconds (default: 4.0)')
     parser.add_argument('--no-cache', action='store_true',
                    help='Disable LLM response caching')
     parser.add_argument('--clear-cache', action='store_true',
                    help='Clear all LLM caches before running')
+    
+    # Enhanced A2A Communication arguments
+    parser.add_argument('--enhanced-a2a', action='store_true',
+                       help='Enable enhanced agent-to-agent communication')
+    parser.add_argument('--a2a-config', type=str, default='conservative',
+                       choices=['conservative', 'default', 'aggressive'],
+                       help='A2A enhancement configuration (default: conservative)')
+    parser.add_argument('--enable-cross-validation', action='store_true',
+                       help='Enable cross-validation between related agents')
+    parser.add_argument('--enable-error-recovery', action='store_true', 
+                       help='Enable intelligent error recovery with A2A context')
+    parser.add_argument('--a2a-analytics', action='store_true',
+                       help='Enable detailed A2A communication analytics')
+    
     args = parser.parse_args()
     
     # Configure logging
@@ -253,21 +330,51 @@ def main():
     
     # Load system config - Add error handling and default config
     logger.info("Initializing system configuration...")
+    
+    # Initialize with a safe default first to prevent access issues
+    workflow_config = AdvancedWorkflowConfig()
+    workflow_config.llm_provider = 'google'
+    workflow_config.environment = 'development'
+    
+    # Now try to load from file if provided
+    if args.config:
+        try:
+            # Load configuration from file 
+            if os.path.exists(args.config):
+                workflow_config = AdvancedWorkflowConfig.load_from_multiple_sources(
+                    config_file=args.config,
+                    args=args
+                )
+                logger.info("Configuration loaded from file successfully")
+            else:
+                logger.warning(f"Configuration file {args.config} not found, using defaults")
+        except Exception as config_error:
+            logger.error(f"Error loading configuration from file: {config_error}")
+            logger.warning("Using default configuration")
+    else:
+        logger.info("No configuration file specified, using defaults")
+        # Load configuration from command line args and environment
+        workflow_config = AdvancedWorkflowConfig.load_from_multiple_sources(args=args)
+
+    # Set the global system config FIRST before calling any functions that depend on it
     try:
-        workflow_config = initialize_system_config(args.config)
-        if not workflow_config:
-            logger.warning("Failed to load configuration, using default settings")
-            workflow_config = AdvancedWorkflowConfig()
-            # Set default attributes that might be missing
-            setattr(workflow_config, 'llm_provider', 'google')
-            setattr(workflow_config, 'environment', 'development')
+        from config import set_system_config
+        set_system_config(workflow_config)
+        logger.info("Global system configuration set successfully")
+    except ImportError as e:
+        logger.warning("set_system_config function not available")
     except Exception as e:
-        logger.error(f"Error initializing configuration: {e}")
-        logger.warning("Using default configuration")
-        workflow_config = AdvancedWorkflowConfig()
-        # Set default attributes that might be missing
-        setattr(workflow_config, 'llm_provider', 'google')
-        setattr(workflow_config, 'environment', 'development')
+        logger.warning(f"Failed to set global system configuration: {e}")
+        # Try a direct fallback
+        try:
+            from config import SystemConfig
+            import config
+            config._system_config = SystemConfig(workflow_config)
+            logger.info("Direct fallback SystemConfig set")
+        except Exception as e2:
+            logger.error(f"Direct fallback also failed: {e2}")
+            # If we can't set the config at all, we need to stop
+            return 1
 
     # Safely access the configuration
     provider = getattr(workflow_config, 'llm_provider', 'google')
@@ -319,6 +426,10 @@ def main():
         embeddings=embedding_model,
         environment=workflow_config.environment
     )
+    
+    # Set as global RAG manager for tools to access
+    from rag_manager import set_rag_manager
+    set_rag_manager(rag_manager)
     
     # Add this section to properly initialize the vector store
     logger.info("Initializing RAG vector store...")
@@ -431,21 +542,71 @@ def main():
         if any("missing" in issue for issue in issues):
             logger.error("Critical configuration issues detected. Exiting.")
             return 1
-    
-    # Create workflow
+      # Create workflow with enhanced A2A support if requested
     try:
-        workflow = get_workflow(workflow_type, args.platform)
+        if args.enhanced_a2a and ENHANCED_A2A_AVAILABLE:
+            logger.info(f"Creating enhanced workflow with A2A communication ({args.a2a_config} configuration)")
+            
+            # Get enhancement configuration based on user choice
+            if args.a2a_config == "conservative":
+                enhancement_config = get_conservative_enhancement_config()
+            elif args.a2a_config == "aggressive":
+                enhancement_config = get_aggressive_enhancement_config()
+            else:  # default
+                enhancement_config = get_default_enhancement_config()
+            
+            # Override specific settings from command line arguments
+            if args.enable_cross_validation:
+                enhancement_config['enable_cross_validation'] = True
+                logger.info("Cross-validation enabled via command line")
+            
+            if args.enable_error_recovery:
+                enhancement_config['enable_error_recovery'] = True
+                logger.info("Error recovery enabled via command line")
+            
+            if args.a2a_analytics:
+                enhancement_config['log_level'] = 'DEBUG'
+                enhancement_config['enable_analytics'] = True
+                logger.info("A2A analytics enabled via command line")
+              # Create enhanced workflow
+            workflow = create_enhanced_workflow(workflow_type, enhancement_config)
+            logger.info("Enhanced A2A workflow created successfully")
+            
+            # Log the configuration being used
+            logger.info("Enhanced A2A Configuration:")
+            for key, value in enhancement_config.items():
+                logger.info(f"  {key}: {value}")
+            
+            # Monitor A2A usage
+            monitoring.log_global(f"Enhanced A2A workflow created with {args.a2a_config} configuration", "INFO")
+            monitoring.log_agent_activity("System", f"A2A features enabled: {list(enhancement_config.keys())}", "CONFIG")
+                
+        else:
+            if args.enhanced_a2a and not ENHANCED_A2A_AVAILABLE:
+                logger.warning("Enhanced A2A requested but not available. Using standard workflow.")
+            
+            # Use standard workflow
+            workflow = get_workflow(workflow_type, args.platform)
+            logger.info(f"Created standard {workflow_type} workflow")
+            
     except Exception as e:
         logger.error(f"Failed to create workflow: {e}")
         return 1
-    
-    # Create initial agent state
+      # Create initial agent state
     initial_state = create_initial_agent_state(
         brd_content=brd_content,
         workflow_config=workflow_config
     )
     initial_state[StateFields.WORKFLOW_ID] = run_id
     initial_state[StateFields.TEMPERATURE_STRATEGY] = temperature_strategy
+    
+    # Add A2A-specific state if enhanced mode is enabled
+    if args.enhanced_a2a and ENHANCED_A2A_AVAILABLE:
+        initial_state["enhanced_a2a_enabled"] = True
+        initial_state["a2a_config_type"] = args.a2a_config
+        initial_state["cross_validation_enabled"] = args.enable_cross_validation
+        initial_state["error_recovery_enabled"] = args.enable_error_recovery
+        initial_state["a2a_analytics_enabled"] = args.a2a_analytics
     
     # Add the missing workflow_start_time to fix the finalizer error
     start_time = time.time()
@@ -472,8 +633,7 @@ def main():
         
         elapsed_time = time.time() - start_time
         logger.info(f"Workflow completed in {elapsed_time:.2f} seconds")
-        
-        # Output final state summary
+          # Output final state summary
         summary_path = os.path.join(run_output_dir, "summary.json")
         with open(summary_path, "w") as f:
             summary = {
@@ -483,6 +643,15 @@ def main():
                 "requirements_analysis": final_state.get("requirements_analysis", {}),
                 "tech_stack": final_state.get("tech_stack_recommendation", {}),
                 "temperature_strategy": temperature_strategy,
+                "enhanced_a2a": {
+                    "enabled": args.enhanced_a2a and ENHANCED_A2A_AVAILABLE,
+                    "config_type": args.a2a_config if args.enhanced_a2a else None,
+                    "features": {
+                        "cross_validation": args.enable_cross_validation,
+                        "error_recovery": args.enable_error_recovery,
+                        "analytics": args.a2a_analytics
+                    } if args.enhanced_a2a else {}
+                },
                 "metrics": {
                     "total_files": len(final_state.get("code_generation_result", {}).get("generated_files", {})),
                     "test_success_rate": final_state.get("test_success_rate", 0),
@@ -540,9 +709,7 @@ def main():
                 has_async = False
                 logger.warning("Async workflow modules not available")
             
-            logger.info("Registering all workflows with LangGraph Dev")
-            
-            # Create and register all synchronous workflows
+            logger.info("Registering all workflows with LangGraph Dev")            # Create and register all synchronous workflows
             sync_workflows = {
                 "basic": create_basic_workflow(),
                 "iterative": create_iterative_workflow(),
@@ -557,7 +724,7 @@ def main():
             for name, workflow in sync_workflows.items():
                 try:
                     dev_console.register_workflow(name, workflow)
-                    logger.info(f"✅ Registered synchronous {name} workflow")
+                    logger.info(f"[OK] Registered synchronous {name} workflow")
                     registered_count += 1
                 except Exception as e:
                     logger.error(f"Failed to register {name} workflow: {str(e)}")
@@ -583,7 +750,7 @@ def main():
                             # Await the coroutine to get the actual workflow
                             workflow = await workflow_coro
                             dev_console.register_workflow(name, workflow)
-                            logger.info(f"✅ Registered {name} workflow")
+                            logger.info(f"[OK] Registered {name} workflow")
                             nonlocal registered_count
                             registered_count += 1
                             async_count += 1
@@ -629,7 +796,7 @@ def main():
                     test_state,
                     config={"configurable": configurable_components}
                 )
-                logger.info(f"✅ Generated trace for {wtype} workflow")
+                logger.info(f"[OK] Generated trace for {wtype} workflow")
             except Exception as e:
                 logger.warning(f"Failed to trace {wtype} workflow: {e}")
         
@@ -660,7 +827,7 @@ def main():
                             test_state,
                             config={"configurable": configurable_components}
                         )
-                        logger.info(f"✅ Generated trace for async_{wtype} workflow")
+                        logger.info(f"[OK] Generated trace for async_{wtype} workflow")
                     except Exception as e:
                         logger.warning(f"Failed to trace async_{wtype} workflow: {e}")
             

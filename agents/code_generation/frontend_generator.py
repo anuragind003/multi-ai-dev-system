@@ -29,8 +29,12 @@ import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 import logging
-from agents.code_generation.models import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput
 from tools.code_generation_utils import parse_llm_output_into_files
+
+# Enhanced memory and RAG imports
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -61,6 +65,16 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             message_bus=message_bus
         )
         
+        # Initialize enhanced memory (inherits from BaseCodeGeneratorAgent -> BaseAgent)
+        self._init_enhanced_memory()
+        
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for enhanced frontend generation")
+        else:
+            self.logger.warning("RAG manager not available - proceeding with basic frontend generation")
+        
         # Initialize comprehensive prompt template
         self._initialize_prompt_templates()
         
@@ -74,83 +88,408 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             "related_components": 1000,
             "api_specs": 1200
         }
-        
-        # Maximum examples to include
+          # Maximum examples to include
         self.max_examples = {
             "components": 3,
             "pages": 2,
             "api_endpoints": 5
         }
+          # Setup message bus subscriptions
+        self._setup_message_subscriptions()
     
     def _initialize_prompt_templates(self):
         """Initialize a single comprehensive prompt template for generating all frontend code."""
         
         multi_file_format = """
-        CRITICAL OUTPUT FORMAT:
-        You MUST provide your response as a single block of text. For each file you generate, 
-        you MUST use the following format:
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        You MUST provide your response as a single block of text with multiple files using this EXACT format:
 
-        ### FILE: path/to/your/file.ext
-
+        ### FILE: filename.ext
         ```filetype
-        // The full content of the file goes here.
+        // Full content of the file goes here
+        // Do not include any other text or explanations outside the content
         ```
 
-        Continue this pattern for all files you need to create. Your output should include:
-        1. Component files (src/components/...)
-        2. Pages/screens files (src/pages/... or src/screens/...)
-        3. State management files (src/store/... or src/context/...)
-        4. Styling files (src/styles/...)
-        5. Configuration files (package.json, tsconfig.json if using TypeScript, etc.)
-        6. Routing configuration
+        ### FILE: another_file.ext
+        ```filetype
+        // Full content of the second file goes here
+        ```
 
-        Each file should be complete, well-structured, and follow best practices for the chosen framework.
+        IMPORTANT RULES:
+        1. Start each file with exactly "### FILE: " followed by the relative file path
+        2. Use ONLY "filetype" as the code block language identifier  
+        3. Do NOT include explanations, comments, or other text between files
+        4. File paths should be relative to project root (e.g., "src/components/App.jsx", not "./src/components/App.jsx")
+        5. Generate ALL necessary frontend files for a complete implementation
+        
+        Files to include:
+        - Component files (src/components/...)
+        - Pages/screens files (src/pages/... or src/screens/...)
+        - State management files (src/store/... or src/context/...)
+        - Styling files (src/styles/...)
+        - Configuration files (package.json, tsconfig.json if using TypeScript, etc.)
+        - Routing configuration
+        - Testing setup files (jest.config.js, test utilities)
+        - Environment configuration (.env.example, config files)
+        - Build and deployment files (Dockerfile, .github/workflows)
         """
 
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", 
-             "You are an expert frontend developer specializing in modern JavaScript/TypeScript frameworks. "
-             "Your task is to generate a complete frontend codebase according to the specified technical "
-             "requirements and design specifications. You will create well-structured, production-ready "
-             "code following best practices and architectural patterns appropriate for the chosen framework."
+             """You are a Senior Frontend Architect with 10+ years of experience building production-grade enterprise applications.
+             Your task is to generate ENTERPRISE-READY, PRODUCTION-QUALITY frontend code with complete testing and DevOps setup.
+             
+             **PRODUCTION REQUIREMENTS - MANDATORY:**
+             
+             🏗️ **ARCHITECTURE & PATTERNS:**
+             - Clean Architecture: Separation of concerns, dependency injection
+             - SOLID principles: Single responsibility, open/closed, etc.
+             - Design Patterns: Observer, Factory, Command, Strategy patterns
+             - Micro-frontends ready: Module federation support where applicable
+             - Domain-driven design: Feature-based folder structure
+             
+             🔒 **SECURITY & COMPLIANCE:**
+             - CSP (Content Security Policy) headers configuration
+             - XSS prevention: Input sanitization, output encoding
+             - CSRF protection: Token validation, SameSite cookies
+             - Authentication: JWT handling, token refresh, secure storage
+             - Authorization: Role-based access control (RBAC)
+             - Data validation: Client-side and server-side validation
+             - Sensitive data masking in development tools
+             
+             ⚡ **PERFORMANCE & OPTIMIZATION:**
+             - Code splitting: Route-based and component-based lazy loading
+             - Tree shaking: Eliminate dead code, optimize bundle size
+             - Memoization: React.memo, useMemo, useCallback usage
+             - Virtual scrolling: For large lists and tables
+             - Image optimization: WebP, lazy loading, responsive images
+             - Service workers: Caching strategies, offline functionality
+             - Bundle analysis: Webpack Bundle Analyzer integration
+             - Core Web Vitals optimization: LCP, FID, CLS metrics
+             
+             🧪 **TESTING STRATEGY:**
+             - Unit tests: Jest + React Testing Library (minimum 80% coverage)
+             - Integration tests: Component interaction testing
+             - E2E tests: Playwright/Cypress for critical user journeys
+             - Visual regression: Storybook + Chromatic integration
+             - Performance tests: Lighthouse CI integration
+             - Accessibility tests: axe-core integration
+             - API mocking: MSW (Mock Service Worker) setup
+             
+             ♿ **ACCESSIBILITY (WCAG 2.1 AA):**
+             - Semantic HTML: Proper headings, landmarks, lists
+             - ARIA labels: aria-label, aria-describedby, role attributes
+             - Keyboard navigation: Tab order, focus management, shortcuts
+             - Screen reader support: Skip links, live regions, descriptions
+             - Color contrast: WCAG compliant contrast ratios
+             - Focus indicators: Visible focus states for all interactive elements
+             - Reduced motion: Respect prefers-reduced-motion media query
+             
+             📱 **RESPONSIVE & PWA:**
+             - Mobile-first design: Progressive enhancement approach
+             - Breakpoint system: xs, sm, md, lg, xl, 2xl breakpoints
+             - Touch interactions: Gesture support, haptic feedback
+             - PWA features: Manifest, service worker, push notifications
+             - Offline capability: Cache-first strategies, background sync
+             - App-like experience: Install prompts, splash screens
+             
+             🔄 **STATE MANAGEMENT:**
+             - Immutable updates: Proper state mutation prevention
+             - Normalized state: Entity-based state structure
+             - Async state handling: Loading, error, success states
+             - Optimistic updates: Immediate UI feedback
+             - State persistence: LocalStorage, SessionStorage integration
+             - State debugging: DevTools integration, time-travel debugging
+             
+             📊 **MONITORING & ANALYTICS:**
+             - Error tracking: Sentry integration with error boundaries
+             - Performance monitoring: Web Vitals tracking, RUM
+             - User analytics: Event tracking, conversion funnels
+             - A/B testing: Feature flags integration
+             - Real-time monitoring: Health checks, uptime monitoring
+             - User session recording: FullStory/LogRocket integration
+             
+             🚀 **DEVOPS & DEPLOYMENT:**
+             - CI/CD pipeline: GitHub Actions/Jenkins integration
+             - Environment configuration: Multiple environment support
+             - Build optimization: Production vs development builds
+             - Static analysis: ESLint, Prettier, TypeScript strict mode
+             - Security scanning: npm audit, Snyk integration
+             - Performance budgets: Bundle size limits, performance metrics
+             - CDN configuration: Asset optimization and caching
+             
+             **FRAMEWORK-SPECIFIC PRODUCTION PATTERNS:**
+             
+             🔵 **React Production Patterns:**
+             - Error Boundaries: Graceful error handling and recovery
+             - Suspense: Loading states and code splitting
+             - Context optimization: Prevent unnecessary re-renders
+             - Custom hooks: Reusable stateful logic
+             - Portal usage: Modals, tooltips, overlays
+             - Ref forwarding: Component composition patterns
+             - PropTypes/TypeScript: Runtime and compile-time validation
+             
+             🟢 **Vue.js Production Patterns:**
+             - Composition API: Reusable reactive logic
+             - Teleport: Portal-like functionality for Vue 3
+             - Async components: Dynamic imports and loading states
+             - Custom directives: Reusable DOM manipulation
+             - Plugin architecture: Modular functionality
+             - Pinia stores: Modern state management
+             - Vue DevTools: Development and debugging integration
+             
+             🔴 **Angular Production Patterns:**
+             - Change detection: OnPush strategy optimization
+             - Dependency injection: Service organization and testing
+             - Guards: Route protection and data loading
+             - Interceptors: HTTP request/response handling
+             - Pipes: Data transformation and performance
+             - NgRx: Advanced state management patterns
+             - Angular CLI: Build optimization and schematics
+             
+             Generate ONLY production-ready code with enterprise standards. Include comprehensive error handling,
+             proper TypeScript interfaces, extensive testing setup, and modern DevOps integration.
+             """
             ),
             ("human", 
              """
-             Generate a complete frontend codebase for the following specifications:
+             Generate a complete PRODUCTION-READY frontend implementation for the **{project_domain}** domain using 
+             **{frontend_framework}** framework with **{frontend_language}** language.
 
-             ## Tech Stack
+             ## Project Context
+             
+             DOMAIN: {project_domain}
+             SCALE: {project_scale}
+             TARGET USERS: {target_users}
+             ACCESSIBILITY REQUIREMENTS: {accessibility_requirements}
+             
+             REQUIREMENTS ANALYSIS:
+             {requirements_summary}
+
+             TECH STACK:
              {tech_stack_summary}
+
+             SYSTEM DESIGN:
+             {system_design_summary}
+
+             ## Technical Details
+             
+             Frontend Framework: {frontend_framework}
+             Programming Language: {frontend_language}
+             Styling Framework: {styling_framework}
+             State Management: {state_management}
+             Routing Library: {routing_library}
+             
+             Full Tech Stack:
+             {tech_stack_details}
+             
+             Full System Design:
+             {system_design_details}
 
              ## UI Design Specifications
              {ui_specs}
 
-             ## API Integration
+             ## API Integration Specs
              {api_specs}
 
-             ## System Design Overview
-             {system_design_overview}
+             ## Component Architecture
+             {component_architecture}
 
-             ## Requirements
-             Generate a complete frontend application including:
-             
-             1. All UI components (reusable components and page-specific components)
-             2. Page/screen components with proper layouts
-             3. State management implementation ({state_management})
-             4. Styling using {styling_approach}
-             5. Routing configuration with {routing_library}
-             6. Configuration files (package.json, etc.)
+             ## Domain-Specific UI Requirements
+             {domain_ui_requirements}
 
-             ## Best Practices to Follow
-             - Use proper folder structure and organization
-             - Implement responsive design
-             - Follow accessibility standards (WCAG)
-             - Include error handling and loading states
-             - Use proper TypeScript types if applicable
-             - Add meaningful comments for complex logic
+             ## Framework-Specific Best Practices
+             {framework_best_practices}
 
+             ## Accessibility and UX Guidelines
+             {accessibility_guidelines}
+
+             ## Context and Guidance
              {rag_context}
 
              {code_review_feedback}
+
+             ## PRODUCTION-READY FILE REQUIREMENTS:
+
+             **MANDATORY FILES TO GENERATE:**
+
+             📦 **Package & Configuration:**
+             - package.json (with ALL production dependencies including:
+               * zustand (state management)
+               * @sentry/react (error tracking)
+               * @tanstack/react-query (server state)
+               * dompurify (XSS prevention)
+               * react-window (virtual scrolling)
+               * web-vitals (performance monitoring)
+               * @types/dompurify (TypeScript types)
+               * react-error-boundary (error boundaries))
+             - tsconfig.json (strict TypeScript configuration)
+             - .env.example (environment variables template)
+             - .eslintrc.js (strict linting rules)
+             - .prettier.config.js (code formatting)
+             - jest.config.js (testing configuration)
+             - tailwind.config.js (if using Tailwind)
+             - vite.config.ts / webpack.config.js (build configuration)
+
+             🏗️ **Core Application Structure:**
+             - src/main.tsx / src/index.tsx (application entry point)
+             - src/App.tsx (main application component with error boundary)
+             - src/router/index.tsx (routing configuration)
+             - src/types/index.ts (TypeScript type definitions)
+             - src/constants/index.ts (application constants)
+             - src/config/index.ts (environment configuration)
+
+             🧩 **Component Architecture:**
+             - src/components/ui/ (reusable UI components)
+             - src/components/layout/ (layout components)
+             - src/components/forms/ (form components with validation)
+             - src/pages/ (page/route components)
+             - src/hooks/ (custom React hooks)
+             - src/context/ (React context providers)
+
+             🔄 **State Management:**
+             - src/store/index.ts (store configuration)
+             - src/store/slices/ (Redux slices or Zustand stores)
+             - src/store/middleware.ts (custom middleware)
+             - src/services/api.ts (API service layer)
+             - src/utils/storage.ts (localStorage/sessionStorage utilities)
+
+             🎨 **Styling & Theming:**
+             - src/styles/globals.css (global styles)
+             - src/styles/variables.css (CSS custom properties)
+             - src/styles/components.css (component-specific styles)
+             - src/theme/index.ts (theme configuration)
+
+             🔒 **Security & Utils:**
+             - src/utils/auth.ts (authentication utilities)
+             - src/utils/validation.ts (form validation schemas)
+             - src/utils/sanitize.ts (XSS prevention)
+             - src/guards/AuthGuard.tsx (route protection)
+             - src/utils/crypto.ts (encryption/decryption utilities)
+
+             🧪 **Testing Setup:**
+             - src/test/setup.ts (test configuration)
+             - src/test/utils.tsx (testing utilities)
+             - src/test/mocks/ (API mocks)
+             - src/__tests__/ (component tests)
+             - cypress/ or playwright/ (E2E test configuration)
+
+             ⚡ **Performance & PWA:**
+             - public/manifest.json (PWA manifest)
+             - public/sw.js (service worker)
+             - src/utils/performance.ts (performance monitoring)
+             - src/utils/lazy.ts (lazy loading utilities)
+
+             🚀 **DevOps & Deployment:**
+             - Dockerfile (containerization)
+             - .github/workflows/ci.yml (CI/CD pipeline)
+             - .dockerignore (Docker ignore file)
+             - nginx.conf (production server configuration)
+
+             ## CRITICAL IMPLEMENTATION REQUIREMENTS:
+
+             1. **Use proper React Router Links instead of anchor tags**
+             2. **Implement comprehensive TypeScript interfaces**
+             3. **Add error boundaries for all route components**
+             4. **Include loading states for all async operations**
+             5. **Implement proper form validation with error handling**
+             6. **Add ARIA labels and semantic HTML for accessibility**
+             7. **Include proper meta tags for SEO**
+             8. **Implement responsive design with mobile-first approach**
+             9. **Add proper error handling for API calls**
+             10. **Include environment-based configuration**
+             11. **Add comprehensive JSDoc comments**
+             12. **Implement proper state management patterns**
+             13. **Include performance monitoring and analytics**
+             14. **Add proper security headers and CSP**
+             15. **Implement offline functionality where applicable**
+
+             ## ENTERPRISE-GRADE ENHANCEMENTS (MANDATORY):
+
+             🚫 **ERROR BOUNDARIES & FAULT TOLERANCE:**
+             - React Error Boundary components for each route
+             - Global error boundary with fallback UI
+             - Error reporting to external services (Sentry)
+             - Graceful degradation strategies
+             - Recovery mechanisms and retry logic
+             - Development vs production error displays
+
+             🔄 **STATE MANAGEMENT (CHOOSE BASED ON COMPLEXITY):**
+             - Zustand for simple to medium complexity (preferred)
+             - Redux Toolkit for complex applications
+             - React Query/TanStack Query for server state
+             - Global state for authentication, user preferences
+             - Local state optimization with useState, useReducer
+             - State persistence to localStorage/sessionStorage
+
+             ⚡ **PERFORMANCE OPTIMIZATION:**
+             - React.lazy() for route-based code splitting
+             - React.memo for expensive component re-renders
+             - useMemo for expensive calculations
+             - useCallback for stable function references
+             - Virtual scrolling for large lists (react-window)
+             - Image lazy loading and optimization
+             - Bundle splitting and tree shaking
+             - Preloading critical resources
+
+             🔒 **SECURITY IMPLEMENTATION:**
+             - Content Security Policy (CSP) headers
+             - XSS prevention with DOMPurify
+             - CSRF protection tokens
+             - Secure authentication flow (JWT with refresh tokens)
+             - Input validation and sanitization
+             - Secure cookie settings (httpOnly, secure, sameSite)
+             - Environment variable security (.env.example)
+             - API endpoint security headers
+
+             📊 **MONITORING & ANALYTICS:**
+             - Sentry integration for error tracking
+             - Google Analytics or custom analytics
+             - Performance monitoring (Web Vitals)
+             - User session recording (optional)
+             - Custom event tracking for business metrics
+             - Real User Monitoring (RUM)
+             - Error boundary reporting
+             - API response time monitoring
+
+             **SPECIFIC FILES TO GENERATE FOR ENHANCEMENTS:**
+
+             🚫 **Error Boundaries:**
+             - src/components/error/ErrorBoundary.tsx
+             - src/components/error/GlobalErrorBoundary.tsx
+             - src/components/error/RouteErrorBoundary.tsx
+             - src/components/error/ErrorFallback.tsx
+             - src/utils/errorReporting.ts
+
+             🔄 **State Management:**
+             - src/store/index.ts (Zustand store setup)
+             - src/store/authStore.ts (authentication state)
+             - src/store/uiStore.ts (UI state management)
+             - src/hooks/useAuthStore.ts
+             - src/hooks/usePersistedStore.ts
+             - src/utils/storage.ts
+
+             ⚡ **Performance:**
+             - src/components/lazy/LazyRoutes.tsx
+             - src/components/performance/VirtualList.tsx
+             - src/hooks/usePerformanceMonitor.ts
+             - src/utils/imageOptimization.ts
+             - src/utils/lazyLoading.ts
+
+             🔒 **Security:**
+             - src/utils/security.ts (XSS prevention, sanitization)
+             - src/components/security/CSPMeta.tsx
+             - src/utils/auth.ts (JWT handling, secure storage)
+             - src/guards/AuthGuard.tsx
+             - src/guards/RoleGuard.tsx
+             - public/.htaccess (security headers)
+
+             📊 **Monitoring:**
+             - src/utils/monitoring.ts (Sentry setup)
+             - src/utils/analytics.ts (GA/custom analytics)
+             - src/hooks/usePerformanceMetrics.ts
+             - src/utils/webVitals.ts
+             - src/components/monitoring/PerformanceMonitor.tsx
 
              Follow this multi-file format EXACTLY:
              {format_instructions}
@@ -196,28 +535,39 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             if not isinstance(system_design, dict):
                 self.log_warning("Invalid system design - using default")
                 system_design = self._create_default_system_design()
-            
-            # Extract frontend technology details
+              # Extract frontend technology details with enhanced domain awareness
             frontend_tech = self._extract_frontend_tech(tech_stack)
-            framework = frontend_tech.get("framework", "React")
-            styling_approach = frontend_tech.get("css_framework", frontend_tech.get("styling", "CSS"))
+            frontend_framework = frontend_tech.get("framework", "React")
+            frontend_language = frontend_tech.get("language", "JavaScript")
+            styling_framework = frontend_tech.get("css_framework", frontend_tech.get("styling", "CSS"))
             state_management = frontend_tech.get("state_management", "Context API")
             routing_library = frontend_tech.get("routing", "react-router")
             
-            self.log_info(f"Using frontend stack: {framework} with {styling_approach}, {state_management}, {routing_library}")
+            # Extract domain and user context
+            project_domain = requirements_analysis.get("domain", "general")
+            project_scale = requirements_analysis.get("scale", "small")
+            target_users = requirements_analysis.get("target_users", "general users")
             
-            # Create concise tech stack summary
+            self.log_info(f"Using frontend stack: {frontend_framework} with {styling_framework}, {state_management}, {routing_library}")
+            
+            # Generate domain-specific requirements and guidelines
+            domain_ui_requirements = self._get_domain_ui_requirements(project_domain, requirements_analysis)
+            accessibility_requirements = self._get_accessibility_requirements(project_domain, target_users)
+            accessibility_guidelines = self._get_accessibility_guidelines(project_domain)
+            framework_best_practices = self._get_frontend_best_practices(frontend_framework, styling_framework, project_domain)
+            
+            # Create enhanced summaries
+            requirements_summary = self._create_requirements_summary(requirements_analysis)
             tech_stack_summary = self._create_tech_stack_summary(frontend_tech)
+            system_design_summary = self._create_system_design_summary(system_design)
             
             # Extract UI specifications and API endpoints
             ui_specs = self._extract_ui_specs(system_design)
             api_specs = self._extract_api_specs(system_design, tech_stack)
-            
-            # Create system design overview
-            system_design_overview = self._create_system_design_overview(system_design)
+            component_architecture = self._create_component_architecture(system_design, frontend_framework)
             
             # Get RAG context for frontend development
-            rag_context = self._get_frontend_rag_context(framework, styling_approach, state_management)
+            rag_context = self._get_frontend_rag_context(frontend_framework, styling_framework, state_management)
             
             # Format UI specs for the prompt
             ui_specs_formatted = json.dumps(ui_specs, indent=2)
@@ -249,23 +599,35 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
                 temperature=adjusted_temp,
                 max_tokens=self.max_tokens
             )
-            
-            # Add monitoring context
-            invoke_config["agent_context"] = f"{self.agent_name}:{framework}_generation"
+              # Add monitoring context
+            invoke_config["agent_context"] = f"{self.agent_name}:{frontend_framework}_generation"
             invoke_config["temperature_used"] = adjusted_temp
             invoke_config["is_revision"] = is_revision
             
             # Execute LLM call to generate all frontend artifacts
-            self.log_info(f"Generating {framework} frontend with temperature {adjusted_temp}")
+            self.log_info(f"Generating {frontend_framework} frontend with temperature {adjusted_temp}")
             response = llm_with_temp.invoke(
                 self.prompt_template.format(
+                    project_domain=project_domain,
+                    project_scale=project_scale,
+                    target_users=target_users,
+                    accessibility_requirements=accessibility_requirements,
+                    requirements_summary=requirements_summary,
                     tech_stack_summary=tech_stack_summary,
-                    ui_specs=ui_specs_formatted,
-                    api_specs=api_specs_formatted,
-                    system_design_overview=system_design_overview,
+                    system_design_summary=system_design_summary,
+                    tech_stack_details=json.dumps(tech_stack, indent=2),
+                    system_design_details=json.dumps(system_design, indent=2),
+                    frontend_framework=frontend_framework,
+                    frontend_language=frontend_language,
+                    styling_framework=styling_framework,
                     state_management=state_management,
-                    styling_approach=styling_approach,
                     routing_library=routing_library,
+                    ui_specs=json.dumps(ui_specs, indent=2),
+                    api_specs=json.dumps(api_specs, indent=2),
+                    component_architecture=component_architecture,
+                    domain_ui_requirements=domain_ui_requirements,
+                    framework_best_practices=framework_best_practices,
+                    accessibility_guidelines=accessibility_guidelines,
                     rag_context=rag_context,
                     code_review_feedback=code_review_section
                 ),
@@ -274,22 +636,30 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             
             # Extract content from response
             content = response.content if hasattr(response, 'content') else str(response)
-            
-            # Store the activity
+              # Store the activity
             self.memory.store_agent_activity(
                 agent_name=self.agent_name,
                 activity_type=f"frontend_{generation_type}",
                 prompt=str(self.prompt_template),
                 response=content[:1000] + "..." if len(content) > 1000 else content,
                 metadata={
-                    "framework": framework,
+                    "framework": frontend_framework,
                     "is_revision": is_revision,
                     "temperature": adjusted_temp
                 }
             )
+              # Parse the multi-file output
+            parsed_files = parse_llm_output_into_files(content)
             
-            # Parse the multi-file output
-            generated_files = parse_llm_output_into_files(content)
+            # Convert GeneratedFile objects to CodeFile objects
+            generated_files = []
+            for parsed_file in parsed_files:
+                from models.data_contracts import CodeFile
+                code_file = CodeFile(
+                    file_path=parsed_file.file_path,
+                    code=parsed_file.content  # GeneratedFile uses 'content', CodeFile uses 'code'
+                )
+                generated_files.append(code_file)
             
             # If parsing fails, create some basic files
             if not generated_files:
@@ -302,22 +672,17 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             state_count = len([f for f in generated_files if "/store/" in f.file_path or "/context/" in f.file_path])
             style_count = len([f for f in generated_files if "/styles/" in f.file_path or f.file_path.endswith((".css", ".scss"))])
             config_count = len([f for f in generated_files if f.file_path in ["package.json", "tsconfig.json", ".env", "webpack.config.js"]])
-            
-            # Set all files to success status (validation could be added later)
-            for f in generated_files:
-                if f.status == "generated":
-                    f.status = "success"
-            
-            # Create structured output
+              # Set all files to success status (validation could be added later)
+            # Note: CodeFile objects don't have a status attribute - that's on CodeGenerationOutput            # Create structured output
             output = CodeGenerationOutput(
-                generated_files=generated_files,
-                summary=f"Generated {len(generated_files)} frontend files for {framework} application",
+                files=generated_files,
+                summary=f"Generated {len(generated_files)} frontend files for {frontend_framework} application",
                 status="success" if generated_files else "error",
                 metadata={
-                    "framework": framework,
+                    "framework": frontend_framework,
                     "is_revision": is_revision,
                     "state_management": state_management,
-                    "styling_approach": styling_approach,
+                    "styling_approach": styling_framework,
                     "routing_library": routing_library,
                     "file_counts": {
                         "components": components_count,
@@ -338,32 +703,56 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
                 f"Frontend {generation_type} complete: {len(generated_files)} files generated "
                 f"({components_count} components, {pages_count} pages, {state_count} state files)"
             )
-            
-            # Publish event if message bus is available
+              # Publish event if message bus is available
             if self.message_bus:
                 self.message_bus.publish("frontend.generated", {
-                    "framework": framework,
+                    "framework": frontend_framework,
                     "file_count": len(generated_files),
                     "components_count": components_count,
                     "is_revision": is_revision,
                     "status": "success"
                 })
             
+            # Store result in enhanced memory for cross-tool access
+            self.enhanced_set("frontend_generation_result", output.dict(), context="frontend_generation")
+            
+            # Convert CodeFile objects to dictionaries for JSON serialization
+            serializable_files = []
+            for file_obj in generated_files:
+                if hasattr(file_obj, 'dict'):
+                    # If it's a Pydantic model, use dict() method
+                    serializable_files.append(file_obj.dict())
+                else:
+                    # If it's a regular object, convert manually
+                    serializable_files.append({
+                        "file_path": getattr(file_obj, 'file_path', 'unknown'),
+                        "code": getattr(file_obj, 'code', '')
+                    })
+            
+            self.store_cross_tool_data("frontend_files", serializable_files, f"Frontend files generated with {frontend_framework}")
+            
+            # Store frontend patterns for reuse
+            self.enhanced_set("frontend_patterns", {
+                "framework": frontend_framework,
+                "components_count": components_count,
+                "pages_count": pages_count,
+                "state_count": state_count,
+                "tech_stack": frontend_tech
+            }, context="frontend_patterns")
+            
             # Return as dictionary
             return output.dict()
             
         except Exception as e:
-            self.log_error(f"Frontend {generation_type} failed: {str(e)}", exc_info=True)
-            # Return error output using the standardized format
+            self.log_error(f"Frontend {generation_type} failed: {str(e)}", exc_info=True)            # Return error output using the standardized format
             error_output = CodeGenerationOutput(
-                generated_files=self._create_default_frontend_files(
+                files=self._create_default_frontend_files(
                     frontend_tech if 'frontend_tech' in locals() else self._create_default_tech_stack()
                 ),
                 summary=f"Error generating frontend code: {str(e)}",
-                status="error",
-                metadata={
+                status="error",                metadata={
                     "error": str(e),
-                    "framework": framework if 'framework' in locals() else "unknown",
+                    "framework": frontend_framework if 'frontend_framework' in locals() else "unknown",
                     "agent": self.agent_name,
                     "timestamp": datetime.now().isoformat()
                 }
@@ -379,12 +768,11 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             
         Returns:
             Adjusted temperature value
-        """
-        # Use a lower temperature for initial code generation (more deterministic)
-        initial_temp = max(0.1, min(self.temperature, 0.2))
+        """        # Use a lower temperature for initial code generation (more deterministic)
+        initial_temp = max(0.1, min(self.default_temperature, 0.2))
         
         # Use slightly higher temperature for revisions to encourage creative fixes
-        revision_temp = max(0.2, min(self.temperature + 0.1, 0.3))
+        revision_temp = max(0.2, min(self.default_temperature + 0.1, 0.3))
         
         return revision_temp if is_revision else initial_temp
     
@@ -761,6 +1149,71 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             self.log_warning(f"Error creating system design overview: {e}")
             return "Standard web application with frontend, backend and database components."
     
+    def _create_requirements_summary(self, requirements_analysis: Dict[str, Any]) -> str:
+        """
+        Create a concise summary of the requirements analysis.
+        
+        Args:
+            requirements_analysis: Requirements analysis data
+            
+        Returns:
+            String summary of requirements
+        """
+        if not requirements_analysis:
+            return "No specific requirements provided"
+        
+        domain = requirements_analysis.get("domain", "General Application")
+        scale = requirements_analysis.get("scale", "small")
+        target_users = requirements_analysis.get("target_users", "general users")
+        
+        functional_reqs = requirements_analysis.get("functional_requirements", [])
+        non_functional_reqs = requirements_analysis.get("non_functional_requirements", [])
+        
+        summary = f"Domain: {domain}, Scale: {scale}, Users: {target_users}"
+        
+        if functional_reqs:
+            summary += f", Features: {len(functional_reqs)} functional requirements"
+        
+        if non_functional_reqs:
+            summary += f", {len(non_functional_reqs)} non-functional requirements"
+        
+        return summary
+    
+    def _create_system_design_summary(self, system_design: Dict[str, Any]) -> str:
+        """
+        Create a concise summary of the system design.
+        
+        Args:
+            system_design: System design data
+            
+        Returns:
+            String summary of system design
+        """
+        if not system_design:
+            return "No system design provided"
+        
+        architecture = system_design.get("architecture", "Standard")
+        ui_section = system_design.get("ui", {})
+        
+        screens_count = len(ui_section.get("screens", []))
+        components_count = len(ui_section.get("components", []))
+        
+        api_section = system_design.get("api_design", {})
+        endpoints_count = len(api_section.get("endpoints", []))
+        
+        summary = f"Architecture: {architecture}"
+        
+        if screens_count:
+            summary += f", {screens_count} screens"
+        
+        if components_count:
+            summary += f", {components_count} components"
+        
+        if endpoints_count:
+            summary += f", {endpoints_count} API endpoints"
+        
+        return summary
+
     def _create_tech_stack_summary(self, frontend_tech: Dict[str, Any]) -> str:
         """
         Create a concise summary of the frontend tech stack.
@@ -808,7 +1261,7 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             combined_context = []
             for query in queries:
                 try:
-                    docs = self.rag_retriever.get_relevant_documents(query)
+                    docs = self.rag_retriever.invoke(query)
                     if docs:
                         context = "\n\n".join([doc.page_content for doc in docs[:2]])  # Just get top 2 results
                         if context:
@@ -825,7 +1278,7 @@ class FrontendGeneratorAgent(BaseCodeGeneratorAgent):
             self.log_warning(f"Error retrieving RAG context: {e}")
             return ""
     
-    def _create_default_frontend_files(self, frontend_tech: Dict[str, Any]) -> List[GeneratedFile]:
+    def _create_default_frontend_files(self, frontend_tech: Dict[str, Any]) -> List:
         """
         Create default frontend files when generation fails.
         
@@ -1118,62 +1571,44 @@ export default AboutPage;
   }
 }
 """
-        
-        # Create default files
+          # Create default files
+        from models.data_contracts import CodeFile
         generated_files = [
-            GeneratedFile(
+            CodeFile(
                 file_path="README.md",
-                content=readme_content,
-                purpose="Project documentation",
-                status="generated"
+                code=readme_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/App.{jsx_ext}",
-                content=app_content,
-                purpose="Main application component",
-                status="generated"
+                code=app_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path="src/App.css",
-                content=app_css,
-                purpose="Application styles",
-                status="generated"
+                code=app_css
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/index.{jsx_ext}",
-                content=index_content,
-                purpose="Application entry point",
-                status="generated"
+                code=index_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/components/Header.{jsx_ext}",
-                content=header_content,
-                purpose="Header component",
-                status="generated"
+                code=header_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/components/Footer.{jsx_ext}",
-                content=footer_content,
-                purpose="Footer component",
-                status="generated"
+                code=footer_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/pages/HomePage.{jsx_ext}",
-                content=home_page_content,
-                purpose="Home page component",
-                status="generated"
+                code=home_page_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path=f"src/pages/AboutPage.{jsx_ext}",
-                content=about_page_content,
-                purpose="About page component",
-                status="generated"
+                code=about_page_content
             ),
-            GeneratedFile(
+            CodeFile(
                 file_path="package.json",
-                content=package_json,
-                purpose="Package configuration",
-                status="generated"
+                code=package_json
             )
         ]
         
@@ -1365,17 +1800,18 @@ export default AboutPage;
             })
         
         return inferred_components
-    
     def _create_default_tech_stack(self) -> Dict[str, Any]:
-        """Create a default tech stack when input is invalid."""
+        """Create a domain-aware default tech stack when input is invalid."""
         return {
             "frontend": {
-                "framework": "React",
+                "framework": "React",  # Default but should be overridden by domain analysis
                 "language": "JavaScript",
                 "styling": "CSS",
                 "state_management": "Context API",
-                "routing": "react-router"
-            }
+                "routing": "react-router",
+                "justification": "React chosen as default due to widespread adoption, but production applications should use domain-specific framework selection"
+            },
+            "note": "This is a generic default stack. Production applications should use domain-specific technology selection."
         }
 
     def _create_default_system_design(self) -> Dict[str, Any]:
@@ -1435,7 +1871,420 @@ export default AboutPage;
                 }
             }
         }
+    
+    def _setup_message_subscriptions(self) -> None:
+        """Set up message bus subscriptions if available"""
+        if self.message_bus:
+            self.message_bus.subscribe("backend.generated", self._handle_backend_ready)
+            self.log_info(f"{self.agent_name} subscribed to backend.generated events")
+    
+    def _handle_backend_ready(self, message: Dict[str, Any]) -> None:
+        """Handle backend generation completion messages"""
+        self.log_info("Received backend generation complete event")
+        
+        payload = message.get("payload", {})
+        if payload.get("status") == "success":
+            # Store backend API information for use in frontend generation
+            if "api_endpoints" in payload:
+                self.working_memory["backend_apis"] = payload["api_endpoints"]
+                self.log_info(f"Backend APIs ready: {len(payload['api_endpoints'])} endpoints")
+            
+            if "files" in payload:
+                self.working_memory["backend_files"] = payload["files"]
+                self.log_info(f"Backend files available: {len(payload['files'])} files")
+        else:
+            self.log_warning("Backend generation completed with errors")
+    
+    def _get_domain_ui_requirements(self, domain: str, requirements_analysis: Dict[str, Any]) -> str:
+        """Generate domain-specific UI requirements."""
+        domain_lower = domain.lower()
+        
+        # Healthcare domain UI requirements
+        if "health" in domain_lower or "medical" in domain_lower:
+            return """HEALTHCARE UI REQUIREMENTS:
+- WCAG AA compliance for accessibility
+- High contrast mode support for visually impaired users
+- Patient data privacy indicators and warnings
+- Medical form validation with real-time feedback
+- Appointment scheduling with calendar integration
+- Mobile-responsive design for telemedicine"""
+        
+        # Financial domain UI requirements
+        elif "financ" in domain_lower or "bank" in domain_lower:
+            return """FINANCIAL UI REQUIREMENTS:
+- Multi-factor authentication UI flows
+- Secure transaction confirmation screens
+- Real-time fraud alerts and notifications
+- Financial data visualization (charts, graphs)
+- Transaction history with filtering and search
+- Mobile-first responsive design for banking apps"""
+        
+        # IoT domain UI requirements
+        elif "iot" in domain_lower or "sensor" in domain_lower:
+            return """IOT UI REQUIREMENTS:
+- Real-time device status dashboards
+- Interactive device control panels
+- Data visualization for sensor readings
+- Device grouping and organization
+- Mobile-responsive controls for remote access"""
+        
+        # E-commerce domain UI requirements
+        elif "ecommerce" in domain_lower or "retail" in domain_lower:
+            return """E-COMMERCE UI REQUIREMENTS:
+- Product catalog with filtering and search
+- Shopping cart with persistent state
+- Checkout flow with progress indicators
+- Mobile-optimized shopping experience
+- Order tracking and delivery status"""
+        
+        # Generic UI requirements
+        else:
+            return """GENERAL UI REQUIREMENTS:
+- Responsive design for all screen sizes
+- Intuitive navigation and user experience
+- Form validation with clear feedback
+- Accessible design following WCAG guidelines"""
 
+    def _get_accessibility_requirements(self, domain: str, target_users: str) -> str:
+        """Get accessibility requirements based on domain and target users."""
+        domain_lower = domain.lower()
+        users_lower = target_users.lower()
+        
+        requirements = ["WCAG 2.1 AA compliance", "Keyboard navigation support", "Screen reader compatibility"]
+        
+        # High accessibility requirements for healthcare and government
+        if any(keyword in domain_lower for keyword in ["health", "medical", "government", "public"]):
+            requirements.extend(["WCAG 2.1 AAA compliance", "High contrast mode", "Large text options"])
+        
+        # Special considerations for elderly users
+        if "elderly" in users_lower or "senior" in users_lower:
+            requirements.extend(["Large touch targets (44px minimum)", "Simple navigation patterns"])
+        
+        return ", ".join(requirements)
+    
+    def _get_accessibility_guidelines(self, domain: str) -> str:
+        """Get detailed accessibility guidelines based on domain."""
+        domain_lower = domain.lower()
+        
+        base_guidelines = """ACCESSIBILITY GUIDELINES:
+- Use semantic HTML elements for proper structure
+- Implement ARIA labels and roles where needed
+- Ensure color contrast ratios meet WCAG standards
+- Provide alternative text for all images
+- Make all interactive elements keyboard accessible
+- Include skip navigation links"""
+        
+        # Enhanced guidelines for sensitive domains
+        if any(keyword in domain_lower for keyword in ["health", "medical", "government", "finance"]):
+            base_guidelines += """
+ENHANCED ACCESSIBILITY (Sensitive Domain):
+- Implement voice navigation for hands-free operation
+- Support multiple input methods (touch, voice, keyboard)
+- Include emergency accessibility features
+- Provide multi-language support"""
+        
+        return base_guidelines
 
+    def _get_frontend_best_practices(self, framework: str, styling: str, domain: str = "") -> str:
+        """Get framework-specific best practices with domain awareness and production requirements."""
+        framework_lower = framework.lower()
+        styling_lower = styling.lower()
+        domain_lower = domain.lower()
+        
+        practices = f"PRODUCTION-READY BEST PRACTICES FOR {framework.upper()}:\n\n"
+        
+        # React best practices
+        if "react" in framework_lower:
+            practices += """🔵 REACT PRODUCTION PATTERNS:
 
+**Architecture & Performance:**
+- Use functional components with hooks exclusively
+- Implement React.memo, useMemo, and useCallback for optimization
+- Use React.lazy() and Suspense for code splitting
+- Implement proper error boundaries for fault tolerance
+- Use React.Fragment to avoid unnecessary DOM elements
+- Follow container/presentation component pattern
 
+**State Management:**
+- Use Context API for simple state, Redux Toolkit for complex state
+- Implement proper immutable updates with Immer
+- Use custom hooks for reusable stateful logic
+- Normalize state shape for better performance
+- Implement proper loading and error states
+
+**Security & Validation:**
+- Use react-hook-form with zod/yup for form validation
+- Sanitize user inputs to prevent XSS attacks
+- Implement proper authentication guards
+- Use environment variables for sensitive configuration
+- Implement proper CSRF protection
+
+**Testing:**
+- Write unit tests with React Testing Library
+- Use MSW for API mocking in tests
+- Implement integration tests for user flows
+- Add accessibility testing with jest-axe
+- Maintain minimum 80% test coverage
+
+**DevOps & Build:**
+- Use TypeScript strict mode for better type safety
+- Implement proper ESLint and Prettier configuration
+- Use Husky for pre-commit hooks
+- Bundle analysis with webpack-bundle-analyzer
+- Implement proper CI/CD with automated testing"""
+        
+        # Vue.js best practices
+        elif "vue" in framework_lower:
+            practices += """🟢 VUE.JS PRODUCTION PATTERNS:
+
+**Architecture & Performance:**
+- Use Composition API over Options API for better code organization
+- Implement proper reactive state management with Pinia
+- Use defineAsyncComponent for lazy loading
+- Implement proper error handling with errorCaptured hook
+- Use provide/inject for dependency injection
+- Follow Vue 3 style guide conventions
+
+**State Management:**
+- Use Pinia for centralized state management
+- Implement proper state normalization
+- Use computed properties for derived state
+- Implement proper async state handling
+- Use watchers sparingly and clean them up
+
+**Security & Validation:**
+- Use VeeValidate for comprehensive form validation
+- Implement proper XSS prevention with v-html sanitization
+- Use Vue meta for SEO and security headers
+- Implement proper authentication middleware
+- Validate props with proper TypeScript interfaces
+
+**Testing:**
+- Write component tests with Vue Test Utils
+- Use Vitest for fast unit testing
+- Implement E2E tests with Cypress
+- Add accessibility testing with vue-axe
+- Test composables and utilities separately
+
+**DevOps & Build:**
+- Use Vite for fast development and build
+- Implement proper TypeScript configuration
+- Use Vue DevTools for debugging
+- Implement proper deployment with Docker
+- Use Vue CLI for consistent project structure"""
+        
+        # Angular best practices
+        elif "angular" in framework_lower:
+            practices += """🔴 ANGULAR PRODUCTION PATTERNS:
+
+**Architecture & Performance:**
+- Use OnPush change detection strategy
+- Implement proper dependency injection hierarchy
+- Use Angular modules for feature organization
+- Implement lazy loading for route modules
+- Use trackBy functions in *ngFor loops
+- Follow Angular style guide strictly
+
+**State Management:**
+- Use NgRx for complex state management
+- Implement proper actions, reducers, and effects
+- Use selectors for state queries
+- Implement proper error handling in effects
+- Use NgRx Entity for normalized state
+
+**Security & Validation:**
+- Use reactive forms with custom validators
+- Implement proper HTTP interceptors
+- Use Angular guards for route protection
+- Implement proper CSRF protection
+- Validate all inputs on both client and server
+
+**Testing:**
+- Write unit tests with Jasmine and Karma
+- Use Angular Testing Utilities
+- Implement E2E tests with Protractor or Cypress
+- Mock services and HTTP calls properly
+- Test components, services, and guards
+
+**DevOps & Build:**
+- Use Angular CLI for consistent builds
+- Implement proper environment configuration
+- Use Angular Universal for SSR
+- Implement proper PWA features
+- Use Angular DevKit for custom schematics"""
+        
+        # Svelte best practices
+        elif "svelte" in framework_lower:
+            practices += """🟠 SVELTE PRODUCTION PATTERNS:
+
+**Architecture & Performance:**
+- Use Svelte stores for state management
+- Implement proper reactive statements
+- Use component composition patterns
+- Implement lazy loading with dynamic imports
+- Use proper component lifecycle methods
+- Follow Svelte conventions for reactivity
+
+**State Management:**
+- Use Svelte stores for global state
+- Implement proper store subscriptions
+- Use derived stores for computed values
+- Implement proper async store patterns
+- Clean up store subscriptions properly
+
+**Security & Validation:**
+- Implement proper form validation
+- Sanitize user inputs properly
+- Use CSP headers for XSS prevention
+- Implement proper authentication flows
+- Validate all data inputs
+
+**Testing:**
+- Write component tests with @testing-library/svelte
+- Use Jest for unit testing
+- Implement E2E tests with Playwright
+- Test stores and utilities separately
+- Mock external dependencies properly
+
+**DevOps & Build:**
+- Use SvelteKit for full-stack applications
+- Implement proper TypeScript support
+- Use Vite for fast development
+- Implement proper deployment strategies
+- Use Svelte DevTools for debugging"""
+        
+        # Add styling framework specific practices
+        practices += f"\n\n🎨 STYLING BEST PRACTICES FOR {styling.upper()}:\n"
+        
+        if "tailwind" in styling_lower:
+            practices += """- Use Tailwind CSS utility classes for consistent design
+- Implement custom design tokens in tailwind.config.js
+- Use @apply directive for component-specific styles
+- Implement responsive design with Tailwind breakpoints
+- Use Tailwind plugins for additional functionality
+- Implement proper purging for production builds"""
+        
+        elif "bootstrap" in styling_lower:
+            practices += """- Use Bootstrap grid system for responsive layouts
+- Customize Bootstrap variables for brand consistency
+- Use Bootstrap components with proper accessibility
+- Implement proper spacing and typography scales
+- Use Bootstrap utilities for quick styling
+- Avoid overriding Bootstrap classes unnecessarily"""
+        
+        elif "material" in styling_lower or "mui" in styling_lower:
+            practices += """- Use Material-UI theme customization
+- Implement proper component variants
+- Use Material Design principles consistently
+- Implement proper elevation and spacing
+- Use Material icons and typography
+- Follow Material Design accessibility guidelines"""
+        
+        # Add domain-specific practices
+        if domain_lower:
+            practices += f"\n\n🏢 DOMAIN-SPECIFIC PRACTICES FOR {domain.upper()}:\n"
+            
+            if "health" in domain_lower or "medical" in domain_lower:
+                practices += """- Implement HIPAA-compliant UI patterns
+- Use proper medical form validations
+- Implement emergency contact features
+- Use high contrast modes for accessibility
+- Implement proper patient data masking
+- Add medical workflow optimizations"""
+            
+            elif "financ" in domain_lower or "bank" in domain_lower:
+                practices += """- Implement PCI-DSS compliant UI patterns
+- Use secure payment form components
+- Implement proper fraud detection UI
+- Add financial data visualization components
+- Use proper currency formatting
+- Implement secure session management"""
+            
+            elif "ecommerce" in domain_lower:
+                practices += """- Implement proper product catalog UI
+- Use shopping cart state management
+- Implement checkout flow optimization
+- Add inventory management displays
+- Use proper pricing and discount displays
+- Implement order tracking interfaces"""
+        
+        # Add general production requirements
+        practices += """\n\n⚡ GENERAL PRODUCTION REQUIREMENTS:
+
+**Performance:**
+- Implement proper code splitting and lazy loading
+- Use image optimization (WebP, lazy loading)
+- Implement proper caching strategies
+- Monitor Core Web Vitals (LCP, FID, CLS)
+- Use service workers for offline functionality
+- Implement proper bundle optimization
+
+**Security:**
+- Implement proper CSP headers
+- Use HTTPS in production
+- Implement proper authentication and authorization
+- Sanitize all user inputs
+- Use environment variables for secrets
+- Implement proper error handling without exposing sensitive data
+
+**Accessibility:**
+- Follow WCAG 2.1 AA guidelines
+- Use semantic HTML elements
+- Implement proper ARIA labels
+- Ensure keyboard navigation
+- Test with screen readers
+- Maintain proper color contrast ratios
+
+**SEO & Meta:**
+- Implement proper meta tags
+- Use structured data where applicable
+- Implement proper Open Graph tags
+- Use proper heading hierarchy
+- Implement breadcrumb navigation
+- Add proper sitemap and robots.txt
+
+**Monitoring & Analytics:**
+- Implement error tracking (Sentry)
+- Add performance monitoring (Web Vitals)
+- Use proper analytics tracking
+- Implement user session recording
+- Add A/B testing capabilities
+- Monitor conversion funnels"""
+        
+        return practices
+
+    def _create_component_architecture(self, system_design: Dict[str, Any], framework: str) -> str:
+        """Create component architecture based on system design and framework."""
+        architecture = f"COMPONENT ARCHITECTURE FOR {framework.upper()}:\n\n"
+        
+        # Extract components from system design
+        components = system_design.get("ui", {}).get("components", [])
+        screens = system_design.get("ui", {}).get("screens", [])
+        
+        if components:
+            architecture += "REUSABLE COMPONENTS:\n"
+            for component in components[:5]:  # Limit to avoid too much content
+                if isinstance(component, dict):
+                    name = component.get("name", "UnnamedComponent")
+                    description = component.get("description", "No description")
+                    architecture += f"- {name}: {description}\n"
+            architecture += "\n"
+        
+        if screens:
+            architecture += "SCREEN/PAGE COMPONENTS:\n"
+            for screen in screens[:5]:  # Limit to avoid too much content
+                if isinstance(screen, dict):
+                    name = screen.get("name", "UnnamedScreen")
+                    description = screen.get("description", "No description")
+                    architecture += f"- {name}: {description}\n"
+            architecture += "\n"
+        
+        # Add framework-specific architectural patterns
+        if "react" in framework.lower():
+            architecture += "REACT ARCHITECTURE PATTERNS:\n- Container/Presentational component pattern\n- Custom hooks for business logic"
+        elif "vue" in framework.lower():
+            architecture += "VUE ARCHITECTURE PATTERNS:\n- Single-file component structure\n- Composition API for logic organization"
+        elif "angular" in framework.lower():
+            architecture += "ANGULAR ARCHITECTURE PATTERNS:\n- Feature module organization\n- Smart/dumb component pattern"
+        
+        return architecture

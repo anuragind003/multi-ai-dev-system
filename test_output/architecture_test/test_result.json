@@ -1,0 +1,112 @@
+{
+  "files": [
+    {
+      "file_path": ".gitignore",
+      "code": "# Byte-compiled / optimized / DLL files\n__pycache__/\n*.py[cod]\n*$py.class\n\n# Distribution / packaging\n.Python\nbuild/\ndist/\neggs/\n.eggs/\nlib/\nlib64/\nparts/\nsdist/\nvar/\nwheels/\nshare/python-wheels/\n*.egg-info/\n.installed.cfg\n*.manifest\n*.spec\n\n# PyInstaller\n#  Usually these files are written by a python script from a template\n#  before being handed to pyinstaller.\n__pyinstaller__/\n\n# Jupyter Notebook\n.ipynb_checkpoints\n\n# OS generated files\n.DS_Store\nThumbs.db\n\n# IDE specific\n.idea/\n*.swp\n*.swo\n.vscode/\n\n# Node Modules\nnode_modules/\n\n# Docker\nDockerfile\ndocker-compose.yml\n\n# Terraform\n.terraform/\nterraform.tfstate\nterraform.tfstate.backup"
+    },
+    {
+      "file_path": "requirements.txt",
+      "code": "fastapi\nuvicorn[standard]\npsycopg2-binary\npython-dotenv\nrequests\npytest\npytest-cov\nflake8\nblack"
+    },
+    {
+      "file_path": "pyproject.toml",
+      "code": "[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"my-web-app\"\nversion = \"0.1.0\"\ndescription = \"A simple web application\"\nauthors = [{ name = \"Your Name\", email = \"your.email@example.com\" }]\ndependencies = [\n    \"fastapi\",\n    \"uvicorn[standard]\",\n    \"psycopg2-binary\",\n    \"python-dotenv\",\n    \"requests\",\n]\n\n[tool.flake8]\nmax-line-length = 120"
+    },
+    {
+      "file_path": "src/app/main.py",
+      "code": "from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\nasync def read_root():\n    return {\"Hello\": \"World\"}"
+    },
+    {
+      "file_path": "src/app/config.py",
+      "code": "from dotenv import load_dotenv\nimport os\n\nload_dotenv()\n\nDATABASE_URL = os.getenv(\"DATABASE_URL\", \"postgresql://user:password@host:port/database\")"
+    },
+    {
+      "file_path": "src/app/models.py",
+      "code": "from typing import Optional\nfrom pydantic import BaseModel\n\nclass Item(BaseModel):\n    name: str\n    description: Optional[str] = None\n    price: float\n    tax: Optional[float] = None"
+    },
+    {
+      "file_path": "src/app/database.py",
+      "code": "from sqlalchemy import create_engine\nfrom sqlalchemy.orm import sessionmaker\n\nfrom .config import DATABASE_URL\n\nengine = create_engine(DATABASE_URL)\nSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()"
+    },
+    {
+      "file_path": "Dockerfile",
+      "code": "FROM python:3.9-slim-buster\n\nWORKDIR /app\n\nCOPY pyproject.toml .\nCOPY requirements.txt .\n\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY src /app/src\n\nEXPOSE 8000\n\nCMD [\"uvicorn\", \"src.app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]"
+    },
+    {
+      "file_path": "docker-compose.yml",
+      "code": "version: \"3.9\"\nservices:\n  web:\n    build: .\n    ports:\n      - \"8000:8000\"\n    environment:\n      DATABASE_URL: postgresql://user:password@db:5432/database\n    depends_on:\n      - db\n  db:\n    image: postgres:13\n    environment:\n      POSTGRES_USER: user\n      POSTGRES_PASSWORD: password\n      POSTGRES_DB: database\n    volumes:\n      - db_data:/var/lib/postgresql/data\n\nvolumes:\n  db_data:"
+    },
+    {
+      "file_path": "kubernetes/deployment.yaml",
+      "code": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-app-deployment\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: web-app\n  template:\n    metadata:\n      labels:\n        app: web-app\n    spec:\n      containers:\n      - name: web-app\n        image: your-dockerhub-username/my-web-app:latest\n        ports:\n        - containerPort: 8000\n        env:\n        - name: DATABASE_URL\n          value: postgresql://user:password@db-service:5432/database"
+    },
+    {
+      "file_path": "kubernetes/service.yaml",
+      "code": "apiVersion: v1\nkind: Service\nmetadata:\n  name: web-app-service\nspec:\n  selector:\n    app: web-app\n  ports:\n    - protocol: TCP\n      port: 80\n      targetPort: 8000\n  type: LoadBalancer"
+    },
+    {
+      "file_path": "kubernetes/db-service.yaml",
+      "code": "apiVersion: v1\nkind: Service\nmetadata:\n  name: db-service\nspec:\n  selector:\n    app: db\n  ports:\n    - protocol: TCP\n      port: 5432\n      targetPort: 5432\n  type: ClusterIP"
+    },
+    {
+      "file_path": "tests/test_main.py",
+      "code": "from fastapi.testclient import TestClient\nfrom src.app.main import app\n\nclient = TestClient(app)\n\ndef test_read_root():\n    response = client.get(\"/\")\n    assert response.status_code == 200\n    assert response.json() == {\"Hello\": \"World\"}"
+    },
+    {
+      "file_path": "README.md",
+      "code": "# My Web Application\n\nThis is a simple web application built with FastAPI and React.\n\n## Getting Started\n\n1. Clone the repository.\n2. Install dependencies: `pip install -r requirements.txt`\n3. Run the application: `uvicorn src.app.main:app --host 0.0.0.0 --port 8000`"
+    },
+    {
+      "file_path": ".env",
+      "code": "DATABASE_URL=postgresql://user:password@localhost:5432/database"
+    },
+    {
+      "file_path": "src/app/api.py",
+      "code": "from fastapi import APIRouter, HTTPException\nfrom src.app.models import Item\nfrom src.app.database import SessionLocal, get_db\n\nrouter = APIRouter()\n\n@router.post(\"/items/\")\nasync def create_item(item: Item):\n    db = get_db()\n    # Add item to database logic here\n    return item"
+    },
+    {
+      "file_path": "src/app/security.py",
+      "code": "# Placeholder for security related functions\ndef get_password_hash(password):\n    # Implement password hashing logic\n    return password\n\ndef verify_password(plain_password, hashed_password):\n    # Implement password verification logic\n    return plain_password == hashed_password"
+    },
+    {
+      "file_path": "monitoring/prometheus.yml",
+      "code": "global:\n  scrape_interval:     15s # Set the scrape interval to every 15 seconds.\n  evaluation_interval: 15s # Evaluate rules every 15 seconds.\n\nscrape_configs:\n  - job_name: 'fastapi-app'\n    static_configs:\n      - targets: ['localhost:8000'] # Replace with your application's address"
+    },
+    {
+      "file_path": "monitoring/grafana_dashboard.json",
+      "code": "# Placeholder for Grafana dashboard configuration\n{}"
+    },
+    {
+      "file_path": "docs/api.yaml",
+      "code": "openapi: 3.0.0\ninfo:\n  title: My Web Application API\n  version: 0.1.0\npaths:\n  /:\n    get:\n      summary: Get a greeting message\n      responses:\n        '200':\n          description: Successful response\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  Hello:\n                    type: string"
+    },
+    {
+      "file_path": "scripts/db_migrate.py",
+      "code": "# Placeholder for database migration script\nprint(\"Database migration script placeholder\")"
+    },
+    {
+      "file_path": "scripts/seed_data.py",
+      "code": "# Placeholder for seeding data script\nprint(\"Seeding data script placeholder\")"
+    },
+    {
+      "file_path": "tests/conftest.py",
+      "code": "# Placeholder for test configuration"
+    },
+    {
+      "file_path": "architecture_decision_records/adr-001-database-choice.md",
+      "code": "# Architecture Decision Record 1: Database Choice\n\n**Date:** 2023-10-27\n\n**Decision:** Use PostgreSQL as the primary database.\n\n**Status:** Approved\n\n**Context:** We need to choose a database for our web application.  We considered several options, including MySQL, MongoDB, and PostgreSQL.\n\n**Considerations:**\n\n*   **PostgreSQL:**  Robust, reliable, supports complex queries, ACID compliant.\n*   **MySQL:**  Popular, widely supported, good performance.\n*   **MongoDB:**  NoSQL, flexible schema, good for unstructured data.\n\n**Decision Drivers:**\n\n*   ACID compliance is important for data integrity.\n*   We anticipate needing complex queries.\n*   PostgreSQL has a strong reputation for reliability.\n\n**Consequences:**\n\n*   Increased complexity compared to a NoSQL database.\n*   Requires more careful schema design."
+    }
+  ],
+  "summary": "Generated 24 architecture files for Layered pattern",
+  "status": "success",
+  "metadata": {
+    "tech_stack": "Default web application stack",
+    "architecture_pattern": "Layered",
+    "is_revision": false,
+    "generation_type": "initial generation",
+    "file_count": 24,
+    "agent": "Architecture Generator Agent",
+    "temperature_used": 0.2,
+    "execution_time": 85.5649049282074
+  }
+}

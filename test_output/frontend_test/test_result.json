@@ -1,0 +1,136 @@
+{
+  "files": [
+    {
+      "file_path": "package.json",
+      "code": "{\n  \"name\": \"ecommerce-platform\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"dependencies\": {\n    \"@sentry/react\": \"^7.77.0\",\n    \"@tanstack/react-query\": \"^5.17.9\",\n    \"dompurify\": \"^3.0.5\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\",\n    \"react-error-boundary\": \"^3.1.4\",\n    \"react-router-dom\": \"^6.21.1\",\n    \"react-window\": \"^1.8.9\",\n    \"web-vitals\": \"^2.1.4\",\n    \"zustand\": \"^4.4.7\"\n  },\n  \"devDependencies\": {\n    \"@babel/preset-env\": \"^7.23.8\",\n    \"@babel/preset-react\": \"^7.23.3\",\n    \"@babel/preset-typescript\": \"^7.23.3\",\n    \"@jest/globals\": \"^29.7.0\",\n    \"@playwright/test\": \"^1.41.2\",\n    \"@tanstack/eslint-plugin-query\": \"^5.17.9\",\n    \"@testing-library/jest-dom\": \"^6.2.0\",\n    \"@testing-library/react\": \"^14.1.2\",\n    \"@types/dompurify\": \"^3.0.5\",\n    \"@types/jest\": \"^29.5.11\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.18.0\",\n    \"@typescript-eslint/parser\": \"^6.18.0\",\n    \"autoprefixer\": \"^10.4.17\",\n    \"babel-jest\": \"^29.7.0\",\n    \"chromatic\": \"^6.6.8\",\n    \"eslint\": \"^8.56.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"eslint-plugin-prettier\": \"^5.1.3\",\n    \"eslint-plugin-react\": \"^7.33.2\",\n    \"husky\": \"^8.0.0\",\n    \"identity-obj-proxy\": \"^3.0.0\",\n    \"jest\": \"^29.7.0\",\n    \"jest-environment-jsdom\": \"^29.7.0\",\n    \"lint-staged\": \"^15.2.0\",\n    \"msw\": \"^1.3.2\",\n    \"postcss\": \"^8.4.34\",\n    \"prettier\": \"^3.1.1\",\n    \"storybook\": \"^7.6.8\",\n    \"tailwindcss\": \"^3.4.1\",\n    \"typescript\": \"^5.3.3\",\n    \"vite\": \"^5.0.8\",\n    \"webpack-bundle-analyzer\": \"^4.10.1\"\n  },\n  \"scripts\": {\n    \"start\": \"vite\",\n    \"build\": \"vite build\",\n    \"serve\": \"vite preview\",\n    \"test\": \"jest\",\n    \"test:e2e\": \"playwright test\",\n    \"lint\": \"eslint . --ext .ts,.tsx\",\n    \"format\": \"prettier --write .\",\n    \"storybook\": \"storybook\",\n    \"build-storybook\": \"storybook build\",\n    \"analyze\": \"webpack-bundle-analyzer dist/stats.json\",\n    \"prepare\": \"husky install\",\n    \"lint-staged\": \"lint-staged\"\n  },\n  \"eslintConfig\": {\n    \"extends\": [\n      \"eslint:recommended\",\n      \"plugin:react/recommended\",\n      \"plugin:@typescript-eslint/recommended\",\n      \"prettier\"\n    ],\n    \"parser\": \"@typescript-eslint/parser\",\n    \"plugins\": [\n      \"react\",\n      \"@typescript-eslint\",\n      \"prettier\",\n      \"@tanstack/query\"\n    ],\n    \"rules\": {\n      \"react/react-in-jsx-scope\": \"off\",\n      \"prettier/prettier\": \"error\",\n      \"@tanstack/query/exhaustive-deps\": \"error\"\n    }\n  },\n  \"lint-staged\": {\n    \"*.{js,jsx,ts,tsx}\": [\n      \"eslint --fix\",\n      \"prettier --write\"\n    ]\n  },\n  \"browserslist\": {\n    \"production\": [\n      \">0.2%\",\n      \"not dead\",\n      \"not op_mini all\"\n    ],\n    \"development\": [\n      \"last 1 chrome version\",\n      \"last 1 firefox version\",\n      \"last 1 safari version\"\n    ]\n  }\n}"
+    },
+    {
+      "file_path": "tsconfig.json",
+      "code": "{\n  \"compilerOptions\": {\n    \"target\": \"ESNext\",\n    \"useUnknownInCatchVariables\": true,\n    \"lib\": [\"dom\", \"dom.iterable\", \"esnext\"],\n    \"allowJs\": false,\n    \"skipLibCheck\": true,\n    \"esModuleInterop\": false,\n    \"allowSyntheticDefaultImports\": true,\n    \"strict\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"resolveJsonModule\": true,\n    \"isolatedModules\": true,\n    \"noEmit\": true,\n    \"jsx\": \"react-jsx\",\n    \"baseUrl\": \".\",\n    \"paths\": {\n      \"@components/*\": [\"src/components/*\"],\n      \"@pages/*\": [\"src/pages/*\"],\n      \"@utils/*\": [\"src/utils/*\"],\n      \"@styles/*\": [\"src/styles/*\"],\n      \"@config/*\": [\"src/config/*\"],\n      \"@hooks/*\": [\"src/hooks/*\"],\n      \"@store/*\": [\"src/store/*\"]\n    }\n  },\n  \"include\": [\"src\"]\n}"
+    },
+    {
+      "file_path": ".env.example",
+      "code": "REACT_APP_API_BASE_URL=http://localhost:3001/api\nSENTRY_DSN=YOUR_SENTRY_DSN"
+    },
+    {
+      "file_path": ".eslintrc.js",
+      "code": "module.exports = {\n  env: {\n    browser: true,\n    es2021: true,\n    node: true,\n  },\n  extends: [\n    'eslint:recommended',\n    'plugin:react/recommended',\n    'plugin:@typescript-eslint/recommended',\n    'prettier',\n  ],\n  parser: '@typescript-eslint/parser',\n  parserOptions: {\n    ecmaFeatures: {\n      jsx: true,\n    },\n    ecmaVersion: 'latest',\n    sourceType: 'module',\n  },\n  plugins: [\n    'react',\n    '@typescript-eslint',\n    'prettier',\n    '@tanstack/query',\n  ],\n  rules: {\n    'react/react-in-jsx-scope': 'off',\n    'prettier/prettier': 'error',\n    '@tanstack/query/exhaustive-deps': 'error',\n    'no-unused-vars': 'warn',\n  },\n  settings: {\n    react: {\n      version: 'detect',\n    },\n  },\n};"
+    },
+    {
+      "file_path": ".prettier.config.js",
+      "code": "module.exports = {\n  semi: true,\n  trailingComma: 'all',\n  singleQuote: true,\n  printWidth: 120,\n  tabWidth: 2,\n  useTabs: false,\n};"
+    },
+    {
+      "file_path": "jest.config.js",
+      "code": "module.exports = {\n  preset: 'ts-jest',\n  testEnvironment: 'jsdom',\n  setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],\n  moduleNameMapper: {\n    '\\\\.(css|less|scss|sass)$': 'identity-obj-proxy',\n  },\n  testMatch: ['**/__tests__/**/*.ts?(x)', '**/?(*.)+(spec|test).ts?(x)'],\n  coverageReporters: ['html', 'text', 'lcov'],\n  coverageThreshold: {\n    global: {\n      branches: 80,\n      functions: 80,\n      lines: 80,\n      statements: 80,\n    },\n  },\n};"
+    },
+    {
+      "file_path": "vite.config.ts",
+      "code": "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\nimport tsconfigPaths from 'vite-tsconfig-paths';\nimport { visualizer } from 'rollup-plugin-visualizer';\n\nexport default defineConfig({\n  plugins: [\n    react(),\n    tsconfigPaths(),\n    visualizer({\n      open: false,\n      filename: 'dist/stats.html',\n    }),\n  ],\n  build: {\n    rollupOptions: {\n      output: {\n        manualChunks(id) {\n          if (id.includes('node_modules')) {\n            return 'vendor';\n          }\n        },\n      },\n    },\n  },\n});"
+    },
+    {
+      "file_path": "src/main.tsx",
+      "code": "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nimport './styles/globals.css';\nimport * as Sentry from \"@sentry/react\";\nimport { BrowserTracing } from \"@sentry/tracing\";\n\nSentry.init({\n  dsn: import.meta.env.VITE_SENTRY_DSN,\n  integrations: [new BrowserTracing()],\n  tracesSampleRate: 1.0,\n});\n\nconst root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);\nroot.render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);"
+    },
+    {
+      "file_path": "src/App.tsx",
+      "code": "import React from 'react';\nimport { BrowserRouter as Router, Routes, Route } from 'react-router-dom';\nimport { HomePage } from './pages/HomePage';\nimport { ProductsPage } from './pages/ProductsPage';\nimport { Header } from './components/layout/Header';\nimport { Footer } from './components/layout/Footer';\nimport {ErrorBoundary} from './components/error/ErrorBoundary';\n\nfunction App() {\n  return (\n    <Router>\n      <ErrorBoundary fallback={<div>Something went wrong.</div>}>\n        <div className=\"min-h-screen flex flex-col\">\n          <Header />\n          <main className=\"flex-grow\">\n            <Routes>\n              <Route path=\"/\" element={<HomePage />} />\n              <Route path=\"/products\" element={<ProductsPage />} />\n            </Routes>\n          </main>\n          <Footer />\n        </div>\n      </ErrorBoundary>\n    </Router>\n  );\n}\n\nexport default App;"
+    },
+    {
+      "file_path": "src/router/index.tsx",
+      "code": "// This file is not currently used, routing is handled in App.tsx"
+    },
+    {
+      "file_path": "src/types/index.ts",
+      "code": "export interface Product {\n  id: number;\n  name: string;\n  description: string;\n  price: number;\n  imageUrl: string;\n}"
+    },
+    {
+      "file_path": "src/constants/index.ts",
+      "code": "export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';"
+    },
+    {
+      "file_path": "src/config/index.ts",
+      "code": "// This file is not currently used, environment variables are accessed directly"
+    },
+    {
+      "file_path": "src/components/ui/ProductCard.tsx",
+      "code": "import React from 'react';\nimport { Product } from '../../types';\n\ninterface ProductCardProps {\n  product: Product;\n}\n\nexport const ProductCard: React.FC<ProductCardProps> = ({ product }) => {\n  return (\n    <div className=\"bg-white rounded-lg shadow-md p-4\">\n      <img src={product.imageUrl} alt={product.name} className=\"w-full h-48 object-cover rounded-md\" />\n      <h3 className=\"text-lg font-semibold mt-2\">{product.name}</h3>\n      <p className=\"text-gray-600\">{product.description}</p>\n      <p className=\"text-xl font-bold mt-2\">${product.price}</p>\n    </div>\n  );\n};"
+    },
+    {
+      "file_path": "src/components/layout/Header.tsx",
+      "code": "import React from 'react';\n\nexport const Header: React.FC = () => {\n  return (\n    <header className=\"bg-blue-500 text-white py-4\">\n      <div className=\"container mx-auto flex items-center justify-between\">\n        <a href=\"/\" className=\"text-2xl font-bold\">E-commerce Platform</a>\n        <nav>\n          <ul className=\"flex space-x-6\">\n            <li><a href=\"/\" className=\"hover:underline\">Home</a></li>\n            <li><a href=\"/products\" className=\"hover:underline\">Products</a></li>\n          </ul>\n        </nav>\n      </div>\n    </header>\n  );\n};"
+    },
+    {
+      "file_path": "src/components/layout/Footer.tsx",
+      "code": "import React from 'react';\n\nexport const Footer: React.FC = () => {\n  return (\n    <footer className=\"bg-gray-100 py-4 mt-auto\">\n      <div className=\"container mx-auto text-center\">\n        <p>&copy; 2024 E-commerce Platform</p>\n      </div>\n    </footer>\n  );\n};"
+    },
+    {
+      "file_path": "src/components/data-display/ProductGrid.tsx",
+      "code": "import React from 'react';\nimport { Product } from '../../types';\nimport { ProductCard } from '../ui/ProductCard';\n\ninterface ProductGridProps {\n  products: Product[];\n}\n\nexport const ProductGrid: React.FC<ProductGridProps> = ({ products }) => {\n  return (\n    <div className=\"grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4\">\n      {products.map((product) => (\n        <ProductCard key={product.id} product={product} />\n      ))}\n    </div>\n  );\n};"
+    },
+    {
+      "file_path": "src/pages/HomePage.tsx",
+      "code": "import React from 'react';\nimport { Hero } from '../components/ui/Hero';\nimport { ProductGrid } from '../components/data-display/ProductGrid';\nimport { Product } from '../types';\n\nconst products: Product[] = [\n  { id: 1, name: 'Product 1', description: 'Description 1', price: 19.99, imageUrl: 'https://via.placeholder.com/150' },\n  { id: 2, name: 'Product 2', description: 'Description 2', price: 29.99, imageUrl: 'https://via.placeholder.com/150' },\n  { id: 3, name: 'Product 3', description: 'Description 3', price: 39.99, imageUrl: 'https://via.placeholder.com/150' },\n];\n\nexport const HomePage: React.FC = () => {\n  return (\n    <div>\n      <Hero />\n      <ProductGrid products={products} />\n    </div>\n  );\n};"
+    },
+    {
+      "file_path": "src/pages/ProductsPage.tsx",
+      "code": "import React from 'react';\nimport { ProductGrid } from '../components/data-display/ProductGrid';\nimport { Product } from '../types';\n\nconst products: Product[] = [\n  { id: 1, name: 'Product 1', description: 'Description 1', price: 19.99, imageUrl: 'https://via.placeholder.com/150' },\n  { id: 2, name: 'Product 2', description: 'Description 2', price: 29.99, imageUrl: 'https://via.placeholder.com/150' },\n  { id: 3, name: 'Product 3', description: 'Description 3', price: 39.99, imageUrl: 'https://via.placeholder.com/150' },\n];\n\nexport const ProductsPage: React.FC = () => {\n  return (\n    <div>\n      <ProductGrid products={products} />\n    </div>\n  );\n};"
+    },
+    {
+      "file_path": "src/components/ui/Hero.tsx",
+      "code": "import React from 'react';\n\nexport const Hero: React.FC = () => {\n  return (\n    <div className=\"bg-gradient-to-r from-blue-200 to-blue-500 py-12 text-center\">\n      <div className=\"container mx-auto\">\n        <h1 className=\"text-4xl font-bold text-white\">Welcome to Our E-commerce Platform</h1>\n        <p className=\"text-lg text-white mt-4\">Discover amazing products at unbeatable prices.</p>\n      </div>\n    </div>\n  );\n};"
+    },
+    {
+      "file_path": "src/hooks/useFetchProducts.ts",
+      "code": "import { useQuery } from '@tanstack/react-query';\nimport { Product } from '../types';\nimport { API_BASE_URL } from '../constants';\n\nconst fetchProducts = async (): Promise<Product[]> => {\n  const response = await fetch(`${API_BASE_URL}/products`);\n  if (!response.ok) {\n    throw new Error('Failed to fetch products');\n  }\n  return await response.json();\n};\n\nexport const useFetchProducts = () => {\n  return useQuery<Product[], Error>({\n    queryKey: ['products'],\n    queryFn: fetchProducts,\n  });\n};"
+    },
+    {
+      "file_path": "src/utils/errorReporting.ts",
+      "code": "import * as Sentry from \"@sentry/react\";\n\nexport const reportError = (error: Error, message?: string) => {\n  Sentry.captureException(error, {\n    extra: {\n      message,\n    },\n  });\n};"
+    },
+    {
+      "file_path": "src/components/error/ErrorBoundary.tsx",
+      "code": "import React, { ReactNode } from 'react';\nimport { reportError } from '../../utils/errorReporting';\n\ninterface ErrorBoundaryProps {\n  fallback: ReactNode;\n  children: ReactNode;\n}\n\nexport const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({ fallback, children }) => {\n  const [hasError, setHasError] = React.useState(false);\n\n  React.useEffect(() => {\n    return () => {\n      if (hasError) {\n        reportError(new Error(\"ErrorBoundary triggered\"));\n      }\n    };\n  }, [hasError]);\n\n  if (hasError) {\n    return fallback;\n  }\n\n  return children;\n};"
+    },
+    {
+      "file_path": "src/styles/globals.css",
+      "code": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody {\n  @apply bg-gray-100 text-gray-800 font-sans;\n}"
+    },
+    {
+      "file_path": "public/manifest.json",
+      "code": "{\n  \"short_name\": \"E-commerce Platform\",\n  \"name\": \"E-commerce Platform\",\n  \"icons\": [\n    {\n      \"src\": \"favicon.ico\",\n      \"sizes\": \"64x64 32x32\",\n      \"type\": \"image/x-icon\"\n    }\n  ],\n  \"start_url\": \".\",\n  \"display\": \"standalone\",\n  \"theme_color\": \"#000000\",\n  \"background_color\": \"#ffffff\"\n}"
+    },
+    {
+      "file_path": "src/test/setup.ts",
+      "code": "import '@testing-library/jest-dom';\nimport { server } from './mocks/server';\n\nbeforeAll(() => server.listen());\nafterEach(() => server.resetHandlers());\nafterAll(() => server.close());"
+    },
+    {
+      "file_path": "src/test/mocks/handlers.ts",
+      "code": "import { rest } from 'msw';\nimport { Product } from '../../types';\n\nconst products: Product[] = [\n  { id: 1, name: 'Product 1', description: 'Description 1', price: 19.99, imageUrl: 'https://via.placeholder.com/150' },\n  { id: 2, name: 'Product 2', description: 'Description 2', price: 29.99, imageUrl: 'https://via.placeholder.com/150' },\n];\n\nexport const handlers = [\n  rest.get('/api/products', (req, res, ctx) => {\n    return res(ctx.status(200), ctx.json(products));\n  }),\n];"
+    },
+    {
+      "file_path": "src/test/mocks/server.ts",
+      "code": "import { setupServer } from 'msw/node';\nimport { handlers } from './handlers';\n\nexport const server = setupServer(...handlers);"
+    }
+  ],
+  "summary": "Generated 28 frontend files for React application",
+  "status": "success",
+  "metadata": {
+    "framework": "React",
+    "is_revision": false,
+    "state_management": "Context API",
+    "styling_approach": "Tailwind CSS",
+    "routing_library": "react-router-dom",
+    "file_counts": {
+      "components": 6,
+      "pages": 2,
+      "state": 0,
+      "styles": 1,
+      "config": 2,
+      "total": 28
+    },
+    "agent": "Frontend Generator Agent",
+    "temperature_used": 0.2,
+    "execution_time": 189.80959033966064
+  }
+}

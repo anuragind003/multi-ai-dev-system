@@ -1,0 +1,124 @@
+{
+  "status": "success",
+  "system_design": {
+    "architecture_pattern": "Microservices",
+    "data_models": [
+      {
+        "entity": "User",
+        "service": "user-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "email": "string unique",
+          "password_hash": "string",
+          "first_name": "string",
+          "last_name": "string",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": [
+          "has_many orders",
+          "has_one cart"
+        ]
+      },
+      {
+        "entity": "Product",
+        "service": "product-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "name": "string",
+          "description": "text",
+          "price": "decimal(10,2)",
+          "category_id": "UUID foreign key",
+          "sku": "string unique",
+          "inventory_count": "integer",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": [
+          "belongs_to category",
+          "has_many order_items"
+        ]
+      },
+      {
+        "entity": "Order",
+        "service": "order-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "user_id": "UUID foreign key",
+          "status": "enum(pending,confirmed,shipped,delivered,cancelled)",
+          "total_amount": "decimal(10,2)",
+          "shipping_address": "text",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": [
+          "belongs_to user",
+          "has_many order_items"
+        ]
+      }
+    ],
+    "api_design": {
+      "endpoints": [
+        {
+          "path": "/auth/register",
+          "method": "POST",
+          "service": "user-service",
+          "description": "User registration"
+        },
+        {
+          "path": "/auth/login",
+          "method": "POST",
+          "service": "user-service",
+          "description": "User authentication"
+        },
+        {
+          "path": "/products",
+          "method": "GET",
+          "service": "product-service",
+          "description": "Get paginated product list"
+        },
+        {
+          "path": "/products/{id}",
+          "method": "GET",
+          "service": "product-service",
+          "description": "Get product details"
+        },
+        {
+          "path": "/orders",
+          "method": "POST",
+          "service": "order-service",
+          "description": "Create new order"
+        }
+      ]
+    },
+    "backend_services": [
+      {
+        "name": "user-service",
+        "port": 8001,
+        "database": "users_db",
+        "responsibilities": [
+          "User management",
+          "Authentication"
+        ]
+      },
+      {
+        "name": "product-service",
+        "port": 8002,
+        "database": "products_db",
+        "responsibilities": [
+          "Product catalog",
+          "Inventory management"
+        ]
+      },
+      {
+        "name": "order-service",
+        "port": 8003,
+        "database": "orders_db",
+        "responsibilities": [
+          "Order processing",
+          "Cart management"
+        ]
+      }
+    ]
+  }
+}

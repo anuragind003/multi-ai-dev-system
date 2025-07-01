@@ -1,0 +1,56 @@
+{
+  "brd_analysis": {
+    "status": "success",
+    "analysis_result": {
+      "functional_requirements": [
+        "User authentication system",
+        "Product catalog management",
+        "Shopping cart functionality",
+        "Order processing"
+      ]
+    }
+  },
+  "tech_stack": {
+    "backend": {
+      "language": "Python",
+      "framework": "FastAPI"
+    },
+    "frontend": {
+      "framework": "React",
+      "language": "TypeScript"
+    },
+    "database": {
+      "primary": "PostgreSQL",
+      "cache": "Redis"
+    }
+  },
+  "system_design": {
+    "architecture_pattern": "Microservices",
+    "data_models": [
+      {
+        "name": "User",
+        "fields": [
+          "id",
+          "email",
+          "password_hash"
+        ]
+      },
+      {
+        "name": "Product",
+        "fields": [
+          "id",
+          "name",
+          "price"
+        ]
+      },
+      {
+        "name": "Order",
+        "fields": [
+          "id",
+          "user_id",
+          "total_amount"
+        ]
+      }
+    ]
+  }
+}

@@ -366,20 +366,27 @@ class JsonHandler:
                 logger.warning("Empty text received in _thoroughly_clean_json")
                 return "{}"
             
-            # Declare variables BEFORE using them
-            open_braces = 0
-            open_brackets = 0
-            
             # Remove any leading/trailing whitespace
             text = text.strip()
             
-            # Remove markdown code blocks
+            # Remove markdown code blocks first
             text = re.sub(r'```(?:json)?\s*', '', text)
             text = re.sub(r'```\s*$', '', text)
             
-            # Calculate brace counts AFTER cleaning
-            open_braces = text.count('{') - text.count('}')
-            open_brackets = text.count('[') - text.count(']')
+            # Check if this looks like a simple string rather than JSON
+            if not ('{' in text or '[' in text):
+                # This might be a simple string input, try to create a minimal JSON structure
+                logger.info(f"Input appears to be a plain string rather than JSON: {text[:100]}...")
+                # If it looks like a requirements summary, wrap it appropriately
+                if any(keyword in text.lower() for keyword in ['requirement', 'should', 'need', 'must', 'system', 'application', 'web', 'api']):
+                    return json.dumps({"requirements_summary": text})
+                else:
+                    # For other content, put it in a general structure
+                    return json.dumps({"content": text})
+            
+            # Declare variables BEFORE using them
+            open_braces = 0
+            open_brackets = 0
             
             # Remove any comments
             text = re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
@@ -391,15 +398,34 @@ class JsonHandler:
                 end = text.rfind('}') + 1
                 if start >= 0 and end > start:
                     text = text[start:end]
+                    
+                    # Calculate brace counts AFTER extraction
+                    open_braces = text.count('{') - text.count('}')
+                    open_brackets = text.count('[') - text.count(']')
+                else:
+                    raise ValueError(f"Invalid brace positions: start={start}, end={end}")
             elif '[' in text and ']' in text:
                 # Handle array root objects
                 start = text.find('[')
                 end = text.rfind(']') + 1
                 if start >= 0 and end > start:
                     text = text[start:end]
+                    
+                    # Calculate bracket counts AFTER extraction
+                    open_braces = text.count('{') - text.count('}')
+                    open_brackets = text.count('[') - text.count(']')
+                else:
+                    raise ValueError(f"Invalid bracket positions: start={start}, end={end}")
             else:
-                # IMPROVED: More descriptive error message
-                raise ValueError(f"No JSON object delimiters found in text (length: {len(text)})")
+                # IMPROVED: More descriptive error message with better fallback
+                logger.warning(f"No JSON object delimiters found in text (length: {len(text)})")
+                # Try to extract key-value pairs from the text as a last resort
+                extracted_data = JsonHandler._extract_structured_content(text)
+                if extracted_data:
+                    return json.dumps(extracted_data)
+                else:
+                    # Create a minimal structure with the text as content
+                    return json.dumps({"requirements_summary": text if text else "No requirements specified"})
             
             # NEW: Fix unterminated strings by scanning line by line
             lines = text.split('\n')
@@ -436,19 +462,32 @@ class JsonHandler:
             try:
                 json.loads(text)
                 return text
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
                 # If still invalid, check for common issues with truncation
                 if '"impact":' in text and not text.endswith('}'):
                     # The common case: truncated in the middle of a field
                     text = re.sub(r'"impact"\s*:(?:\s*"[^"]*)?$', '"impact": "Truncated"}]}', text)
                     logger.info("Fixed truncated 'impact' field in recommendations")
+                    
+                # Try one more time after fixing
+                try:
+                    json.loads(text)
+                    return text
+                except json.JSONDecodeError:
+                    logger.warning(f"JSON still invalid after cleaning: {e}")
+                    # Return a minimal valid structure
+                    return json.dumps({"requirements_summary": "Failed to parse requirements"})
             
             return text
                 
         except Exception as e:
-            # IMPROVED: Don't swallow the original error
+            # IMPROVED: Don't swallow the original error, provide better fallback
             logger.warning(f"JSON cleaning error in _thoroughly_clean_json: {e}")
-            return "{}"  # Return empty JSON object as fallback
+            # Try to preserve the original text if it looks like requirements
+            if text and any(keyword in text.lower() for keyword in ['requirement', 'should', 'need', 'must', 'system']):
+                return json.dumps({"requirements_summary": text})
+            else:
+                return json.dumps({"requirements_summary": "Error processing requirements"})  # Better than empty object
     
     @classmethod
     def _extract_structured_content(cls, text: str) -> Dict[str, Any]:
@@ -1514,70 +1553,114 @@ class JsonHandler:
             return initial_result
     
     @classmethod
-    def extract_json_from_text(cls, text: str) -> Any:
+    def extract_json_from_text(cls, text: Any) -> Any:
         """
         Extract JSON from text using multiple parsing strategies.
         
         Args:
-            text: Text potentially containing JSON
-            
+            text: Text potentially containing JSON or already parsed dict/list
+        
         Returns:
             Dict/List/None: Extracted JSON object or None if extraction fails
         """
-        if not text:
-            return None
+        # If text is already a dict or list, return it directly
+        if isinstance(text, (dict, list)):
+            return text
+        
+        if not text or (isinstance(text, str) and not text.strip()):
+            logger.warning("Empty or whitespace-only text received in extract_json_from_text")
+            return {"requirements_summary": "No content provided"}
+            
+        # Convert to string if needed
+        if not isinstance(text, str):
+            text = str(text)
+            
+        text = text.strip()
+        
+        # Check if text looks like JSON at all
+        if not ('{' in text or '[' in text):
+            logger.info("Text does not contain JSON delimiters, treating as plain text")
+            # If it looks like requirements or technical content, wrap appropriately
+            if any(keyword in text.lower() for keyword in ['requirement', 'should', 'need', 'must', 'system', 'application', 'web', 'api', 'backend', 'frontend', 'database']):
+                return {"requirements_summary": text}
+            else:
+                return {"content": text}
             
         try:
             # First try to parse the entire text as JSON
             try:
-                return json.loads(text.strip())
-            except json.JSONDecodeError:
-                pass
+                result = json.loads(text)
+                logger.info("Successfully parsed entire text as JSON")
+                return result
+            except json.JSONDecodeError as e:
+                logger.debug(f"Direct JSON parsing failed: {e}")
                 
             # Extract JSON from markdown if present
             json_text = cls._extract_json_from_markdown(text)
             if json_text:
                 try:
-                    return json.loads(json_text.strip())
+                    result = json.loads(json_text.strip())
+                    logger.info("Successfully extracted JSON from markdown")
+                    return result
                 except json.JSONDecodeError:
-                    pass
+                    logger.debug("Markdown-extracted JSON parsing failed")
                     
             # Try preprocessing then parsing
             preprocessed_text = cls._preprocess_json_text(text)
             try:
-                return json.loads(preprocessed_text)
+                result = json.loads(preprocessed_text)
+                logger.info("Successfully parsed after preprocessing")
+                return result
             except json.JSONDecodeError:
-                pass
+                logger.debug("Preprocessed JSON parsing failed")
                 
             # Try character by character extraction
             extracted_text = cls._extract_json_character_by_character(text)
             if extracted_text:
                 try:
-                    return json.loads(extracted_text)
+                    result = json.loads(extracted_text)
+                    logger.info("Successfully parsed after character-by-character extraction")
+                    return result
                 except json.JSONDecodeError:
-                    pass
+                    logger.debug("Character-by-character extracted JSON parsing failed")
             
             # Try thorough cleaning
             cleaned_text = cls._thoroughly_clean_json(text)
             try:
-                return json.loads(cleaned_text)
+                result = json.loads(cleaned_text)
+                logger.info("Successfully parsed after thorough cleaning")
+                return result
             except json.JSONDecodeError:
-                pass
+                logger.debug("Thoroughly cleaned JSON parsing failed")
                 
             # Last resort: attempt repair
             repaired_text = cls._attempt_json_repair(text)
             if repaired_text:
                 try:
-                    return json.loads(repaired_text)
+                    result = json.loads(repaired_text)
+                    logger.info("Successfully parsed after JSON repair")
+                    return result
                 except json.JSONDecodeError:
-                    pass
+                    logger.debug("Repaired JSON parsing failed")
             
             # If all parsing attempts fail, try to extract structured content
-            return cls._extract_structured_content(text)
+            logger.info("All JSON parsing attempts failed, attempting structured content extraction")
+            structured_content = cls._extract_structured_content(text)
+            if structured_content:
+                logger.info("Successfully extracted structured content")
+                return structured_content
+            else:
+                # Final fallback - wrap the text as content
+                logger.warning("All extraction methods failed, wrapping text as content")
+                return {"requirements_summary": text}
             
         except Exception as e:
-            logger.warning(f"JSON extraction failed: {e}")
-            return None
+            logger.warning(f"JSON extraction failed with exception: {e}")
+            # Final safety net - return the text wrapped in a structure
+            if isinstance(text, str) and text.strip():
+                return {"requirements_summary": text}
+            else:
+                return {"requirements_summary": "Error processing input"}
     
     @classmethod
     def check_template_variables(cls, text: str) -> Tuple[bool, List[str]]:

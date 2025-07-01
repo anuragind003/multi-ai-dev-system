@@ -35,8 +35,17 @@ from graph_nodes import (
     
     # Edge decision functions
     has_next_phase,
-    should_retry_code_generation
+    should_retry_code_generation,
+    
+    # Add all legacy decision functions to be wrapped
+    decide_on_architecture_quality,
+    decide_on_database_quality,
+    decide_on_backend_quality,
+    decide_on_frontend_quality,
+    decide_on_integration_quality
 )
+# New: Import interrupt for human-in-the-loop
+from langgraph.types import interrupt
 
 logger = logging.getLogger(__name__)
 
@@ -166,45 +175,171 @@ async def async_should_retry_code_generation(state: AgentState) -> str:
     """Async wrapper for should_retry_code_generation decision function."""
     return await asyncio.to_thread(should_retry_code_generation, state)
 
+# New: Human-in-the-loop node
+async def human_approval_node(state: AgentState) -> dict:
+    """
+    Pauses the workflow to wait for human approval.
+    This node uses langgraph.types.interrupt to halt execution.
+    The frontend will catch this interruption and prompt the user.
+    """
+    logger.info("--- Human Approval: Waiting for review of BRD Analysis ---")
+    
+    # The `interrupt` function will pause the graph here.
+    # The content passed to `interrupt` will be sent to the frontend.
+    # We are including the BRD analysis output for the user to review.
+    brd_analysis_output = state.get("requirements_analysis", {"error": "BRD analysis not found in state."})
+    
+    user_decision = interrupt(
+        {
+            "message": "Please review the BRD Analysis. Do you approve?",
+            "details": brd_analysis_output,
+            "options": ["approve", "reject", "edit"],
+        }
+    )
+
+    logger.info(f"--- Human decision received: {user_decision} ---")
+
+    return {"human_decision": user_decision}
+
+def decide_after_brd_approval(state: AgentState) -> str:
+    """
+    Determines the next step based on the human's decision on the BRD analysis.
+
+    - If 'approve', proceed to the next phase (tech stack).
+    - If 'reject' or 'edit', loop back to revise the BRD analysis.
+    - Otherwise, end the workflow.
+    """
+    human_decision = state.get("human_decision", "reject").lower()
+    logger.info(f"Routing based on human decision: '{human_decision}'")
+
+    if human_decision == "approve":
+        return "proceed"
+    elif human_decision in ["reject", "edit"]:
+        logger.info("Decision is to revise. Looping back to BRD Analysis.")
+        return "revise"
+    else:
+        logger.warning(f"Unknown human decision '{human_decision}' received. Ending workflow for safety.")
+        return "end"
+
+# Add async wrappers for legacy decision functions
+async_decide_on_architecture_quality = make_async_node(decide_on_architecture_quality)
+async_decide_on_database_quality = make_async_node(decide_on_database_quality)
+async_decide_on_backend_quality = make_async_node(decide_on_backend_quality)
+async_decide_on_frontend_quality = make_async_node(decide_on_frontend_quality)
+async_decide_on_integration_quality = make_async_node(decide_on_integration_quality)
+
 # Initialization node to set up the state properly
 async def async_initialize_workflow_state(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Initialize the workflow state with required fields."""
-    logger.info("Initializing workflow state")
+    """
+    Initialize essential state keys at the beginning of the workflow.
+    
+    This function ensures that all commonly used state keys are initialized
+    with appropriate default values, preventing KeyError exceptions when
+    these keys are accessed later in the workflow.
+    
+    Args:
+        state: Current workflow state (may be empty or partially initialized)
+        config: Configuration dictionary (unused but required for compatibility)
+        
+    Returns:
+        State update dictionary with all essential keys initialized
+    """
+    logger.info("Initializing essential workflow state keys")
     
     try:
-        # Generate a workflow ID if not present
-        workflow_id = state.get(StateFields.WORKFLOW_ID, str(uuid.uuid4()))
+        # Create a new state object to avoid modifying the original
+        initialized_state = state.copy()
         
-        # Create initial state update
-        state_update = {
-            StateFields.WORKFLOW_ID: workflow_id,
-            StateFields.WORKFLOW_START_TIME: time.time(),
-            StateFields.WORKFLOW_STATUS: "initializing",
-            StateFields.CURRENT_PHASE_INDEX: 0,
-            StateFields.REVISION_COUNTS: {},
-            StateFields.ERRORS: []
-        }
+        # Initialize workflow metadata using consistent field names
+        if "workflow_id" not in initialized_state:
+            initialized_state["workflow_id"] = f"workflow_{int(time.time())}"
         
-        # Initialize code_generation_result if not present
-        if StateFields.CODE_GENERATION_RESULT not in state:
-            state_update[StateFields.CODE_GENERATION_RESULT] = {
-                "generated_files": [],
+        if "workflow_start_time" not in initialized_state:
+            initialized_state["workflow_start_time"] = time.time()
+        
+        # Initialize code generation structure to match sync version
+        if "code_generation_result" not in initialized_state:
+            initialized_state["code_generation_result"] = {
+                "generated_files": {},
                 "status": "not_started",
-                "timestamp": time.time()
+                "generation_metrics": {}
             }
+        elif "generated_files" not in initialized_state["code_generation_result"]:
+            initialized_state["code_generation_result"]["generated_files"] = {}
+        
+        # Initialize error tracking
+        if "errors" not in initialized_state:
+            initialized_state["errors"] = []
+        
+        # Initialize execution timing structures
+        if "agent_execution_times" not in initialized_state:
+            initialized_state["agent_execution_times"] = {}
+        
+        if "module_execution_times" not in initialized_state:
+            initialized_state["module_execution_times"] = {}
+        
+        # Initialize phase tracking
+        if "current_phase_index" not in initialized_state:
+            initialized_state["current_phase_index"] = 0
+        
+        # Initialize revision counters for code components (matching sync version)
+        revision_counter_keys = [
+            StateFields.ARCHITECTURE_REVISION_COUNT,
+            StateFields.DATABASE_REVISION_COUNT, 
+            StateFields.BACKEND_REVISION_COUNT,
+            StateFields.FRONTEND_REVISION_COUNT,
+            StateFields.INTEGRATION_REVISION_COUNT
+        ]
+        
+        for key in revision_counter_keys:
+            if key not in initialized_state:
+                initialized_state[key] = 0
+        
+        # Initialize counters for retry decision points
+        if "current_code_gen_retry" not in initialized_state:
+            initialized_state["current_code_gen_retry"] = 0
             
+        if "current_test_retry" not in initialized_state:
+            initialized_state["current_test_retry"] = 0
+            
+        if "current_implementation_iteration" not in initialized_state:
+            initialized_state["current_implementation_iteration"] = 0
+        
+        # Initialize thresholds for decision functions
+        if "min_quality_score" not in initialized_state:
+            initialized_state["min_quality_score"] = 3.0
+            
+        if "min_success_rate" not in initialized_state:
+            initialized_state["min_success_rate"] = 0.7
+            
+        if "min_coverage_percentage" not in initialized_state:
+            initialized_state["min_coverage_percentage"] = 60.0
+            
+        if "max_code_gen_retries" not in initialized_state:
+            initialized_state["max_code_gen_retries"] = 3
+            
+        if "max_test_retries" not in initialized_state:
+            initialized_state["max_test_retries"] = 2
+            
+        if "max_implementation_iterations" not in initialized_state:
+            initialized_state["max_implementation_iterations"] = 2
+        
+        # Initialize completed steps tracking
+        if "completed_stages" not in initialized_state:
+            initialized_state["completed_stages"] = []
+        
         # Log successful initialization
-        logger.info(f"Workflow {workflow_id} initialized successfully")
-        return state_update
+        logger.info(f"Workflow {initialized_state['workflow_id']} initialized successfully")
+        return initialized_state
         
     except Exception as e:
         logger.error(f"Failed to initialize workflow state: {str(e)}")
         
-        # Return minimal state with error
+        # Return minimal state with error (fallback)
         return {
-            StateFields.WORKFLOW_ID: str(uuid.uuid4()),
-            StateFields.WORKFLOW_STATUS: "error",
-            StateFields.ERRORS: [{
+            "workflow_id": f"workflow_{int(time.time())}",
+            "workflow_start_time": time.time(),
+            "errors": [{
                 "module": "Initialization",
                 "function": "async_initialize_workflow_state",
                 "error": str(e),
@@ -318,26 +453,5 @@ async def async_attempt_recovery(state: AgentState, config: dict) -> Dict[str, A
         "recovery_timestamp": time.time()
     }
 
-# Replace these recursive decision functions:
-
-# Legacy quality decision functions
-async def async_decide_on_architecture_quality(state: AgentState) -> str:
-    """Maps to the unified should_retry_code_generation decision"""
-    # Fix recursive call by using the standard retry function instead
-    return await async_should_retry_code_generation(state)
-
-async def async_decide_on_database_quality(state: AgentState) -> str:
-    """Maps to the unified should_retry_code_generation decision"""
-    return await async_should_retry_code_generation(state)
-
-async def async_decide_on_backend_quality(state: AgentState) -> str:
-    """Maps to the unified should_retry_code_generation decision"""
-    return await async_should_retry_code_generation(state)
-
-async def async_decide_on_frontend_quality(state: AgentState) -> str:
-    """Maps to the unified should_retry_code_generation decision"""
-    return await async_should_retry_code_generation(state)
-
-async def async_decide_on_integration_quality(state: AgentState) -> str:
-    """Maps to the unified should_retry_code_generation decision"""
-    return await async_should_retry_code_generation(state)
+# Note: Legacy quality decision functions are created via make_async_node() above
+# and map to the sync versions for consistent behavior

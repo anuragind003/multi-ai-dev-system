@@ -150,7 +150,7 @@ class AsyncMetricsCollector:
             try:
                 await log_func(log_entry, log_dir, prefix)
             except Exception as e:
-                print(f"Error processing log: {e}")
+                logging.error(f"Error processing log: {e}")
             finally:
                 self._log_queue.task_done()
     
@@ -163,7 +163,7 @@ class AsyncMetricsCollector:
             async with aiofiles.open(log_file, "a") as f:
                 await f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
-            print(f"❌ Failed to write async log: {e}")
+            logging.error(f"Failed to write async log: {e}")
     
     def _log_to_file_sync(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
         """Synchronous method to log to a file when async is unavailable."""
@@ -174,7 +174,7 @@ class AsyncMetricsCollector:
             with open(log_file, "a") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
-            print(f"❌ Failed to write sync log: {e}")
+            logging.error(f"Failed to write sync log: {e}")
     
     def log_entry(self, log_entry: Dict[str, Any], log_dir: Path, prefix: str):
         """Log an entry using async when possible, falling back to sync."""
@@ -233,10 +233,10 @@ class AsyncMetricsCollector:
         try:
             async with aiofiles.open(metrics_file, "w") as f:
                 await f.write(json.dumps(self.get_summary_metrics(), indent=2))
-            print(f"✅ Metrics saved to {metrics_file}")
+            logging.info(f"Metrics saved to {metrics_file}")
             
         except Exception as e:
-            print(f"❌ Failed to save metrics: {e}")
+            logging.error(f"Failed to save metrics: {e}")
     
     def save_metrics_to_file(self):
         """Save all metrics to a JSON file, attempting async if possible."""
@@ -249,9 +249,9 @@ class AsyncMetricsCollector:
             try:
                 with open(metrics_file, "w") as f:
                     json.dump(self.get_summary_metrics(), f, indent=2)
-                print(f"✅ Metrics saved to {metrics_file}")
+                logging.info(f"Metrics saved to {metrics_file}")
             except Exception as e:
-                print(f"❌ Failed to save metrics: {e}")
+                logging.error(f"Failed to save metrics: {e}")
 
     async def shutdown(self):
         """Gracefully shut down the metrics collector."""
@@ -355,14 +355,14 @@ def log_agent_activity(agent_name: str, message: str, level: str = "INFO", metad
     metrics_collector.increment_agent_activity(agent_name)
     metrics_collector.log_agent(log_entry)
     
-    # Print to console for visibility
+    # Print to console for visibility using logger instead of print to avoid Unicode errors
     if level in ["ERROR", "WARNING", "SUCCESS"]:
         if level == "ERROR":
-            print(f"❌ [{agent_name}] {message}")
+            logging.error(f"[{agent_name}] {message}")
         elif level == "WARNING":
-            print(f"⚠️ [{agent_name}] {message}")
+            logging.warning(f"[{agent_name}] {message}")
         elif level == "SUCCESS":
-            print(f"✅ [{agent_name}] {message}")
+            logging.info(f"[{agent_name}] {message}")
 
 # Add the async version of SimpleTracer
 class AsyncSimpleTracer:

@@ -18,6 +18,7 @@ import monitoring
 from .base_agent import BaseAgent
 from agent_temperatures import get_agent_temperature
 from tools.json_handler import JsonHandler
+from multi_ai_dev_system.models.data_contracts import TechStackOutput
 
 
 class TechStackAdvisorAgent(BaseAgent):

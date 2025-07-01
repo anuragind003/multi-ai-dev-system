@@ -1,0 +1,276 @@
+{
+  "status": "success",
+  "system_design": {
+    "architecture_pattern": "Microservices",
+    "high_level_architecture": {
+      "frontend_tier": {
+        "components": ["React SPA", "Redux Store", "API Client"],
+        "responsibilities": [
+          "User interface",
+          "State management",
+          "API communication"
+        ]
+      },
+      "api_gateway": {
+        "component": "Kong API Gateway",
+        "responsibilities": [
+          "Request routing",
+          "Authentication",
+          "Rate limiting",
+          "Load balancing"
+        ]
+      },
+      "backend_services": [
+        {
+          "name": "user-service",
+          "port": 8001,
+          "database": "users_db",
+          "responsibilities": [
+            "User management",
+            "Authentication",
+            "Profile management"
+          ]
+        },
+        {
+          "name": "product-service",
+          "port": 8002,
+          "database": "products_db",
+          "responsibilities": [
+            "Product catalog",
+            "Inventory management",
+            "Search"
+          ]
+        },
+        {
+          "name": "order-service",
+          "port": 8003,
+          "database": "orders_db",
+          "responsibilities": [
+            "Order processing",
+            "Cart management",
+            "Order history"
+          ]
+        },
+        {
+          "name": "payment-service",
+          "port": 8004,
+          "database": "payments_db",
+          "responsibilities": [
+            "Payment processing",
+            "Transaction history",
+            "Refunds"
+          ]
+        },
+        {
+          "name": "notification-service",
+          "port": 8005,
+          "database": "notifications_db",
+          "responsibilities": [
+            "Email notifications",
+            "SMS alerts",
+            "Push notifications"
+          ]
+        }
+      ],
+      "data_layer": {
+        "primary_database": "PostgreSQL clusters per service",
+        "caching": "Redis for session and API caching",
+        "message_queue": "RabbitMQ for async communication"
+      }
+    },
+    "data_models": [
+      {
+        "entity": "User",
+        "service": "user-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "email": "string unique",
+          "password_hash": "string",
+          "first_name": "string",
+          "last_name": "string",
+          "phone": "string optional",
+          "is_active": "boolean default true",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": ["has_many orders", "has_one cart"]
+      },
+      {
+        "entity": "Product",
+        "service": "product-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "name": "string",
+          "description": "text",
+          "price": "decimal(10,2)",
+          "category_id": "UUID foreign key",
+          "sku": "string unique",
+          "inventory_count": "integer",
+          "is_active": "boolean default true",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": [
+          "belongs_to category",
+          "has_many order_items",
+          "has_many reviews"
+        ]
+      },
+      {
+        "entity": "Order",
+        "service": "order-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "user_id": "UUID foreign key",
+          "status": "enum(pending,confirmed,shipped,delivered,cancelled)",
+          "total_amount": "decimal(10,2)",
+          "shipping_address": "text",
+          "created_at": "timestamp",
+          "updated_at": "timestamp"
+        },
+        "relationships": ["belongs_to user", "has_many order_items"]
+      },
+      {
+        "entity": "Category",
+        "service": "product-service",
+        "attributes": {
+          "id": "UUID primary key",
+          "name": "string",
+          "description": "text",
+          "parent_id": "UUID foreign key optional",
+          "is_active": "boolean default true",
+          "created_at": "timestamp"
+        },
+        "relationships": [
+          "has_many products",
+          "belongs_to parent_category",
+          "has_many subcategories"
+        ]
+      }
+    ],
+    "api_design": {
+      "api_version": "v1",
+      "base_url": "/api/v1",
+      "authentication": "JWT Bearer Token",
+      "endpoints": [
+        {
+          "path": "/auth/register",
+          "method": "POST",
+          "service": "user-service",
+          "description": "User registration",
+          "request_body": {
+            "email": "string",
+            "password": "string",
+            "first_name": "string",
+            "last_name": "string"
+          },
+          "response": {
+            "user_id": "uuid",
+            "access_token": "string",
+            "refresh_token": "string"
+          }
+        },
+        {
+          "path": "/auth/login",
+          "method": "POST",
+          "service": "user-service",
+          "description": "User authentication",
+          "request_body": { "email": "string", "password": "string" },
+          "response": {
+            "user_id": "uuid",
+            "access_token": "string",
+            "refresh_token": "string"
+          }
+        },
+        {
+          "path": "/products",
+          "method": "GET",
+          "service": "product-service",
+          "description": "Get paginated product list",
+          "query_params": {
+            "page": "integer",
+            "limit": "integer",
+            "category": "string",
+            "search": "string"
+          },
+          "response": {
+            "products": "array",
+            "total": "integer",
+            "page": "integer",
+            "limit": "integer"
+          }
+        },
+        {
+          "path": "/products/{id}",
+          "method": "GET",
+          "service": "product-service",
+          "description": "Get product details",
+          "path_params": { "id": "uuid" },
+          "response": { "product": "object" }
+        },
+        {
+          "path": "/cart",
+          "method": "GET",
+          "service": "order-service",
+          "description": "Get user cart",
+          "headers": { "Authorization": "Bearer token" },
+          "response": { "cart_items": "array", "total_amount": "decimal" }
+        },
+        {
+          "path": "/cart/items",
+          "method": "POST",
+          "service": "order-service",
+          "description": "Add item to cart",
+          "headers": { "Authorization": "Bearer token" },
+          "request_body": { "product_id": "uuid", "quantity": "integer" },
+          "response": { "message": "string", "cart_item": "object" }
+        },
+        {
+          "path": "/orders",
+          "method": "POST",
+          "service": "order-service",
+          "description": "Create new order",
+          "headers": { "Authorization": "Bearer token" },
+          "request_body": {
+            "shipping_address": "string",
+            "payment_method": "string"
+          },
+          "response": {
+            "order_id": "uuid",
+            "status": "string",
+            "total_amount": "decimal"
+          }
+        }
+      ]
+    },
+    "security_design": {
+      "authentication": "JWT with access and refresh tokens",
+      "authorization": "Role-based access control (RBAC)",
+      "data_encryption": "AES-256 for sensitive data at rest",
+      "communication": "TLS 1.3 for all API communication",
+      "input_validation": "Pydantic models for request validation",
+      "rate_limiting": "Per-user and per-IP rate limits",
+      "security_headers": ["CORS", "CSP", "HSTS", "X-Frame-Options"]
+    },
+    "deployment_architecture": {
+      "environment_strategy": "Development -> Staging -> Production",
+      "containerization": "Docker containers for all services",
+      "orchestration": "Kubernetes with Helm charts",
+      "service_mesh": "Istio for service-to-service communication",
+      "load_balancing": "Application Load Balancer (ALB)",
+      "auto_scaling": "Horizontal Pod Autoscaler (HPA)",
+      "monitoring": "Prometheus + Grafana + Jaeger tracing"
+    }
+  },
+  "metadata": {
+    "agent": "System Design Agent",
+    "timestamp": "2024-01-15T10:00:00Z",
+    "design_principles": [
+      "Scalability",
+      "Reliability",
+      "Security",
+      "Maintainability"
+    ],
+    "confidence_score": 0.91
+  }
+}

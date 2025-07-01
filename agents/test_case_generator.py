@@ -11,10 +11,14 @@ from datetime import datetime
 
 # Import proper dependencies
 from .code_generation.base_code_generator import BaseCodeGeneratorAgent
-from .code_generation.models import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput
 from tools.code_generation_utils import parse_llm_output_into_files
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+
+# Enhanced memory and RAG imports
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
 
 class TestCaseGeneratorAgent(BaseCodeGeneratorAgent):
     """
@@ -37,6 +41,18 @@ class TestCaseGeneratorAgent(BaseCodeGeneratorAgent):
             rag_retriever=rag_retriever,
             message_bus=message_bus
         )
+        
+        # Store temperature as an instance variable for the run method in base_code_generator.py
+        self.temperature = temperature
+        
+        # Enhanced memory is already initialized in BaseCodeGeneratorAgent
+        # Initialize RAG context if not already done by parent
+        if not hasattr(self, 'rag_manager'):
+            self.rag_manager = get_rag_manager()
+            if self.rag_manager:
+                self.logger.info("RAG manager available for enhanced test generation")
+            else:
+                self.logger.warning("RAG manager not available - proceeding with basic test generation")
         
         # Token optimization configurations
         self.max_tokens = {
@@ -212,8 +228,21 @@ class TestCaseGeneratorAgent(BaseCodeGeneratorAgent):
                     }
                 )
                 
+                # Store result in enhanced memory for cross-tool access
+                output_dict = output.dict()
+                self.enhanced_set("test_generation_result", output_dict, context="test_generation")
+                self.store_cross_tool_data("test_files", generated_files_list, f"Test files generated with {test_framework}")
+                
+                # Store test patterns for reuse
+                self.enhanced_set("test_patterns", {
+                    "framework": test_framework,
+                    "test_count": test_count,
+                    "categories": self._categorize_test_files(generated_files_list),
+                    "execution_time": execution_time
+                }, context="test_patterns")
+                
                 self.log_success(f"Generated {test_count} test files in {execution_time:.2f}s")
-                return output.dict()
+                return output_dict
 
             except Exception as e:
                 execution_time = time.time() - start_time
@@ -223,7 +252,7 @@ class TestCaseGeneratorAgent(BaseCodeGeneratorAgent):
     def _create_empty_output(self, message: str) -> Dict[str, Any]:
         """Create an empty output with an error message"""
         return CodeGenerationOutput(
-            generated_files=[],
+            files=[],
             summary=message,
             status="error",
             metadata={

@@ -26,7 +26,9 @@ import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from agent_temperatures import get_agent_temperature
-from agents.models import (
+from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
+from rag_manager import get_rag_manager
+from models.data_contracts import (
     ProjectAnalysisInput,
     ProjectAnalysisOutput,
     ExecutiveSummary
@@ -58,6 +60,16 @@ class ProjectAnalyzerAgent(BaseAgent):
             temperature=temperature,
             rag_retriever=rag_retriever
         )
+        
+        # Initialize enhanced memory
+        self._init_enhanced_memory()
+
+        # Initialize RAG context
+        self.rag_manager = get_rag_manager()
+        if self.rag_manager:
+            self.logger.info("RAG manager available for project analysis patterns")
+        else:
+            self.logger.warning("RAG manager not available")
         
         # Initialize single comprehensive prompt template
         self._initialize_prompt_templates()
@@ -226,6 +238,18 @@ class ProjectAnalyzerAgent(BaseAgent):
                     "analysis_approach": "comprehensive project assessment",
                     "confidence_level": "high"
                 }
+            
+            # Store project analysis results in enhanced memory
+            if isinstance(final_analysis, dict):
+                analysis_summary = {
+                    "project_viability": final_analysis.get("project_viability", "Unknown"),
+                    "complexity_score": final_analysis.get("executive_summary", {}).get("project_complexity", "Unknown"),
+                    "estimated_duration": final_analysis.get("executive_summary", {}).get("estimated_duration", "Unknown"),
+                    "analysis_timestamp": datetime.now().isoformat()
+                }
+                self.enhanced_set("project_analysis_summary", analysis_summary, context="project_analysis")
+                self.store_cross_tool_data("project_analysis_results", final_analysis, 
+                                         "Comprehensive project analysis results for project planning")
                 
             # Log success
             self.log_success("Comprehensive project analysis completed successfully with structured output")

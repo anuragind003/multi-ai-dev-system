@@ -1,0 +1,388 @@
+### FILE: .gitignore
+```filetype
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.manifest
+*.spec
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before being handed to pyinstaller.
+__pyinstaller__/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# Node Modules
+node_modules/
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+```
+
+### FILE: requirements.txt
+```filetype
+fastapi
+uvicorn[standard]
+psycopg2-binary
+python-dotenv
+requests
+pytest
+pytest-cov
+flake8
+black
+```
+
+### FILE: pyproject.toml
+```filetype
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-web-app"
+version = "0.1.0"
+description = "A simple web application"
+authors = [{ name = "Your Name", email = "your.email@example.com" }]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "psycopg2-binary",
+    "python-dotenv",
+    "requests",
+]
+
+[tool.flake8]
+max-line-length = 120
+```
+
+### FILE: src/app/main.py
+```filetype
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+async def read_root():
+    return {"Hello": "World"}
+```
+
+### FILE: src/app/config.py
+```filetype
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@host:port/database")
+```
+
+### FILE: src/app/models.py
+```filetype
+from typing import Optional
+from pydantic import BaseModel
+
+class Item(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float
+    tax: Optional[float] = None
+```
+
+### FILE: src/app/database.py
+```filetype
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from .config import DATABASE_URL
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+### FILE: Dockerfile
+```filetype
+FROM python:3.9-slim-buster
+
+WORKDIR /app
+
+COPY pyproject.toml .
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src /app/src
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### FILE: docker-compose.yml
+```filetype
+version: "3.9"
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/database
+    depends_on:
+      - db
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
+```
+
+### FILE: kubernetes/deployment.yaml
+```filetype
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+      - name: web-app
+        image: your-dockerhub-username/my-web-app:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: postgresql://user:password@db-service:5432/database
+```
+
+### FILE: kubernetes/service.yaml
+```filetype
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+spec:
+  selector:
+    app: web-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
+```
+
+### FILE: kubernetes/db-service.yaml
+```filetype
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+spec:
+  selector:
+    app: db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP
+```
+
+### FILE: tests/test_main.py
+```filetype
+from fastapi.testclient import TestClient
+from src.app.main import app
+
+client = TestClient(app)
+
+def test_read_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"Hello": "World"}
+```
+
+### FILE: README.md
+```filetype
+# My Web Application
+
+This is a simple web application built with FastAPI and React.
+
+## Getting Started
+
+1. Clone the repository.
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run the application: `uvicorn src.app.main:app --host 0.0.0.0 --port 8000`
+```
+
+### FILE: .env
+```filetype
+DATABASE_URL=postgresql://user:password@localhost:5432/database
+```
+
+### FILE: src/app/api.py
+```filetype
+from fastapi import APIRouter, HTTPException
+from src.app.models import Item
+from src.app.database import SessionLocal, get_db
+
+router = APIRouter()
+
+@router.post("/items/")
+async def create_item(item: Item):
+    db = get_db()
+    # Add item to database logic here
+    return item
+```
+
+### FILE: src/app/security.py
+```filetype
+# Placeholder for security related functions
+def get_password_hash(password):
+    # Implement password hashing logic
+    return password
+
+def verify_password(plain_password, hashed_password):
+    # Implement password verification logic
+    return plain_password == hashed_password
+```
+
+### FILE: monitoring/prometheus.yml
+```filetype
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds.
+
+scrape_configs:
+  - job_name: 'fastapi-app'
+    static_configs:
+      - targets: ['localhost:8000'] # Replace with your application's address
+```
+
+### FILE: monitoring/grafana_dashboard.json
+```filetype
+# Placeholder for Grafana dashboard configuration
+{}
+```
+
+### FILE: docs/api.yaml
+```filetype
+openapi: 3.0.0
+info:
+  title: My Web Application API
+  version: 0.1.0
+paths:
+  /:
+    get:
+      summary: Get a greeting message
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Hello:
+                    type: string
+```
+
+### FILE: scripts/db_migrate.py
+```filetype
+# Placeholder for database migration script
+print("Database migration script placeholder")
+```
+
+### FILE: scripts/seed_data.py
+```filetype
+# Placeholder for seeding data script
+print("Seeding data script placeholder")
+```
+
+### FILE: tests/conftest.py
+```filetype
+# Placeholder for test configuration
+```
+
+### FILE: architecture_decision_records/adr-001-database-choice.md
+```filetype
+# Architecture Decision Record 1: Database Choice
+
+**Date:** 2023-10-27
+
+**Decision:** Use PostgreSQL as the primary database.
+
+**Status:** Approved
+
+**Context:** We need to choose a database for our web application.  We considered several options, including MySQL, MongoDB, and PostgreSQL.
+
+**Considerations:**
+
+*   **PostgreSQL:**  Robust, reliable, supports complex queries, ACID compliant.
+*   **MySQL:**  Popular, widely supported, good performance.
+*   **MongoDB:**  NoSQL, flexible schema, good for unstructured data.
+
+**Decision Drivers:**
+
+*   ACID compliance is important for data integrity.
+*   We anticipate needing complex queries.
+*   PostgreSQL has a strong reputation for reliability.
+
+**Consequences:**
+
+*   Increased complexity compared to a NoSQL database.
+*   Requires more careful schema design.
+```

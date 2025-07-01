@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi-AI Development System - Live Monitor</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #0f0f23;
+        color: #cccccc;
+        overflow-x: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        padding: 1rem 2rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+
+      .header h1 {
+        color: white;
+        font-size: 1.8rem;
+        font-weight: 300;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff4444;
+        animation: pulse 2s infinite;
+      }
+
+      .status-indicator.connected {
+        background: #44ff44;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      .main-container {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 20px;
+        padding: 20px;
+        height: calc(100vh - 80px);
+      }
+
+      .workflow-panel {
+        background: #1a1a2e;
+        border-radius: 10px;
+        padding: 20px;
+        border: 1px solid #333;
+      }
+
+      .monitoring-panel {
+        background: #16213e;
+        border-radius: 10px;
+        padding: 20px;
+        border: 1px solid #333;
+        overflow-y: auto;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #aaaaaa;
+        font-weight: 500;
+      }
+
+      .form-group textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 12px;
+        background: #0f0f23;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: #cccccc;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        resize: vertical;
+      }
+
+      .form-group textarea:focus {
+        outline: none;
+        border-color: #2a5298;
+        box-shadow: 0 0 0 2px rgba(42, 82, 152, 0.2);
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        width: 100%;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(42, 82, 152, 0.4);
+      }
+
+      .btn:disabled {
+        background: #333;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .monitoring-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #333;
+      }
+
+      .monitoring-header h3 {
+        color: #ffffff;
+        font-size: 1.2rem;
+      }
+
+      .clear-logs {
+        background: #444;
+        color: #ccc;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .clear-logs:hover {
+        background: #555;
+      }
+
+      .event-log {
+        max-height: calc(100vh - 300px);
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #444 transparent;
+      }
+
+      .event-log::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .event-log::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .event-log::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+      }
+
+      .event-item {
+        background: #1a1a2e;
+        margin-bottom: 10px;
+        padding: 12px;
+        border-radius: 6px;
+        border-left: 3px solid #2a5298;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .event-item.workflow_status {
+        border-left-color: #44ff44;
+      }
+
+      .event-item.agent_thinking {
+        border-left-color: #ffaa44;
+      }
+
+      .event-item.agent_action {
+        border-left-color: #44aaff;
+      }
+
+      .event-item.tool_result {
+        border-left-color: #aa44ff;
+      }
+
+      .event-item.error {
+        border-left-color: #ff4444;
+        background: #2e1a1a;
+      }
+
+      .event-item.agent_completed {
+        border-left-color: #44ff88;
+      }
+
+      .event-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+
+      .event-type {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+      }
+
+      .event-time {
+        color: #666;
+        font-size: 11px;
+      }
+
+      .event-content {
+        color: #cccccc;
+      }
+
+      .agent-name {
+        color: #44aaff;
+        font-weight: bold;
+      }
+
+      .tool-name {
+        color: #aa44ff;
+        font-weight: bold;
+      }
+
+      .session-info {
+        background: #0f0f23;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-size: 12px;
+      }
+
+      .session-id {
+        color: #44aaff;
+        font-family: "Courier New", monospace;
+      }
+
+      .workflow-type-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .workflow-type-selector input[type="radio"] {
+        display: none;
+      }
+
+      .workflow-type-selector label {
+        padding: 8px 16px;
+        background: #333;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: center;
+        flex: 1;
+      }
+
+      .workflow-type-selector input[type="radio"]:checked + label {
+        background: #2a5298;
+        color: white;
+      }
+
+      .sample-brds {
+        margin-bottom: 15px;
+      }
+
+      .sample-btn {
+        background: #333;
+        color: #ccc;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        margin-right: 10px;
+        margin-bottom: 5px;
+      }
+
+      .sample-btn:hover {
+        background: #444;
+      }
+
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: #333;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 10px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #2a5298, #44aaff);
+        width: 0%;
+        transition: width 0.3s ease;
+        position: relative;
+      }
+
+      .progress-fill::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.3),
+          transparent
+        );
+        animation: shine 2s infinite;
+      }
+
+      @keyframes shine {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>
+        <span class="status-indicator" id="connectionStatus"></span>
+        Multi-AI Development System - Live Monitor
+      </h1>
+    </div>
+
+    <div class="main-container">
+      <div class="workflow-panel">
+        <h2>Start Workflow</h2>
+
+        <div class="sample-brds">
+          <button class="sample-btn" onclick="loadSampleBRD('ecommerce')">
+            E-commerce BRD
+          </button>
+          <button class="sample-btn" onclick="loadSampleBRD('taskmanager')">
+            Task Manager BRD
+          </button>
+          <button class="sample-btn" onclick="loadSampleBRD('fintech')">
+            FinTech BRD
+          </button>
+        </div>
+
+        <div class="workflow-type-selector">
+          <input
+            type="radio"
+            id="phased"
+            name="workflow_type"
+            value="phased"
+            checked
+          />
+          <label for="phased">Phased Development</label>
+          <input
+            type="radio"
+            id="iterative"
+            name="workflow_type"
+            value="iterative"
+          />
+          <label for="iterative">Iterative Development</label>
+        </div>
+
+        <div class="form-group">
+          <label for="brdContent">Business Requirements Document:</label>
+          <textarea
+            id="brdContent"
+            placeholder="Enter your Business Requirements Document here...
+
+Example:
+Project: E-commerce Platform
+Objective: Create a modern e-commerce platform for online retail
+
+Features Required:
+- User registration and authentication
+- Product catalog with search and filtering
+- Shopping cart and checkout process
+- Payment gateway integration
+- Order management system
+- Admin dashboard for inventory management
+
+Technical Requirements:
+- Web-based application
+- Mobile responsive design
+- Secure payment processing
+- Real-time inventory updates
+- Performance optimization for high traffic
+
+Business Goals:
+- Support 10,000+ concurrent users
+- 99.9% uptime requirement
+- Fast page load times (<3 seconds)
+- Conversion rate optimization"
+          ></textarea>
+        </div>
+
+        <button class="btn" id="submitBtn" onclick="startWorkflow()">
+          Start Multi-AI Development Workflow
+        </button>
+
+        <div class="progress-bar" id="progressBar" style="display: none">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="monitoring-panel">
+        <div class="monitoring-header">
+          <h3>Live Agent Monitor</h3>
+          <div class="connection-status">
+            <span id="connectionText">Connecting...</span>
+            <button class="clear-logs" onclick="clearLogs()">Clear</button>
+          </div>
+        </div>
+
+        <div class="session-info" id="sessionInfo" style="display: none">
+          <div>
+            Session ID: <span class="session-id" id="currentSessionId"></span>
+          </div>
+          <div>Started: <span id="sessionStartTime"></span></div>
+        </div>
+
+        <div class="event-log" id="eventLog">
+          <div class="event-item">
+            <div class="event-header">
+              <span class="event-type">System</span>
+              <span class="event-time">Ready</span>
+            </div>
+            <div class="event-content">
+              Waiting for WebSocket connection to Multi-AI Development System...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let ws = null;
+      let currentSessionId = null;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 5;
+
+      // Sample BRD templates
+      const sampleBRDs = {
+        ecommerce: `Project: E-commerce Platform
+Objective: Create a modern e-commerce platform for online retail
+
+Features Required:
+- User registration and authentication system
+- Product catalog with advanced search and filtering
+- Shopping cart and secure checkout process
+- Payment gateway integration (Stripe, PayPal)
+- Order management and tracking system
+- Admin dashboard for inventory management
+- Customer reviews and ratings
+- Wishlist functionality
+- Email notifications
+
+Technical Requirements:
+- Web-based responsive application
+- RESTful API architecture
+- Database optimization for large product catalogs
+- CDN integration for fast image loading
+- SEO-friendly URLs and meta tags
+- Integration with shipping providers
+- Real-time inventory management
+- Performance optimization for high traffic
+
+Business Goals:
+- Support 10,000+ concurrent users
+- 99.9% uptime requirement
+- Page load times under 3 seconds
+- Mobile-first design approach
+- Conversion rate optimization
+- Analytics and reporting dashboard`,
+
+        taskmanager: `Project: Team Task Management System
+Objective: Build a collaborative task management platform for teams
+
+Features Required:
+- User authentication and role-based access
+- Project creation and management
+- Task assignment and tracking
+- Real-time collaboration features
+- File attachment and sharing
+- Time tracking and reporting
+- Deadline and milestone management
+- Team communication tools
+- Dashboard with analytics
+- Mobile application support
+
+Technical Requirements:
+- Cloud-based SaaS architecture
+- Real-time synchronization across devices
+- RESTful API with GraphQL endpoints
+- Scalable database design
+- Push notifications
+- Third-party integrations (Slack, Google Calendar)
+- Automated backup and recovery
+- Security and data encryption
+
+Business Goals:
+- Support teams of 5-500 members
+- 99.5% uptime requirement
+- Sub-second response times
+- Intuitive user experience
+- Freemium pricing model
+- Integration marketplace`,
+
+        fintech: `Project: Digital Banking Platform
+Objective: Develop a comprehensive digital banking solution
+
+Features Required:
+- Secure user onboarding with KYC verification
+- Account management (checking, savings, credit)
+- Fund transfers and bill payments
+- Mobile check deposit
+- Card management and controls
+- Investment portfolio tracking
+- Loan application and management
+- Customer support chat system
+- Financial analytics and insights
+- Fraud detection and prevention
+
+Technical Requirements:
+- Bank-grade security standards
+- PCI DSS compliance
+- Multi-factor authentication
+- Real-time transaction processing
+- Encrypted data transmission
+- API integration with core banking systems
+- Mobile-first architecture
+- Blockchain integration for secure transactions
+- AI/ML for fraud detection
+
+Business Goals:
+- Handle 1M+ transactions daily
+- 99.99% uptime requirement
+- Sub-100ms transaction processing
+- Regulatory compliance (SOX, PCI, GDPR)
+- Scalable microservices architecture
+- Real-time risk assessment`,
+      };
+
+      function loadSampleBRD(type) {
+        document.getElementById("brdContent").value = sampleBRDs[type];
+      }
+
+      function connectWebSocket() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/ws/agent-monitor`;
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = function (event) {
+          console.log("WebSocket connected");
+          updateConnectionStatus(true);
+          reconnectAttempts = 0;
+          addEvent(
+            "connection",
+            "Connected to Multi-AI Development System",
+            "System"
+          );
+        };
+
+        ws.onmessage = function (event) {
+          const data = JSON.parse(event.data);
+          handleWebSocketMessage(data);
+        };
+
+        ws.onclose = function (event) {
+          console.log("WebSocket disconnected");
+          updateConnectionStatus(false);
+          addEvent("connection", "Disconnected from server", "System");
+
+          // Attempt to reconnect
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            setTimeout(() => {
+              addEvent(
+                "connection",
+                `Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`,
+                "System"
+              );
+              connectWebSocket();
+            }, 2000 * reconnectAttempts);
+          }
+        };
+
+        ws.onerror = function (error) {
+          console.error("WebSocket error:", error);
+          addEvent("error", "WebSocket connection error", "System");
+        };
+      }
+
+      function updateConnectionStatus(connected) {
+        const statusIndicator = document.getElementById("connectionStatus");
+        const connectionText = document.getElementById("connectionText");
+
+        if (connected) {
+          statusIndicator.classList.add("connected");
+          connectionText.textContent = "Connected";
+        } else {
+          statusIndicator.classList.remove("connected");
+          connectionText.textContent = "Disconnected";
+        }
+      }
+
+      function handleWebSocketMessage(data) {
+        console.log("Received:", data);
+
+        if (data.type === "agent_event") {
+          handleAgentEvent(data);
+        } else if (data.type === "connection_established") {
+          addEvent("connection", data.message, "System");
+        }
+      }
+
+      function handleAgentEvent(data) {
+        const { session_id, event_type, data: eventData, timestamp } = data;
+
+        // Update current session info
+        if (session_id && session_id !== currentSessionId) {
+          updateSessionInfo(session_id, timestamp);
+        }
+
+        switch (event_type) {
+          case "workflow_status":
+            addEvent(event_type, eventData.message, "Workflow", timestamp);
+            updateProgress(eventData.status);
+            break;
+
+          case "agent_thinking":
+            addEvent(event_type, eventData.message, eventData.agent, timestamp);
+            break;
+
+          case "agent_action":
+            addEvent(
+              event_type,
+              `Using tool: ${eventData.tool}\nInput: ${eventData.input}`,
+              eventData.agent,
+              timestamp
+            );
+            break;
+
+          case "tool_result":
+            addEvent(
+              event_type,
+              `Tool: ${eventData.tool}\nResult: ${eventData.result}`,
+              eventData.agent,
+              timestamp
+            );
+            break;
+
+          case "agent_completed":
+            addEvent(
+              event_type,
+              `Agent completed successfully`,
+              eventData.agent,
+              timestamp
+            );
+            break;
+
+          case "error":
+            addEvent(
+              event_type,
+              eventData.error,
+              eventData.agent || "System",
+              timestamp
+            );
+            break;
+        }
+      }
+
+      function updateSessionInfo(sessionId, timestamp) {
+        currentSessionId = sessionId;
+        document.getElementById("currentSessionId").textContent = sessionId;
+        document.getElementById("sessionStartTime").textContent = new Date(
+          timestamp
+        ).toLocaleTimeString();
+        document.getElementById("sessionInfo").style.display = "block";
+      }
+
+      function updateProgress(status) {
+        const progressBar = document.getElementById("progressBar");
+        const progressFill = document.getElementById("progressFill");
+
+        if (status === "workflow_started") {
+          progressBar.style.display = "block";
+          progressFill.style.width = "10%";
+        } else if (status === "workflow_completed") {
+          progressFill.style.width = "100%";
+          setTimeout(() => {
+            progressBar.style.display = "none";
+            progressFill.style.width = "0%";
+          }, 3000);
+        }
+      }
+
+      function addEvent(type, message, agent, timestamp) {
+        const eventLog = document.getElementById("eventLog");
+        const eventItem = document.createElement("div");
+        eventItem.className = `event-item ${type}`;
+
+        const time = timestamp
+          ? new Date(timestamp).toLocaleTimeString()
+          : new Date().toLocaleTimeString();
+
+        eventItem.innerHTML = `
+                <div class="event-header">
+                    <span class="event-type">${type.replace("_", " ")}</span>
+                    <span class="event-time">${time}</span>
+                </div>
+                <div class="event-content">
+                    ${
+                      agent !== "System"
+                        ? `<span class="agent-name">[${agent}]</span> `
+                        : ""
+                    }
+                    ${message.replace(/\n/g, "<br>")}
+                </div>
+            `;
+
+        eventLog.appendChild(eventItem);
+        eventLog.scrollTop = eventLog.scrollHeight;
+      }
+
+      function clearLogs() {
+        document.getElementById("eventLog").innerHTML = "";
+        document.getElementById("sessionInfo").style.display = "none";
+        currentSessionId = null;
+      }
+
+      async function startWorkflow() {
+        const brdContent = document.getElementById("brdContent").value.trim();
+
+        if (!brdContent) {
+          alert("Please enter a Business Requirements Document");
+          return;
+        }
+
+        const workflowType = document.querySelector(
+          'input[name="workflow_type"]:checked'
+        ).value;
+        const submitBtn = document.getElementById("submitBtn");
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Processing...";
+
+        try {
+          const response = await fetch("/api/workflow-with-monitoring", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              brd_content: brdContent,
+              workflow_type: workflowType,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.status === "completed") {
+            addEvent(
+              "success",
+              "Workflow completed successfully! Check the result in the response.",
+              "System"
+            );
+            console.log("Workflow Result:", result);
+          } else {
+            addEvent("error", `Workflow failed: ${result.error}`, "System");
+          }
+        } catch (error) {
+          addEvent("error", `Request failed: ${error.message}`, "System");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Start Multi-AI Development Workflow";
+        }
+      }
+
+      // Initialize WebSocket connection when page loads
+      window.onload = function () {
+        connectWebSocket();
+      };
+
+      // Handle page visibility changes to reconnect if needed
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden && (!ws || ws.readyState !== WebSocket.OPEN)) {
+          connectWebSocket();
+        }
+      });
+    </script>
+  </body>
+</html>

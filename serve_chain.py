@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 
 # Import components from their correct locations
-from shared_memory import SharedProjectMemory
+from enhanced_memory_manager import EnhancedSharedProjectMemory as SharedProjectMemory
 from message_bus import MessageBus
 from checkpoint_manager import CheckpointManager
 from tools.code_execution_tool import CodeExecutionTool
@@ -136,6 +136,9 @@ def create_workflow_runnable() -> Runnable:
             checkpoint_manager_for_run = CheckpointManager(output_dir=run_output_dir)
             code_execution_tool_for_run = CodeExecutionTool(output_dir=run_output_dir)
 
+            # Get session_id for WebSocket monitoring
+            session_id = inputs.get("session_id")
+            
             # Create configurable components dictionary
             configurable_components = {
                 "llm": GLOBAL_LLM,
@@ -147,7 +150,8 @@ def create_workflow_runnable() -> Runnable:
                 "checkpoint_manager": checkpoint_manager_for_run,
                 "workflow_id": run_id,
                 "global_llm_specific_kwargs": GLOBAL_LLM_SPECIFIC_KWARGS,
-                "temperature_strategy": temperature_strategy
+                "temperature_strategy": temperature_strategy,
+                "session_id": session_id  # Pass session_id for WebSocket monitoring
             }
 
             # Set up workflow based on input type

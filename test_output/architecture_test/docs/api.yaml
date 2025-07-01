@@ -1,0 +1,18 @@
+openapi: 3.0.0
+info:
+  title: My Web Application API
+  version: 0.1.0
+paths:
+  /:
+    get:
+      summary: Get a greeting message
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Hello:
+                    type: string

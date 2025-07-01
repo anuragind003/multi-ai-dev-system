@@ -20,19 +20,72 @@
     "enable_api": true
   },
   "graphs": {
-    "phased_workflow": "async_graph:create_async_phased_workflow",
-    "iterative_workflow": "async_graph:create_async_iterative_workflow",
-    "basic_workflow": "async_graph:create_async_basic_workflow",
-    "modular_workflow": "async_graph:create_async_modular_workflow",
-    "resumable_workflow": "async_graph:create_async_resumable_workflow",
-    "implementation_workflow": "async_graph:create_async_implementation_workflow",
+    "phased_workflow": {
+      "path": "async_graph:create_async_phased_workflow",
+      "description": "Comprehensive phased development workflow with BRD analysis, tech stack selection, architecture design, and code generation"
+    },
+    "iterative_workflow": {
+      "path": "async_graph:create_async_iterative_workflow",
+      "description": "Iterative development workflow with continuous refinement and feedback loops"
+    },
+    "basic_workflow": {
+      "path": "async_graph:create_async_basic_workflow",
+      "description": "Basic software development workflow for simple projects"
+    },
+    "modular_workflow": {
+      "path": "async_graph:create_async_modular_workflow",
+      "description": "Modular development approach with component-based architecture"
+    },
+    "resumable_workflow": {
+      "path": "async_graph:create_async_resumable_workflow",
+      "description": "Resumable workflow that can continue from checkpoints and handle interruptions"
+    },
+    "implementation_workflow": {
+      "path": "async_graph:create_async_implementation_workflow",
+      "description": "Implementation-focused workflow for detailed code generation and testing"
+    },
     
-    "sync_phased": "graph:create_phased_workflow",
-    "sync_iterative": "graph:create_iterative_workflow",
-    "sync_basic": "graph:create_basic_workflow",
-    "sync_modular": "graph:create_modular_workflow",
-    "sync_resumable": "graph:create_resumable_workflow",
-    "sync_implementation": "graph:create_implementation_workflow"
+    "sync_phased": {
+      "path": "graph:create_phased_workflow",
+      "description": "Synchronous phased development workflow for sequential processing"
+    },
+    "sync_iterative": {
+      "path": "graph:create_iterative_workflow", 
+      "description": "Synchronous iterative development with step-by-step execution"
+    },
+    "sync_basic": {
+      "path": "graph:create_basic_workflow",
+      "description": "Basic synchronous workflow for simple development tasks"
+    },
+    "sync_modular": {
+      "path": "graph:create_modular_workflow",
+      "description": "Synchronous modular workflow with component isolation"
+    },
+    "sync_resumable": {
+      "path": "graph:create_resumable_workflow",
+      "description": "Synchronous resumable workflow with checkpoint management"
+    },
+    "sync_implementation": {
+      "path": "graph:create_implementation_workflow",
+      "description": "Synchronous implementation workflow for detailed code development"
+    },
+    
+    "brd_analysis_mcp": {
+      "path": "mcp_agent_wrapper:create_brd_analysis_agent",
+      "description": "Analyze Business Requirements Document and extract technical requirements, objectives, and success criteria"
+    },
+    "tech_stack_mcp": {
+      "path": "mcp_agent_wrapper:create_tech_stack_agent", 
+      "description": "Recommend optimal technology stack based on project requirements and target platform"
+    },
+    "code_generation_mcp": {
+      "path": "mcp_agent_wrapper:create_code_generation_agent",
+      "description": "Generate complete project code structure and implementation files based on specifications"
+    },
+    "complete_workflow_mcp": {
+      "path": "mcp_agent_wrapper:create_complete_workflow_agent",
+      "description": "Execute complete development workflow from BRD analysis through code generation"
+    }
   },
   "dependencies": [
     "agents",
@@ -61,5 +114,9 @@
       "type": "shared_project_memory",
       "batch_size": 50
     }
-  }
+  },
+  "http": {
+    "disable_mcp": false
+  },
+  "env": ".env"
 }

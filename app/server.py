@@ -1,16 +1,33 @@
 # app/server.py
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from langserve import add_routes
 from langchain_core.prompts import PromptTemplate
 import os
 import sys
+import uuid
+import logging
 from fastapi.openapi.utils import get_openapi
+from datetime import datetime
+import asyncio
+from langgraph.types import Command
+import json
+from fastapi import BackgroundTasks
 
 # Import from the project
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from serve_chain import create_workflow_runnable
 from config import get_llm
+from .websocket_manager import websocket_manager
+from multi_ai_dev_system.graph import get_workflow
+from multi_ai_dev_system.enhanced_memory_manager import get_project_memory
+from multi_ai_dev_system.enhanced_langgraph_checkpointer import EnhancedMemoryCheckpointer
+from multi_ai_dev_system.agent_state import StateFields
+from multi_ai_dev_system.async_graph import get_async_workflow
 
 # Initialize FastAPI app with properly enabled OpenAPI schema
 app = FastAPI(
@@ -217,6 +234,161 @@ async def get_temperature_strategy():
             "planning": 0.4
         }
     }
+
+# WebSocket endpoints for real-time monitoring
+@app.websocket("/ws/agent-monitor")
+async def websocket_agent_monitor(websocket: WebSocket):
+    """WebSocket endpoint for real-time agent monitoring."""
+    await websocket_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and listen for any client messages
+            data = await websocket.receive_json()
+            # NEW: Handle human responses
+            if data.get("type") == "human_response":
+                session_id = data.get("session_id")
+                await websocket_manager.handle_human_response(session_id, data)
+            else:
+                await websocket.send_text(f"Echo: {json.dumps(data)}")
+
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket)
+    except Exception as e:
+        logging.error(f"WebSocket error: {e}")
+        websocket_manager.disconnect(websocket)
+
+@app.get("/api/agent-sessions")
+async def get_active_sessions():
+    """Get list of active agent sessions."""
+    return {
+        "active_sessions": list(websocket_manager.agent_sessions.keys()),
+        "total_connections": len(websocket_manager.active_connections),
+        "sessions": {
+            session_id: {
+                "started": session_data["started"],
+                "event_count": len(session_data["events"])
+            }
+            for session_id, session_data in websocket_manager.agent_sessions.items()
+        }
+    }
+
+@app.get("/api/agent-sessions/{session_id}/history")
+async def get_session_history(session_id: str):
+    """Get event history for a specific agent session."""
+    history = websocket_manager.get_session_history(session_id)
+    return {
+        "session_id": session_id,
+        "event_count": len(history),
+        "events": history
+    }
+
+@app.post("/api/workflow-with-monitoring")
+async def workflow_with_monitoring(request: Request):
+    """Enhanced workflow endpoint with WebSocket monitoring support."""
+    json_body = await request.json()
+    
+    # Generate session ID for this workflow run
+    session_id = str(uuid.uuid4())
+    
+    # Add session_id to the request for callback handler
+    json_body["session_id"] = session_id
+    
+    # Notify WebSocket clients that a new workflow is starting
+    await websocket_manager.send_workflow_status(
+        session_id, 
+        "workflow_started", 
+        "Multi-AI Development Workflow Started",
+        {"brd_content_length": len(json_body.get("brd_content", ""))}
+    )
+    
+    try:
+        # Run the workflow
+        result = workflow_runnable.invoke(json_body)
+        
+        # Notify completion
+        await websocket_manager.send_workflow_status(
+            session_id,
+            "workflow_completed",
+            "Multi-AI Development Workflow Completed Successfully",
+            {"result_keys": list(result.keys()) if isinstance(result, dict) else []}
+        )
+        
+        return {
+            "session_id": session_id,
+            "result": result,
+            "status": "completed"
+        }
+        
+    except Exception as e:
+        # Notify error
+        await websocket_manager.send_error(
+            session_id,
+            f"Workflow failed: {str(e)}"
+        )
+        
+        return {
+            "session_id": session_id,
+            "error": str(e),
+            "status": "failed"
+        }
+
+async def run_resumable_graph(session_id: str, inputs: dict, graph_runner_queue: asyncio.Queue):
+    """Function to run in the background for a resumable workflow."""
+    
+    memory_manager = get_project_memory(f"./output/run_{session_id}")
+    checkpointer = EnhancedMemoryCheckpointer(memory_manager=memory_manager, backend_type="hybrid")
+    
+    # Get the async graph definition
+    uncompiled_graph = await get_async_workflow("resumable")
+    
+    # Compile it with our persistent checkpointer
+    resumable_workflow = uncompiled_graph.compile(checkpointer=checkpointer)
+    
+    config = {"configurable": {"thread_id": session_id}}
+    
+    # Initial invocation
+    await websocket_manager.send_workflow_status(session_id, "started", "Workflow started.")
+    result = None
+    
+    async for event in resumable_workflow.astream(inputs, config, stream_mode="values"):
+        result = event
+        # This will stream all node outputs to the client
+        await websocket_manager.send_agent_event(session_id, "node_update", event)
+
+    while result and result.get('__interrupt__'):
+        await websocket_manager.send_workflow_status(session_id, "paused", "Waiting for human input.", result.get('__interrupt__'))
+        
+        # Wait for user input from the queue
+        user_response = await graph_runner_queue.get()
+        decision = user_response.get("decision", "reject")
+        payload = user_response.get("payload", {})
+        
+        command = Command(resume=decision, update=payload)
+        
+        # Resume the graph
+        async for event in resumable_workflow.astream(command, config, stream_mode="values"):
+             result = event
+             await websocket_manager.send_agent_event(session_id, "node_update", event)
+
+    await websocket_manager.send_workflow_status(session_id, "completed", "Workflow finished.", result)
+    del websocket_manager.resumable_runs[session_id]
+
+@app.post("/api/workflow/run_interactive")
+async def run_interactive_workflow(request: Request, background_tasks: BackgroundTasks):
+    """Run an interactive, resumable workflow with WebSocket communication."""
+    body = await request.json()
+    inputs = body.get("inputs", {})
+    session_id = body.get("session_id") or f"session_{uuid.uuid4()}"
+
+    if session_id in websocket_manager.resumable_runs:
+        return {"status": "error", "message": "Session already in progress."}
+
+    graph_runner_queue = asyncio.Queue()
+    websocket_manager.resumable_runs[session_id] = graph_runner_queue
+
+    background_tasks.add_task(run_resumable_graph, session_id, inputs, graph_runner_queue)
+    
+    return {"status": "started", "session_id": session_id}
 
 if __name__ == "__main__":
     import uvicorn
