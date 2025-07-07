@@ -8,8 +8,11 @@ import threading
 import time
 import uuid
 import json
-from typing import Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List, Optional
 from queue import Queue, Empty
+
+
+_message_bus_instance: Optional["MessageBus"] = None
 
 
 class MessageBus:
@@ -222,3 +225,15 @@ class MessageBus:
             self.logger.error(message)
         else:
             self.logger.info(message)
+
+
+def get_message_bus() -> "MessageBus":
+    """
+    Singleton accessor for the MessageBus.
+    This ensures a single instance is used throughout the application.
+    """
+    global _message_bus_instance
+    if _message_bus_instance is None:
+        logging.getLogger("MessageBus").info("Creating a new global instance of MessageBus.")
+        _message_bus_instance = MessageBus()
+    return _message_bus_instance

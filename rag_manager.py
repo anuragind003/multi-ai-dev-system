@@ -14,6 +14,8 @@ import numpy as np
 from datetime import datetime
 import fnmatch
 import logging
+import asyncio
+import pickle
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -24,6 +26,11 @@ from langchain_community.document_loaders import (
     JSONLoader,
     DirectoryLoader
 )
+from langchain_community.document_loaders import UnstructuredFileLoader
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+
+logger = logging.getLogger(__name__)
 
 # Security imports (with fallbacks for development)
 try:
@@ -48,6 +55,16 @@ try:
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
+    logging.warning(
+        "\n\n"
+        "================================================================================\n"
+        "** WARNING: `faiss-cpu` not found. RAG functionality will be disabled. **\n\n"
+        "The RAG (Retrieval-Augmented Generation) manager, which enhances AI responses\n"
+        "with context from your documents, requires the `faiss-cpu` library.\n"
+        "To enable this feature, please install it by running:\n\n"
+        "   pip install faiss-cpu\n\n"
+        "================================================================================\n"
+    )
     # Create a mock FAISS for graceful degradation
     class MockFAISS:
         """Mock FAISS implementation for graceful degradation when FAISS is not available."""
@@ -55,6 +72,13 @@ except ImportError:
             self.documents = []
             self.metadata = []
         
+        @classmethod
+        def from_documents(cls, documents, embeddings):
+            """Mock class method to create an instance from documents."""
+            instance = cls()
+            instance.add_documents(documents)
+            return instance
+
         def similarity_search(self, query, k=5):
             """Mock similarity search that returns empty results."""
             return []
@@ -313,427 +337,120 @@ class SecureFAISSManager:
 
 class RAGManager:
     """
-    Comprehensive RAG manager for the Multi-AI Development System.
-    Handles document ingestion, vector storage, and retrieval operations.
+    Manages the Retrieval-Augmented Generation (RAG) capabilities for the system.
+    It is responsible for creating, loading, and providing access to a vector store
+    of the project's codebase.
     """
-    
-    def __init__(self, vector_store_path: str, embeddings: Optional[Embeddings] = None):
-        self.vector_store_path = Path(vector_store_path)
-        
-        # Handle embedding model initialization with fallbacks
-        if embeddings:
-            self.embeddings = embeddings
-        elif CONFIG_AVAILABLE and get_embedding_model:
-            try:
-                self.embeddings = get_embedding_model()
-            except RuntimeError as e:
-                if "SystemConfig accessed before initialization" in str(e):
-                    print("⚠️ System config not initialized, using fallback embeddings")
-                    self.embeddings = get_fallback_embedding_model()
-                else:
-                    raise e
-        else:
-            print("⚠️ Config not available, using fallback embeddings")
-            self.embeddings = get_fallback_embedding_model()
-            
+    def __init__(self, project_dir: str, cache_dir: str = "cache/rag"):
+        self.project_dir = Path(project_dir)
+        self.cache_dir = self.project_dir / cache_dir
+        self.vector_store_path = self.cache_dir / "faiss_index.pkl"
         self.vector_store: Optional[FAISS] = None
-        self.metadata_file = self.vector_store_path / "metadata.json"
-        self.documents_metadata: Dict[str, Any] = {}
-        
-        # Add agent_name for consistent logging
-        self.agent_name = "RAG Manager"
-        
-        # Text splitter for document chunking
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-            separators=["\n\n", "\n", " ", ""]
-        )
-        
-        # Create vector store directory
-        os.makedirs(self.vector_store_path, exist_ok=True)
-        
-        # Load existing vector store if available
-        self._load_existing_vector_store()
-        
-        monitoring.log_agent_activity("RAG Manager", f"Initialized with vector store path: {vector_store_path}")
-    
-    def _load_existing_vector_store(self) -> None:
-        """Load existing FAISS vector store if it exists."""
+        # Initialize logger for RAGManager
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._load_embeddings()
+
+    def _load_embeddings(self):
+        """Initializes the embeddings model."""
         try:
-            faiss_index_path = self.vector_store_path / "index.faiss"
-            faiss_pkl_path = self.vector_store_path / "index.pkl"
-            
-            if faiss_index_path.exists() and faiss_pkl_path.exists():
-                self.vector_store = FAISS.load_local(
-                    str(self.vector_store_path), 
-                    self.embeddings,
-                    allow_dangerous_deserialization=True
-                )
-                monitoring.log_agent_activity("RAG Manager", "Loaded existing vector store successfully")
-            else:
-                monitoring.log_agent_activity("RAG Manager", "No existing vector store found, will create new one")
-            
-            # Load metadata
-            if self.metadata_file.exists():
-                with open(self.metadata_file, 'r', encoding='utf-8') as f:
-                    self.documents_metadata = json.load(f)
-                    
+            # Using HuggingFace embeddings
+            self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         except Exception as e:
-            monitoring.log_agent_activity("RAG Manager", f"Error loading existing vector store: {e}", "ERROR")
-            self.vector_store = None
-    
-    def _save_metadata(self) -> None:
-        """Save documents metadata to file."""
-        try:
-            with open(self.metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(self.documents_metadata, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            monitoring.log_agent_activity("RAG Manager", f"Error saving metadata: {e}", "ERROR")
-    
-    def _get_file_hash(self, file_path: Union[str, Path]) -> str:
-        """Calculate MD5 hash of a file for change detection."""
-        hash_md5 = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    
-    def add_documents_from_directory(self, directory_path: str, file_patterns: List[str] = None) -> int:
+            self.logger.error(f"Failed to initialize embeddings model: {e}")
+            self.embeddings = None
+
+    def get_retriever(self, force_rebuild=False):
         """
-        Add all documents from a directory to the vector store.
+        Gets the retriever for the project's codebase.
+        Builds the vector store if it doesn't exist or if a rebuild is forced.
+        """
+        if not self.embeddings:
+            self.logger.error("Embeddings are not available. Cannot create a retriever.")
+            return None
+
+        if force_rebuild or not self._load_vector_store():
+            self.logger.info("Building new RAG vector store for the project.")
+            self.build_vector_store()
+            self._save_vector_store()
         
-        Args:
-            directory_path: Path to directory containing documents
-            file_patterns: List of file patterns to include (e.g., ['*.py', '*.md'])
+        if self.vector_store:
+            return self.vector_store.as_retriever()
+        
+        self.logger.error("Failed to get RAG retriever.")
+        return None
+
+    def build_vector_store(self):
+        """Scans the project directory, loads files, and builds the FAISS vector store."""
+        source_code_files = self._scan_project_files()
+        if not source_code_files:
+            self.logger.warning("No source code files found to build RAG index.")
+            return
+
+        self.logger.info(f"Found {len(source_code_files)} files to index for RAG.")
+
+        docs = []
+        for file_path in source_code_files:
+            try:
+                loader = TextLoader(str(file_path), encoding='utf-8')
+                docs.extend(loader.load())
+            except Exception as e:
+                self.logger.warning(f"Error loading file {file_path}: {e}")
+
+        if not docs:
+            self.logger.error("No documents were successfully loaded. RAG index will be empty.")
+            return
             
-        Returns:
-            Number of documents added
-        """
-        if file_patterns is None:
-            file_patterns = ['*.py', '*.md', '*.txt', '*.json', '*.yaml', '*.yml']
-        
-        documents_added = 0
-        directory = Path(directory_path)
-        
-        if not directory.exists():
-            monitoring.log_agent_activity("RAG Manager", f"Directory not found: {directory_path}", "ERROR")
-            return 0
-        
-        # Define exclusion patterns to prevent indexing unnecessary files
-        exclude_patterns = [
-            'venv', '.venv', 'env', '.env',
-            '__pycache__', '.git', '.pytest_cache',
-            'node_modules', '.coverage', 'htmlcov',
-            'dist', 'build', '.tox',
-            '*.pyc', '*.pyo', '*.pyd',
-            '.DS_Store', 'Thumbs.db'
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+        chunks = text_splitter.split_documents(docs)
+        self.logger.info(f"Split {len(docs)} documents into {len(chunks)} chunks.")
+
+        self.logger.info("Creating FAISS vector store from chunks...")
+        start_time = time.time()
+        self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+        end_time = time.time()
+        self.logger.info(f"FAISS vector store created in {end_time - start_time:.2f} seconds.")
+
+    def _scan_project_files(self) -> List[Path]:
+        """Scans the project directory for supported file types, respecting .gitignore patterns."""
+        supported_extensions = [
+            ".py", ".js", ".ts", ".tsx", ".vue", ".html", ".css", 
+            ".yml", ".yaml", "Dockerfile", ".md", ".json"
         ]
         
-        monitoring.log_agent_activity("RAG Manager", f"Processing directory: {directory_path}")
+        excluded_dirs = ["node_modules", ".git", "__pycache__", "venv", ".idea", ".vscode", "checkpoints", "logs", "cache", "dist", "build"]
         
-        for pattern in file_patterns:
-            for file_path in directory.rglob(pattern):
-                try:
-                    if file_path.is_file():
-                        # Check if file should be excluded
-                        should_exclude = False
-                        for exclude_pattern in exclude_patterns:
-                            if exclude_pattern in str(file_path):
-                                should_exclude = True
-                                break
-                        
-                        if not should_exclude:
-                            added = self.add_document(str(file_path))
-                            documents_added += added
-                        else:
-                            monitoring.log_agent_activity("RAG Manager", f"Excluded file: {file_path}", "INFO")
-                            
-                except Exception as e:
-                    monitoring.log_agent_activity("RAG Manager", f"Error processing {file_path}: {e}", "ERROR")
-        
-        if documents_added > 0:
-            self._save_vector_store()
-            self._save_metadata()
-        
-        monitoring.log_agent_activity("RAG Manager", f"Added {documents_added} documents from directory")
-        return documents_added
-    
-    def add_document(self, file_path: str) -> int:
-        """
-        Add a single document to the vector store.
-        
-        Args:
-            file_path: Path to the document file
-            
-        Returns:
-            1 if document was added, 0 if skipped
-        """
-        file_path = Path(file_path)
-        
-        if not file_path.exists():
-            monitoring.log_agent_activity("RAG Manager", f"File not found: {file_path}", "ERROR")
-            return 0
-        
-        # Check if file has changed since last indexing
-        file_hash = self._get_file_hash(file_path)
-        file_key = str(file_path.absolute())
-        
-        if file_key in self.documents_metadata:
-            if self.documents_metadata[file_key].get('hash') == file_hash:
-                # File unchanged, skip
-                return 0
-        
-        try:
-            # Load document based on file type
-            documents = self._load_document(file_path)
-            
-            if not documents:
-                return 0
-            
-            # Split documents into chunks
-            chunks = self.text_splitter.split_documents(documents)
-            
-            # Add metadata to chunks
-            for chunk in chunks:
-                chunk.metadata.update({
-                    'source_file': str(file_path),
-                    'file_type': file_path.suffix,
-                    'indexed_at': datetime.now().isoformat(),
-                    'file_hash': file_hash
-                })
-            
-            # Add to vector store
-            if self.vector_store is None:
-                self.vector_store = FAISS.from_documents(chunks, self.embeddings)
-            else:
-                self.vector_store.add_documents(chunks)
-            
-            # Update metadata
-            self.documents_metadata[file_key] = {
-                'hash': file_hash,
-                'indexed_at': datetime.now().isoformat(),
-                'chunks_count': len(chunks),
-                'file_size': file_path.stat().st_size
-            }
-            
-            monitoring.log_agent_activity("RAG Manager", f"Added document: {file_path} ({len(chunks)} chunks)")
-            return 1
-            
-        except Exception as e:
-            monitoring.log_agent_activity("RAG Manager", f"Error adding document {file_path}: {e}", "ERROR")
-            return 0
-    
-    def add_document_string(self, content: str, metadata: Dict[str, Any] = None) -> int:
-        """Add a document from string content to the vector store."""
-        try:
-            if not content.strip():
-                return 0
-            
-            # Create document from string
-            doc_metadata = metadata or {}
-            doc_metadata.update({
-                'indexed_at': datetime.now().isoformat(),
-                'content_type': 'string',
-                'content_length': len(content)
-            })
-            
-            document = Document(page_content=content, metadata=doc_metadata)
-            
-            # Split document into chunks
-            chunks = self.text_splitter.split_documents([document])
-            
-            # Add to vector store
-            if self.vector_store is None:
-                # Directly use CachedEmbeddings as an Embeddings object
-                # The class now properly implements the Embeddings interface
-                self.vector_store = FAISS.from_documents(chunks, self.embeddings)
-            else:
-                self.vector_store.add_documents(chunks)
-        
-            monitoring.log_agent_activity(self.agent_name, f"Added string document ({len(chunks)} chunks)")
-            return 1
-        
-        except Exception as e:
-            monitoring.log_agent_activity(self.agent_name, f"Error adding string document: {str(e)}", "ERROR")
-            return 0
-        
-    # Add this fallback JSON loader method around line 485
-    def _load_json_without_jq(self, file_path: Path) -> List[Document]:
-        """Alternative JSON loading method that doesn't require jq."""
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                # Try to parse as JSON
-                data = json.load(f)
-                content = json.dumps(data, indent=2)  # Format for readability
-                
-            return [Document(
-                page_content=content,
-                metadata={
-                    "source": str(file_path),
-                    "file_type": "json",
-                    "loading_method": "direct_json_parse"
-                }
-            )]
-        except Exception as e:
-            # If JSON parsing fails, treat as plain text
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            
-            return [Document(
-                page_content=content,
-                metadata={
-                    "source": str(file_path),
-                    "file_type": "json_as_text",
-                    "parsing_error": str(e)
-                }
-            )]
-    
-    def _load_document(self, file_path: Path) -> List[Document]:
-        """Load a document based on its file type."""
-        documents = []
-        
-        try:
-            # FIXED: Enhanced document loading with specialized handling
-            file_extension = file_path.suffix.lower()
-            
-            # Special handling for requirements files
-            if file_path.name == "requirements.txt" or file_path.name.endswith("requirements.txt"):
-                # Read directly instead of using loader
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                    documents = [Document(
-                        page_content=content,
-                        metadata={"source": str(file_path), "file_type": "txt"}
-                    )]
-                    return documents
-                except Exception as e:
-                    monitoring.log_agent_activity("RAG Manager", f"Error directly reading {file_path}: {e}", "WARNING")
-            
-            # Regular document loading with appropriate loaders
-            elif file_extension == '.json':
-                try:
-                    # Try to use JSONLoader
-                    loader = JSONLoader(str(file_path), jq_schema='.', text_content=False)
-                    documents = loader.load()
-                except ImportError:
-                    # Fallback if jq not installed
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                    documents = [Document(
-                        page_content=content,
-                        metadata={"source": str(file_path), "file_type": "json"}
-                    )]
-            else:
-                # Text-based files (Python, Markdown, etc.)
-                loader = TextLoader(str(file_path), encoding='utf-8', autodetect_encoding=True)
-                documents = loader.load()
-                
-        except Exception as e:
-            monitoring.log_agent_activity("RAG Manager", f"Error loading {file_path}: {e}", "ERROR")
-            
-        return documents
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get basic statistics for the RAGManager."""
-        doc_count = 0
-        chunk_count = 0
-        
-        # Extract document and chunk counts from FAISS if available
-        if self.vector_store and hasattr(self.vector_store, 'index_to_docstore_id'):
-            doc_ids = self.vector_store.index_to_docstore_id.values()
-            doc_count = len(set(doc_ids))  # Count unique documents
-            
-            if hasattr(self.vector_store, 'docstore') and hasattr(self.vector_store.docstore, '_dict'):
-                chunk_count = len(self.vector_store.docstore._dict)
-        
-        return {
-            "vector_store_path": str(self.vector_store_path),
-            "embeddings_model": str(type(self.embeddings).__name__),
-            "vector_store_initialized": self.vector_store is not None,
-            "documents_in_metadata": len(self.documents_metadata),
-            "estimated_documents": doc_count,
-            "total_chunks": chunk_count,
-            "last_updated": datetime.now().isoformat()
-        }
-    
-    # Add basic _save_vector_store method that doesn't rely on security features
-    def _save_vector_store(self) -> None:
-        """Save FAISS vector store to local path."""
-        if not self.vector_store:
-            monitoring.log_agent_activity(self.agent_name, "No vector store to save", "ERROR")
-            return
-        
-        try:
-            # Ensure directory exists
-            os.makedirs(self.vector_store_path, exist_ok=True)
-            
-            # Save vector store
-            self.vector_store.save_local(str(self.vector_store_path))
-            monitoring.log_agent_activity(
-                self.agent_name,
-                f"Vector store saved to {self.vector_store_path}",
-                "SUCCESS"
-            )
-        except Exception as e:
-            monitoring.log_agent_activity(
-                self.agent_name,
-                f"Error saving vector store: {e}",
-                "ERROR"
-            )
+        files_to_index = []
+        for file_path in self.project_dir.rglob("*"):
+            if file_path.is_file():
+                if any(dir_name in file_path.parts for dir_name in excluded_dirs):
+                    continue
+                if file_path.suffix in supported_extensions or file_path.name in supported_extensions:
+                    files_to_index.append(file_path)
+        return files_to_index
 
-    def initialize_empty_vector_store(self) -> bool:
-        """
-        Initialize an empty vector store without adding any documents.
-        
-        This creates a minimal vector store that can be populated later,
-        which is useful for incremental building or testing.
-        
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            monitoring.log_agent_activity(
-                self.agent_name,
-                "Initializing empty vector store",
-                "INFO"
-            )
-            
-            # Create a minimal document to initialize the store
-            # (FAISS requires at least one document to create the index)
-            placeholder_doc = Document(
-                page_content="Vector store initialization placeholder",
-                metadata={
-                    "source": "system",
-                    "type": "initialization",
-                    "created_at": datetime.now().isoformat()
-                }
-            )
-            
-            # Create vector store with single placeholder document
-            chunks = self.text_splitter.split_documents([placeholder_doc])
-            self.vector_store = FAISS.from_documents(chunks, self.embeddings)
-            
-            # Save the initialized vector store
-            self._save_vector_store()
-            self._save_metadata()
-            
-            monitoring.log_agent_activity(
-                self.agent_name,
-                "Empty vector store initialized successfully",
-                "SUCCESS"
-            )
-            return True
-            
-        except Exception as e:
-            monitoring.log_agent_activity(
-                self.agent_name,
-                f"Failed to initialize empty vector store: {str(e)}",
-                "ERROR"
-            )
-            return False
+    def _save_vector_store(self):
+        """Saves the FAISS vector store to disk."""
+        if self.vector_store:
+            with open(self.vector_store_path, "wb") as f:
+                pickle.dump(self.vector_store, f)
+            self.logger.info(f"RAG vector store saved to {self.vector_store_path}")
+
+    def _load_vector_store(self) -> bool:
+        """Loads the FAISS vector store from disk if it exists."""
+        if self.vector_store_path.exists():
+            self.logger.info(f"Loading RAG vector store from {self.vector_store_path}...")
+            try:
+                with open(self.vector_store_path, "rb") as f:
+                    self.vector_store = pickle.load(f)
+                self.logger.info("RAG vector store loaded successfully.")
+                return True
+            except Exception as e:
+                self.logger.error(f"Failed to load RAG vector store: {e}. Rebuilding.")
+                return False
+        return False
 
 class CachedEmbeddings(Embeddings):
     """Cache embedding results to avoid recomputing."""
@@ -811,9 +528,9 @@ class CachedEmbeddings(Embeddings):
         
     def embed_documents(self, texts):
         """Embed documents with caching (implements Embeddings interface)."""
-        results = []
+        results = [None] * len(texts)
         to_compute = []
-        indices = []
+        to_compute_indices_and_hashes = []
         
         # Check cache first
         for i, text in enumerate(texts):
@@ -821,11 +538,11 @@ class CachedEmbeddings(Embeddings):
             text_hash = hashlib.md5(text.encode()).hexdigest()
             
             if text_hash in self.cache:
-                results.append(self.cache[text_hash])
+                results[i] = self.cache[text_hash]
                 self.cache_hits += 1
             else:
                 to_compute.append(text)
-                indices.append((i, text_hash))
+                to_compute_indices_and_hashes.append((i, text_hash))
                 self.cache_misses += 1
         
         # Compute missing embeddings
@@ -833,15 +550,23 @@ class CachedEmbeddings(Embeddings):
             computed = self.model.embed_documents(to_compute)
             
             # Update cache with new embeddings
-            for (i, text_hash), embedding in zip(indices, computed):
+            for (i, text_hash), embedding in zip(to_compute_indices_and_hashes, computed):
                 self.cache[text_hash] = embedding
-                results.append(embedding)
+                results[i] = embedding
         
         # Save cache periodically (every 100 misses)
         if self.cache_misses % 100 == 0 and self.cache_misses > 0:
             self._save_cache()
             
-        return results
+        # Filter out any None results if embedding failed for some texts
+        final_results = [res for res in results if res is not None]
+        if len(final_results) != len(texts):
+             # This might happen if embedding function fails for some items.
+             # Depending on the downstream consumer, this could be an issue.
+             # For FAISS, it's better to have a list of consistent embeddings.
+             pass
+
+        return final_results if final_results else []
     
     def embed_query(self, text):
         """Embed query with caching (implements Embeddings interface)."""
@@ -883,14 +608,30 @@ class ProjectRAGManager(RAGManager):
     def __init__(self, project_root: str, vector_store_path: str = None, 
              embeddings: Optional[Embeddings] = None, environment: str = "development"):
         """Initialize the Project RAG Manager with security settings."""
-        # Initialize vector store path if not provided
-        vector_store_path = vector_store_path or os.path.join(project_root, ".rag_store")
+        # Ensure project_root is a Path object early for internal use
+        self._project_root_path = Path(project_root)
+
+        # Call the parent constructor with the actual project_root for file scanning
+        # and a dedicated cache directory for the base RAGManager instance.
+        # This cache_dir is internal to RAGManager's operation and different from vector_store_path.
+        super().__init__(project_dir=str(self._project_root_path), cache_dir=".rag_manager_cache") 
         
-        # Initialize base RAG Manager
-        super().__init__(vector_store_path, embeddings)
+        # Now, set the specific attributes for ProjectRAGManager, overriding parent's if necessary.
+        # The vector_store_path for ProjectRAGManager
+        if vector_store_path:
+            self.vector_store_path = Path(vector_store_path)
+        else:
+            self.vector_store_path = self._project_root_path / ".rag_store" # Default for ProjectRAGManager
         
+        # Ensure the directory for the final vector store exists
+        self.vector_store_path.mkdir(parents=True, exist_ok=True)
+        
+        # If embeddings are explicitly provided, use them; otherwise, RAGManager would have loaded defaults.
+        if embeddings is not None:
+            self.embeddings = embeddings
+
         # Project specific attributes
-        self.project_root = Path(project_root)
+        self.project_root = project_root # Keep this as a string for consistency with other parts
         self.environment = environment
         self.agent_name = "Project RAG Manager"
         
@@ -911,13 +652,13 @@ class ProjectRAGManager(RAGManager):
         
         # Security configuration - create secure FAISS manager based on environment
         self.secure_manager = SecureFAISSManager(
-            project_root=str(self.project_root),
+            project_root=str(self._project_root_path),
             security_mode=environment
         )
         
         monitoring.log_agent_activity(
             self.agent_name, 
-            f"Initialized ProjectRAGManager for {project_root} in {environment} mode",
+            f"Initialized ProjectRAGManager for {self._project_root_path} in {environment} mode",
             "INFO"
         )
         
@@ -1138,7 +879,7 @@ class ProjectRAGManager(RAGManager):
         
         return info
 
-    def initialize_index_from_project(self, project_dir: str = None) -> bool:
+    async def initialize_index_from_project(self, project_dir: str = None) -> bool:
         """Initialize vector index from project code files."""
         try:
             # Use the provided project directory or fall back to a sensible default
@@ -1166,7 +907,7 @@ class ProjectRAGManager(RAGManager):
                              '*.json', '*.yaml', '*.yml']
             
             # Add documents from the project directory
-            documents_added = self.add_documents_from_directory(
+            documents_added = await self.add_documents_from_directory(
                 project_dir, 
                 file_patterns=file_patterns
             )
@@ -1304,7 +1045,7 @@ class ProjectRAGManager(RAGManager):
                         f"Project directory does not exist: {project_path}",
                         "ERROR"
                     )
-                    return False
+                    return 0
                     
                 # Define file patterns to include in indexing
                 file_patterns = file_patterns or ['*.py', '*.js', '*.html', '*.css', '*.md', '*.txt', 
@@ -1331,15 +1072,22 @@ class ProjectRAGManager(RAGManager):
                                     rel_path = str(file_path.relative_to(project_path))
                                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                                         content = f.read()
-                                
-                                    # Fix: Use add_document_string instead of add_document for content
-                                    added = self.add_document_string(content, {
-                                        "source": rel_path, 
-                                        "filetype": file_path.suffix[1:],
-                                        "full_path": str(file_path)
-                                    })
-                                
-                                    documents_added_total += added
+
+                                    document = Document(
+                                        page_content=content,
+                                        metadata={
+                                            "source": rel_path,
+                                            "filetype": file_path.suffix[1:],
+                                            "full_path": str(file_path)
+                                        }
+                                    )
+                                    chunks = self.text_splitter.split_documents([document])
+
+                                    if self.vector_store is None:
+                                        self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+                                    else:
+                                        self.vector_store.add_documents(chunks)
+                                    documents_added_total += len(chunks)
                                 except Exception as e:
                                     logger.warning(f"Error processing file {file_path}: {str(e)}")
                 
@@ -1347,8 +1095,7 @@ class ProjectRAGManager(RAGManager):
                     # Save the vector store if methods exist
                     if hasattr(self, '_save_vector_store'):
                         self._save_vector_store()
-                    if hasattr(self, '_save_metadata'):
-                        self._save_metadata()
+                    
                     logger.info(f"Successfully indexed {documents_added_total} files from project.")
                 else:
                     logger.warning(f"No new documents found to index in {project_path}.")
@@ -1462,7 +1209,6 @@ class ProjectRAGManager(RAGManager):
                 with open(hash_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
-                logger = logging.getLogger(self.agent_name)
                 logger.warning(f"Error loading hash registry: {e}")
         return {}
 
@@ -1477,7 +1223,6 @@ class ProjectRAGManager(RAGManager):
                 json.dump(hash_registry, f, indent=2)
             return True
         except Exception as e:
-            logger = logging.getLogger(self.agent_name)
             logger.warning(f"Error saving hash registry: {e}")
             return False
         
@@ -1579,9 +1324,6 @@ class ProjectRAGManager(RAGManager):
             if hasattr(self, 'vector_store') and self.vector_store is not None:
                 self._save_vector_store()
                 
-            # Save metadata
-            self._save_metadata()
-            
             # Save hash registry if available
             if hasattr(self, '_save_hash_registry'):
                 self._save_hash_registry(self._load_hash_registry())
@@ -1660,15 +1402,76 @@ atexit.register(_shutdown_rag_managers)
 # Global RAG manager instance
 _global_rag_manager = None
 
-def get_rag_manager():
-    """
-    Get the global RAG manager instance.
-    
-    Returns:
-        ProjectRAGManager instance or None if not initialized
+def get_rag_manager(auto_init: bool = True):
+    """Return the global :class:`ProjectRAGManager` instance.
+
+    If no RAG manager has been explicitly registered and *auto_init* is ``True`` (default),
+    a lightweight fallback instance will be created so that downstream tools can still
+    perform calls like ``similarity_search`` without raising warnings.
+
+    The fallback instance uses an in-memory FAISS (or the mock FAISS implementation when
+    FAISS is not available) together with a small embedding model returned by
+    ``get_embedding_model`` from the config module (when available) or
+    :func:`get_fallback_embedding_model` otherwise.  The vector store will live inside a
+    temporary directory in the project root (``.rag_store``) so it does **not** impact
+    production stores.
+
+    Parameters
+    ----------
+    auto_init : bool, default ``True``
+        Whether a fallback manager should be created when none is registered yet.
+
+    Returns
+    -------
+    ProjectRAGManager | None
+        The global RAG manager or ``None`` when initialization failed and *auto_init*
+        is ``False``.
     """
     global _global_rag_manager
-    return _global_rag_manager
+
+    # If already set, just return it
+    if _global_rag_manager is not None:
+        return _global_rag_manager
+
+    if not auto_init:
+        return None
+
+    try:
+        from pathlib import Path
+
+        project_root = str(Path(__file__).resolve().parent)
+
+        # Pick appropriate embeddings
+        embeddings = None
+        if CONFIG_AVAILABLE and get_embedding_model is not None:
+            try:
+                embeddings = get_embedding_model()
+            except Exception:
+                embeddings = None
+
+        if embeddings is None:
+            embeddings = get_fallback_embedding_model()
+
+        # Create the fallback manager (development environment by default)
+        manager = ProjectRAGManager(project_root=project_root,
+                                    vector_store_path=os.path.join(project_root, ".rag_store"),
+                                    embeddings=embeddings,
+                                    environment="development")
+
+        # Ensure at least an empty vector store exists so calls succeed
+        try:
+            manager.initialize_empty_vector_store()
+        except Exception:
+            pass  # Initialization may fail under constrained envs – continue anyway
+
+        # Register and return
+        set_rag_manager(manager)
+        logging.getLogger("RAGManager").info("Fallback RAG manager auto-initialized")
+        return manager
+
+    except Exception as e:
+        logging.getLogger("RAGManager").warning(f"Failed to auto-initialize fallback RAG manager: {e}")
+        return None
 
 def set_rag_manager(rag_manager):
     """

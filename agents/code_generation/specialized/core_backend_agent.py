@@ -11,12 +11,13 @@ from pathlib import Path
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.retrievers import BaseRetriever
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from tools.code_generation_utils import parse_llm_output_into_files
+from models.data_contracts import CodeGenerationOutput, WorkItem, GeneratedFile
 
 import logging
 logger = logging.getLogger(__name__)
@@ -347,26 +348,167 @@ class CoreBackendAgent(BaseCodeGeneratorAgent):
             
         return generated_files
 
-    def _generate_code(self, llm, invoke_config: Dict, **kwargs) -> Dict[str, Any]:
-        """Implementation of the abstract method from base class."""
-        # Extract parameters
-        domain = kwargs.get('domain', 'General')
-        language = kwargs.get('language', 'Python')
-        framework = kwargs.get('framework', 'FastAPI')
-        features = kwargs.get('features', set())
-        scale = kwargs.get('scale', 'enterprise')
-        
-        return self.generate_comprehensive_backend(domain, language, framework, features, scale) 
+    async def _generate_code(self, llm, invoke_config, work_item: WorkItem, tech_stack: dict) -> dict:
+        """
+        Generates backend code and tests for a given work item asynchronously.
+        This method is called by the `run` method of the base class.
+        """
+        prompt_template = self._create_prompt_template()
+        chain = prompt_template | llm
 
-    def _get_scale_requirements(self, scale: str) -> str:
-        """Get scale-specific infrastructure requirements using LLM."""
-        prompt_context = {
-            "domain": "general", # Generic domain for requirements
-            "language": "general",
-            "framework": "general",
-            "features": "scalability, reliability, security",
-            "scale": scale
-        }
-        chain = self.scale_requirements_prompt | self.llm
-        response = chain.invoke(prompt_context)
-        return response.content if hasattr(response, 'content') else str(response) 
+        logger.info(f"Running CoreBackendAgent for work item: {work_item.description}")
+
+        query = f"Task: {work_item.description}\nFile to be created/modified: {work_item.file_path}"
+        rag_context = self._get_rag_context(query)
+
+        try:
+            result = await chain.ainvoke({
+                "work_item_description": work_item.description,
+                "file_path": work_item.file_path,
+                "language": tech_stack.get("backend_language", "Python"),
+                "database_management_system": tech_stack.get("database", "PostgreSQL"),
+                "api_documentation_tool": tech_stack.get("api_documentation_tool", "Swagger"),
+                "example_code_snippet": work_item.example or "No example provided.",
+                "rag_context": rag_context
+            })
+            
+            logger.info(f"CoreBackendAgent completed for work item: {work_item.description}")
+            
+            parsed_output = self._parse_output(result.content)
+            files = self._create_files_from_parsed_output(parsed_output, work_item)
+
+            return CodeGenerationOutput(
+                files=files,
+                summary=f"Successfully generated backend code and tests for: {work_item.description}"
+            ).dict()
+
+        except Exception as e:
+            logger.error(f"Error running CoreBackendAgent: {e}", exc_info=True)
+            return self.get_default_response()
+
+    def _parse_output(self, llm_output: str) -> dict:
+        """
+        Parses the LLM's output to extract the implementation code and test code.
+        """
+        code = llm_output.split("[CODE]")[1].split("[/CODE]")[0].strip()
+        test_code = llm_output.split("[TESTS]")[1].split("[/TESTS]")[0].strip()
+
+        # Clean up potential markdown formatting
+        code = code.replace("```python", "").replace("```", "").strip()
+        test_code = test_code.replace("```python", "").replace("```", "").strip()
+        
+        return {"code": code, "test_code": test_code}
+
+    def _create_files_from_parsed_output(self, parsed_output: dict, work_item: WorkItem) -> list[GeneratedFile]:
+        """Creates a list of GeneratedFile objects from the parsed LLM output."""
+        files = []
+        
+        # Implementation file
+        if parsed_output.get("code"):
+            files.append(GeneratedFile(file_path=work_item.file_path, content=parsed_output["code"]))
+        
+        # Test file
+        if parsed_output.get("test_code"):
+            test_file_path = self._get_test_file_path(work_item.file_path)
+            files.append(GeneratedFile(file_path=test_file_path, content=parsed_output["test_code"]))
+            
+        return files
+
+    def _get_test_file_path(self, file_path_str: str) -> str:
+        """Derives a conventional test file path from a source file path."""
+        p = Path(file_path_str)
+        parts = list(p.parts)
+        
+        # Replace 'src' with 'tests' if it exists
+        try:
+            src_index = parts.index('src')
+            parts[src_index] = 'tests'
+        except ValueError:
+            # If 'src' is not in the path, insert 'tests' at the beginning
+            parts.insert(0, 'tests')
+            
+        # Add 'test_' prefix to the filename
+        filename = f"test_{p.name}"
+        
+        # Reassemble the path
+        new_path = Path(*parts[:-1]) / filename
+        return str(new_path)
+
+    def _create_prompt_template(self) -> PromptTemplate:
+        """Creates the prompt template for the agent."""
+        prompt_string = """
+        You are a world-class backend developer. Your task is to write clean, efficient, and well-documented backend code based on the provided requirements and technology stack.
+        You must follow all instructions, including file paths and function names, precisely.
+        The code you generate will be part of a larger project. Ensure it is modular and integrates well.
+
+        {rag_context}
+
+        **Technology Stack:**
+        - Language: {language}
+        - Database Management System: {database_management_system}
+        - API Documentation Tool: {api_documentation_tool}
+
+        **Work Item:**
+        - Description: {work_item_description}
+        - File Path: {file_path}
+        - Example Snippet (for reference):
+        ```
+        {example_code_snippet}
+        ```
+
+        **Instructions:**
+        1.  Generate the complete code for the file specified in `File Path`. Do NOT just generate a snippet.
+        2.  You MUST also generate the corresponding unit tests for the code you write. The tests should be complete and runnable.
+        3.  Format your response clearly, separating the implementation code and the test code with the specified tags.
+
+        **Output Format:**
+        Provide your response in the following format, and do not include any other text, explanations, or markdown formatting outside of the specified tags.
+
+        [CODE]
+        ```python
+        # Your generated backend code here
+        ```
+        [/CODE]
+
+        [TESTS]
+        ```python
+        # Your generated unit tests here
+        ```
+        [/TESTS]
+        """
+        return PromptTemplate(
+            template=prompt_string,
+            input_variables=[
+                "work_item_description",
+                "file_path",
+                "language",
+                "database_management_system",
+                "api_documentation_tool",
+                "example_code_snippet",
+                "rag_context"
+            ],
+        )
+
+    def _get_rag_context(self, query: str) -> str:
+        """
+        Retrieves RAG context for the given query.
+        """
+        # This method needs to be implemented based on the specific RAG system
+        # For now, we'll use a placeholder implementation
+        return f"RAG context for query: {query}"
+
+    def _get_file_extension(self, language: str) -> str:
+        """
+        Retrieves the file extension for the given language.
+        """
+        # This method needs to be implemented based on the specific file extensions for each language
+        # For now, we'll use a placeholder implementation
+        return "py" if language.lower() == "python" else "java" if language.lower() == "java" else "js" if language.lower() == "javascript" else "ts" if language.lower() == "typescript" else "cpp" if language.lower() == "c++" else "cs" if language.lower() == "c#" else "rb" if language.lower() == "ruby" else "go" if language.lower() == "golang" else "php" if language.lower() == "php" else "html" if language.lower() == "html" else "css" if language.lower() == "css" else "sql" if language.lower() == "sql" else "sh" if language.lower() == "shell" else "md" if language.lower() == "markdown" else "txt"
+
+    def _extract_code_from_response(self, response: str) -> str:
+        """
+        Extracts code from the LLM response.
+        """
+        # This method needs to be implemented based on the specific format of the LLM response
+        # For now, we'll use a placeholder implementation
+        return response.strip() 

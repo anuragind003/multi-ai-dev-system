@@ -1,103 +1,49 @@
 {
-  "name": "ecommerce-platform",
-  "version": "0.1.0",
+  "name": "general-frontend",
+  "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write src/**/*.{ts,tsx,js,jsx,css,json}"
+  },
   "dependencies": {
-    "@sentry/react": "^7.77.0",
-    "@tanstack/react-query": "^5.17.9",
-    "dompurify": "^3.0.5",
+    "@tanstack/react-query": "^4.24.4",
+    "dompurify": "^3.0.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-error-boundary": "^3.1.4",
-    "react-router-dom": "^6.21.1",
-    "react-window": "^1.8.9",
+    "react-router-dom": "^6.11.2",
+    "react-window": "^1.8.7",
     "web-vitals": "^2.1.4",
-    "zustand": "^4.4.7"
+    "zustand": "^4.3.7"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.23.8",
-    "@babel/preset-react": "^7.23.3",
-    "@babel/preset-typescript": "^7.23.3",
-    "@jest/globals": "^29.7.0",
-    "@playwright/test": "^1.41.2",
-    "@tanstack/eslint-plugin-query": "^5.17.9",
-    "@testing-library/jest-dom": "^6.2.0",
-    "@testing-library/react": "^14.1.2",
-    "@types/dompurify": "^3.0.5",
-    "@types/jest": "^29.5.11",
-    "@typescript-eslint/eslint-plugin": "^6.18.0",
-    "@typescript-eslint/parser": "^6.18.0",
-    "autoprefixer": "^10.4.17",
-    "babel-jest": "^29.7.0",
-    "chromatic": "^6.6.8",
-    "eslint": "^8.56.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-prettier": "^5.1.3",
-    "eslint-plugin-react": "^7.33.2",
-    "husky": "^8.0.0",
-    "identity-obj-proxy": "^3.0.0",
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "lint-staged": "^15.2.0",
-    "msw": "^1.3.2",
-    "postcss": "^8.4.34",
-    "prettier": "^3.1.1",
-    "storybook": "^7.6.8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.8",
-    "webpack-bundle-analyzer": "^4.10.1"
-  },
-  "scripts": {
-    "start": "vite",
-    "build": "vite build",
-    "serve": "vite preview",
-    "test": "jest",
-    "test:e2e": "playwright test",
-    "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write .",
-    "storybook": "storybook",
-    "build-storybook": "storybook build",
-    "analyze": "webpack-bundle-analyzer dist/stats.json",
-    "prepare": "husky install",
-    "lint-staged": "lint-staged"
-  },
-  "eslintConfig": {
-    "extends": [
-      "eslint:recommended",
-      "plugin:react/recommended",
-      "plugin:@typescript-eslint/recommended",
-      "prettier"
-    ],
-    "parser": "@typescript-eslint/parser",
-    "plugins": [
-      "react",
-      "@typescript-eslint",
-      "prettier",
-      "@tanstack/query"
-    ],
-    "rules": {
-      "react/react-in-jsx-scope": "off",
-      "prettier/prettier": "error",
-      "@tanstack/query/exhaustive-deps": "error"
-    }
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.0.0",
+    "@types/dompurify": "^3.0.1",
+    "@types/jest": "^29.5.1",
+    "@types/react": "^18.2.14",
+    "@types/react-dom": "^18.2.6",
+    "@types/react-router-dom": "^6.3.1",
+    "@types/react-window": "^1.8.10",
+    "@types/web-vitals": "^2.1.4",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.14",
+    "eslint": "^8.45.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "husky": "^8.0.3",
+    "postcss": "^8.4.24",
+    "prettier": "^3.0.0",
+    "tailwindcss": "^3.3.2",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5",
+    "vitest": "^0.32.2"
   }
 }

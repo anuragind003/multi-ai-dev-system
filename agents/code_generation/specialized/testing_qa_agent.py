@@ -15,6 +15,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+from models.data_contracts import CodeGenerationOutput, GeneratedFile, WorkItem
+from tools.code_generation_utils import parse_llm_output_into_files
 
 import logging
 logger = logging.getLogger(__name__)
@@ -546,3 +548,61 @@ Generate the content for this file.
         """Estimate tokens used in generation."""
         # Rough estimation: ~4 characters per token
         return len(content) // 4 
+
+    def run(self, context: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Generates unit tests for a single work item based on its implementation.
+        """
+        work_item: WorkItem = context["work_item"]
+        tech_stack = context.get("tech_stack", {})
+        language = tech_stack.get("language", "python")
+        framework = tech_stack.get("backend_framework", "fastapi")
+        generated_code = context.get("generated_code", [])
+
+        logger.info(f"TestingQAAgent starting tests for work item: {work_item['id']}")
+
+        prompt = self._create_work_item_test_prompt(work_item, language, framework, generated_code)
+        
+        response = self.llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+
+        generated_files = parse_llm_output_into_files(content)
+
+        return CodeGenerationOutput(
+            generated_files=[FileOutput(**f) for f in generated_files],
+            summary=f"Generated {len(generated_files)} test files for work item {work_item['id']}."
+        )
+
+    def _create_work_item_test_prompt(self, work_item: Dict[str, Any], language: str, framework: str, generated_code: List[Dict[str, Any]]) -> str:
+        
+        code_str = ""
+        for file_data in generated_code:
+            code_str += f"### FILE: {file_data['path']}\n```{file_data.get('file_type', '')}\n{file_data['content']}\n```\n\n"
+
+        return f"""
+        You are an expert Testing QA Engineer for {language} using the {framework} framework.
+        Your task is to write comprehensive unit tests for the provided code, ensuring all acceptance criteria for the work item are met.
+
+        **Work Item to Test: {work_item['id']}**
+        - **Description:** {work_item['description']}
+        - **Acceptance Criteria:**
+        {chr(10).join(f'  - {c}' for c in work_item['acceptance_criteria'])}
+
+        **Code to be Tested:**
+        ```
+        {code_str}
+        ```
+
+        **Instructions:**
+        1. Write unit tests that thoroughly cover the provided code.
+        2. Specifically, create tests that validate EACH acceptance criterion listed above.
+        3. Use standard testing libraries for the ecosystem (e.g., `pytest` for Python, `Jest` for Node.js/TypeScript).
+        4. Place the test files in an appropriate directory (e.g., a `tests/` directory at the root or alongside the source code).
+        5. Your output must be in the multi-file format.
+
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        ### FILE: path/to/your/test_file.ext
+        ```filetype
+        # Complete test file content here
+        ```
+        """ 

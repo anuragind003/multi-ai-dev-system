@@ -19,8 +19,14 @@ from agent_temperatures import get_agent_temperature
 from agent_state import AgentState, StateFields
 from datetime import datetime
 import os  # New import for environment variable check
+import shutil  # New import for file operations
+
+from utils.websocket_callback import create_websocket_callback
 
 _AGENT_CACHE = {}  # Module-level cache for agents
+
+# Module-level cache for BRD analysis (fallback if llm_cache is not available)
+_LAST_BRD_ANALYSIS = None
 
 @contextmanager
 def start_trace_span(name: str, metadata: Optional[Dict[str, Any]] = None) -> Generator[None, None, None]:
@@ -88,21 +94,24 @@ def start_trace_span(name: str, metadata: Optional[Dict[str, Any]] = None) -> Ge
         )
 
 # Import agent classes
-from agents.brd_analyst import BRDAnalystAgent  # Keep original for backward compatibility
-from agents.brd_analyst_react import BRDAnalystReActAgent  # New ReAct-based BRD Analyst
-from agents.tech_stack_advisor_react import TechStackAdvisorReActAgent
-from agents.system_designer_react import SystemDesignerReActAgent
+from agents.brd_analyst_react import BRDAnalystReActAgent  # Simplified BRD Analyst (no ReAct)
+from agents.tech_stack_advisor_simplified import TechStackAdvisorSimplifiedAgent
+from agents.system_designer_simplified import SystemDesignerSimplifiedAgent
+from agents.planning.plan_compiler_simplified import PlanCompilerSimplifiedAgent
+from agents.code_quality_agent import CodeQualityAgent
 
-from agents.planning.plan_compiler_react import PlanCompilerReActAgent
 from agents.code_generation.architecture_generator import ArchitectureGeneratorAgent
 from agents.code_generation.database_generator import DatabaseGeneratorAgent
 from agents.code_generation.backend_orchestrator import BackendOrchestratorAgent
 from agents.code_generation.frontend_generator import FrontendGeneratorAgent
 from agents.code_generation.integration_generator import IntegrationGeneratorAgent
 from agents.code_generation.code_optimizer import CodeOptimizerAgent
-from agents.test_case_generator import TestCaseGeneratorAgent
-from agents.code_quality_agent import CodeQualityAgent
-from agents.test_validation_agent import TestValidationAgent
+
+# Import standardized human approval model
+from models.human_approval import ApprovalPayload
+
+# Import data contracts
+from models.data_contracts import ComprehensiveTechStackOutput
 
 logger = logging.getLogger(__name__)
 
@@ -134,8 +143,12 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
         agent_args["temperature"] = temperature
 
     # Add RAG retriever if the agent accepts it and it's available
-    if "rag_retriever" in agent_class.__init__.__code__.co_varnames and "rag_manager" in config["configurable"]:
-        agent_args["rag_retriever"] = config["configurable"].get("rag_manager").get_retriever()    # Add output directory if the agent accepts it and it's available
+    if "rag_manager" in config["configurable"]:
+        rag_manager = config["configurable"].get("rag_manager")
+        if rag_manager:
+            agent_args["rag_retriever"] = rag_manager.get_retriever()
+            
+    # Add output directory if the agent accepts it and it's available
     if "output_dir" in agent_class.__init__.__code__.co_varnames and "run_output_dir" in config["configurable"]:
         agent_args["output_dir"] = config["configurable"]["run_output_dir"]
     elif "run_output_dir" in agent_class.__init__.__code__.co_varnames and "run_output_dir" in config["configurable"]:
@@ -150,6 +163,9 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
         agent_args["message_bus"] = config["configurable"]["message_bus"]    # Add any additional kwargs
     agent_args.update(additional_kwargs)
 
+    # Remove 'verbose' if present, as create_json_chat_agent no longer accepts it
+    agent_args.pop("verbose", None)
+
     # Create and return the agent instance
     agent_instance = agent_class(**agent_args)
       # --- UPDATED DELAY ---
@@ -163,284 +179,654 @@ def create_agent_with_temperature(agent_class, agent_name_key: str, config: Dict
 # --- Planning & Analysis Nodes ---
 
 def brd_analysis_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Parse the BRD to extract requirements and convert to a structured format.
-    Uses the ReAct-based BRD Analyst for improved accuracy and reasoning."""
-    logger.info("Executing BRD analysis node")
+    """Parse the BRD to extract requirements and convert to a structured format."""
+    logger.info("Executing BRD analysis node with streamlined agent")
     
-    # Use the new ReAct-based agent
+    # The new agent is more efficient and doesn't need complex skipping logic.
     agent = create_agent_with_temperature(BRDAnalystReActAgent, "BRD Analyst Agent", config)
     
-    # Get session_id from config if available for WebSocket monitoring
-    session_id = config.get("session_id")
-    requirements = agent.run(state[StateFields.BRD_CONTENT], session_id=session_id)
-    
-    return {StateFields.REQUIREMENTS_ANALYSIS: requirements}
+    # The streamlined agent now directly calls the tool and returns the structured data
+    summary_output = agent.run(raw_brd=state[StateFields.BRD_CONTENT])
+
+    # Debug: Log the raw output from the agent
+    logger.info(f"Raw agent output type: {type(summary_output)}")
+    logger.info(f"Raw agent output keys: {list(summary_output.keys()) if isinstance(summary_output, dict) else 'Not a dict'}")
+
+    # Store in shared memory
+    memory_hub = config.get("configurable", {}).get("memory_hub")
+    if memory_hub:
+        memory_hub.set('brd_analysis', summary_output, context='brd_analysis')
+
+    # The streamlined agent returns the tool output directly
+    if isinstance(summary_output, dict):
+        if "error" in summary_output:
+            # Handle error case
+            logger.error(f"BRD analysis failed: {summary_output}")
+            requirements_analysis = {}
+        else:
+            # The output should be the direct BRDRequirementsAnalysis structure
+            requirements_analysis = summary_output
+            logger.info("Using direct tool output as requirements analysis")
+    else:
+        # Fallback for unexpected output format
+        logger.warning(f"Unexpected BRD analysis output format: {type(summary_output)}")
+        requirements_analysis = {}
+
+    logger.info(f"Final requirements_analysis keys: {list(requirements_analysis.keys()) if isinstance(requirements_analysis, dict) else 'Not a dict'}")
+    if isinstance(requirements_analysis, dict):
+        func_reqs = requirements_analysis.get('functional_requirements', [])
+        non_func_reqs = requirements_analysis.get('non_functional_requirements', [])
+        logger.info(f"Functional requirements count: {len(func_reqs)}")
+        logger.info(f"Non-functional requirements count: {len(non_func_reqs)}")
+        if func_reqs:
+            logger.info(f"First functional requirement: {func_reqs[0]}")
+
+    logger.info(f"BRD analysis result structure: {list(requirements_analysis.keys()) if isinstance(requirements_analysis, dict) else 'Not a dict'}")
+
+    return {
+        StateFields.REQUIREMENTS_ANALYSIS: requirements_analysis,
+    }
 
 def tech_stack_recommendation_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Recommend appropriate technology stack based on the requirements."""
-    logger.info("Executing tech stack recommendation node")
+    logger.info("Executing tech stack recommendation node with simplified agent")
     
-    agent = create_agent_with_temperature(TechStackAdvisorReActAgent, "Tech Stack Advisor Agent", config)
+    agent = create_agent_with_temperature(TechStackAdvisorSimplifiedAgent, "Tech Stack Advisor Agent", config)
     
-    # Get session_id from config if available for WebSocket monitoring
-    session_id = config.get("session_id")
-    tech_stack = agent.run(state[StateFields.REQUIREMENTS_ANALYSIS], session_id=session_id)
+    # Pause to respect API rate limits before executing the agent
+    time.sleep(config.get("api_call_delay_seconds", 4.0))
+    logger.info(f"Pausing for {config.get('api_call_delay_seconds', 4.0)} seconds to respect API rate limits...")
     
-    return {StateFields.TECH_STACK_RECOMMENDATION: tech_stack}
+    try:
+        result = agent.run(raw_brd=state[StateFields.BRD_CONTENT], requirements_analysis=state[StateFields.REQUIREMENTS_ANALYSIS])
+        
+        logger.info(f"Tech stack agent returned result type: {type(result)}")
+        if isinstance(result, dict):
+            logger.info(f"Tech stack result keys: {list(result.keys())}")
+            # Check for errors
+            if "error" in result:
+                logger.error(f"Tech stack agent returned error: {result}")
+                return {StateFields.TECH_STACK_RECOMMENDATION: result}
+            else:
+                logger.info("Tech stack agent completed successfully, propagating result")
+                return {StateFields.TECH_STACK_RECOMMENDATION: result}
+        else:
+            logger.warning(f"Tech stack agent returned non-dict result: {type(result)}")
+            return {StateFields.TECH_STACK_RECOMMENDATION: {"tech_stack_result": result}}
+            
+    except Exception as e:
+        logger.error(f"Error in tech stack recommendation node: {str(e)}", exc_info=True)
+        return {StateFields.TECH_STACK_RECOMMENDATION: {
+            "error": "node_execution_error",
+            "details": str(e)
+        }}
 
 def system_design_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Create a comprehensive system design based on requirements and tech stack."""
-    logger.info("Executing system design node")
+    logger.info("Executing system design node with streamlined agent")
     
-    agent = create_agent_with_temperature(SystemDesignerReActAgent, "System Designer Agent", config)
-    system_design = agent.run(
-        state[StateFields.REQUIREMENTS_ANALYSIS], 
-        state[StateFields.TECH_STACK_RECOMMENDATION]
+    agent = create_agent_with_temperature(SystemDesignerSimplifiedAgent, "System Designer Agent", config)
+
+    # Pause to respect API rate limits
+    time.sleep(config.get("api_call_delay_seconds", 4.0))
+    logger.info(f"Pausing for {config.get('api_call_delay_seconds', 4.0)} seconds to respect API rate limits...")
+
+    # Retrieve the tech stack recommendation, which is now a ComprehensiveTechStackOutput
+    tech_stack_output_raw = state[StateFields.TECH_STACK_RECOMMENDATION]
+    
+    # Attempt to parse into the Pydantic model for robust access
+    try:
+        tech_stack_output = ComprehensiveTechStackOutput(**tech_stack_output_raw)
+    except Exception as e:
+        logger.error(f"Failed to parse tech_stack_recommendation into ComprehensiveTechStackOutput in system_design_node: {e}", exc_info=True)
+        tech_stack_output = ComprehensiveTechStackOutput() # Fallback to empty model
+
+    # Extract the selected stack, if available, otherwise pass the raw recommendation
+    selected_tech_stack_for_agent = tech_stack_output.selected_stack.model_dump() if tech_stack_output.selected_stack else tech_stack_output.model_dump()
+
+    result = agent.run(
+        requirements_analysis=state[StateFields.REQUIREMENTS_ANALYSIS],
+        tech_stack_recommendation=selected_tech_stack_for_agent
     )
     
-    return {StateFields.SYSTEM_DESIGN: system_design}
+    return {StateFields.SYSTEM_DESIGN: result}
 
 def planning_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Create an implementation plan with development phases."""
-    logger.info("Executing planning node")
-    
-    agent = create_agent_with_temperature(PlanCompilerReActAgent, "Plan Compiler Agent", config)
-    
-    # Extract required inputs with defaults for missing elements
-    project_analysis = state.get("project_analysis", {})
-    system_design = state[StateFields.SYSTEM_DESIGN]
-    timeline_estimation = state.get("timeline_estimation", {})
-    risk_assessment = state.get("risk_assessment", {})
-    
-    implementation_plan = agent.run(
-        project_analysis=project_analysis,
-        system_design=system_design,
-        timeline_estimation=timeline_estimation,
-        risk_assessment=risk_assessment
+    logger.info("Executing planning node with streamlined agent")
+    agent = create_agent_with_temperature(PlanCompilerSimplifiedAgent, "Plan Compiler Agent", config)
+
+    # Pause to respect API rate limits
+    time.sleep(config.get("api_call_delay_seconds", 4.0))
+    logger.info(f"Pausing for {config.get('api_call_delay_seconds', 4.0)} seconds to respect API rate limits...")
+
+    result = agent.run(
+        requirements_analysis=state["requirements_analysis"],
+        tech_stack_recommendation=state["tech_stack_recommendation"],
+        system_design=state["system_design"]
     )
-    
-    return {StateFields.IMPLEMENTATION_PLAN: implementation_plan}
+    return {StateFields.IMPLEMENTATION_PLAN: result}
 
 # --- Phased Loop Nodes ---
 
-def phase_iterator_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Iterate through implementation phases and set up the current phase context."""
-    logger.info("Executing phase iterator node")
+def work_item_iterator_node(state: AgentState, config: dict) -> Dict[str, Any]:
+    """Iterate through the work item backlog and set up the current item for execution."""
+    logger.info("Executing work item iterator node")
     
-    # Get implementation plan - check both top level and nested structure
     plan = state.get(StateFields.IMPLEMENTATION_PLAN, {})
+    work_items = plan.get("work_items", [])
     
-    # Try to get phases from nested structure first (ComprehensivePlanOutput format)
-    if "implementation_plan" in plan:
-        nested_plan = plan["implementation_plan"]
-        phases = nested_plan.get("development_phases", [])
-        logger.info(f"Found nested implementation plan with {len(phases)} phases")
-    else:
-        # Fallback to direct structure
-        phases = plan.get("development_phases", [])
-        logger.info(f"Found direct implementation plan with {len(phases)} phases")
-    
-    current_index = state.get(StateFields.CURRENT_PHASE_INDEX, 0)
-    
-    # Check if we have phases to process
-    if not phases:
-        logger.warning(f"No development phases found in implementation plan. Plan structure: {list(plan.keys())}")
-        logger.info(f"Plan content preview: {str(plan)[:200]}...")
+    if not work_items:
+        logger.warning(f"No work items found in the implementation plan. Plan content: {plan}")
         return {"is_complete": True}
+
+    completed_work_items = state.get("completed_work_items", [])
+    completed_ids = {item['id'] for item in completed_work_items}
+
+    # Find the next pending work item whose dependencies are met
+    next_work_item = None
+    for item in work_items:
+        if item['id'] not in completed_ids and item['status'] == 'pending':
+            # Check if all dependencies are met
+            dependencies = item.get('dependencies', [])
+            if all(dep_id in completed_ids for dep_id in dependencies):
+                next_work_item = item
+                break
     
-    # Get the current phase if available
-    if current_index < len(phases):
-        current_phase = phases[current_index]
-        phase_name = current_phase.get("name", f"Phase {current_index + 1}")
-        phase_type = current_phase.get("type", "unknown").lower()
-        
-        logger.info(f"--- Starting Phase {current_index + 1}/{len(phases)}: {phase_name} ({phase_type}) ---")
-        
-        # Prepare phase context
+    if next_work_item:
+        work_item_id = next_work_item.get('id', 'N/A')
+        agent_role = next_work_item.get('agent_role', 'unknown')
+        logger.info(f"--- Starting Work Item: {work_item_id} ({agent_role}) ---")
+        logger.info(f"Description: {next_work_item.get('description')}")
+
         return {
-            StateFields.CURRENT_PHASE_NAME: phase_name,
-            StateFields.CURRENT_PHASE_TYPE: phase_type,
-            "current_phase_details": current_phase,
-            "current_phase_start_time": time.time(),
-            StateFields.REVISION_COUNTS: state.get(StateFields.REVISION_COUNTS, {})  # Carry over revision counts
+            "current_work_item": next_work_item,
+            "current_work_item_start_time": time.time(),
         }
     else:
-        logger.info("--- All implementation phases complete ---")
-        return {"is_complete": True}
+        # Check if all items are complete
+        if len(completed_ids) == len(work_items):
+            logger.info("--- All work items complete ---")
+            return {"is_complete": True}
+        else:
+            logger.error("Deadlock detected: No pending work items have their dependencies met.")
+            # This is an error state, we should probably stop the workflow
+            return {"is_complete": True, "error": "dependency_deadlock"}
 
 def code_generation_dispatcher_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Route to appropriate code generator based on current phase type."""
-    phase_type = state.get(StateFields.CURRENT_PHASE_TYPE, "unknown").lower()
-    phase_name = state.get(StateFields.CURRENT_PHASE_NAME, "Unknown Phase")
-    
-    logger.info(f"Dispatching to code generator for phase type: '{phase_type}' (Phase: {phase_name})")
+    """Route to appropriate code generator based on the current work item's agent role."""
+    work_item = state.get("current_work_item")
+    if not work_item:
+        logger.error("Dispatcher called without a current_work_item in the state.")
+        return {StateFields.CODE_GENERATION_RESULT: {"status": "error", "error_message": "No work item provided to dispatcher."}}
 
-    # Map phase types to generator agents
+    agent_role = work_item.get('agent_role', "unknown").lower()
+    work_item_id = work_item.get('id', "Unknown Work Item")
+    
+    logger.info(f"Dispatching to code generator for agent role: '{agent_role}' (Work Item: {work_item_id})")
+
+    # Map agent roles to generator agents
     generator_map = {
-        "architecture": ArchitectureGeneratorAgent,
-        "setup": ArchitectureGeneratorAgent,
-        "database": DatabaseGeneratorAgent,
-        "data": DatabaseGeneratorAgent,
-        "backend": BackendOrchestratorAgent,  # Use new orchestrator for industrial backend
-        "api": BackendOrchestratorAgent,     # Use orchestrator for API generation
-        "server": BackendOrchestratorAgent,  # Use orchestrator for server generation
-        "frontend": FrontendGeneratorAgent,
-        "ui": FrontendGeneratorAgent,
-        "client": FrontendGeneratorAgent,
-        "integration": IntegrationGeneratorAgent,
-        "connect": IntegrationGeneratorAgent,
-        "optimization": CodeOptimizerAgent,
-        "refactor": CodeOptimizerAgent,
-        # Default to backend orchestrator if type is unclear
-        "implementation": BackendOrchestratorAgent,
+        "architecture_specialist": ArchitectureGeneratorAgent,
+        "database_specialist": DatabaseGeneratorAgent,
+        "backend_developer": BackendOrchestratorAgent,
+        "frontend_developer": FrontendGeneratorAgent,
+        # 'devops_specialist' and 'code_optimizer' can be added back once they are refactored
     }
     
-    agent_class = generator_map.get(phase_type, BackendOrchestratorAgent)
+    agent_class = generator_map.get(agent_role)
     
+    if not agent_class:
+        error_msg = f"No agent found for role '{agent_role}'. Cannot proceed with work item."
+        logger.error(error_msg)
+        # It's better to stop and report an error than to default to a random agent.
+        return {StateFields.CODE_GENERATION_RESULT: {"status": "error", "error_message": error_msg}}
+
+    # Create the specialized agent instance
     agent = create_agent_with_temperature(agent_class, f"{agent_class.__name__}", config)
     
-    # Check if we're processing a revision
-    revision_counts = state.get(StateFields.REVISION_COUNTS, {})
-    current_revisions = revision_counts.get(phase_type, 0)
-    is_revision = current_revisions > 0
+    # The new agent interface is simpler: just pass the work item and the full state.
+    # The agent itself is responsible for extracting what it needs.
+    result = agent.run(work_item=work_item, state=state)
     
-    # Prepare inputs for the generator
-    inputs = {
-        "requirements_analysis": state.get(StateFields.REQUIREMENTS_ANALYSIS, {}),
-        "tech_stack_recommendation": state.get(StateFields.TECH_STACK_RECOMMENDATION, {}),
-        "system_design": state.get(StateFields.SYSTEM_DESIGN, {}),
-        "implementation_plan": state.get(StateFields.IMPLEMENTATION_PLAN, {}),
-        "phase_name": phase_name,
-        "phase_type": phase_type,
-        "is_revision": is_revision
-    }
-    
-    # Add existing code generation result if available
-    if StateFields.CODE_GENERATION_RESULT in state:
-        inputs["code_generation_result"] = state[StateFields.CODE_GENERATION_RESULT]
-    
-    # Add feedback if this is a revision
-    if is_revision and StateFields.CODE_REVIEW_FEEDBACK in state:
-        inputs["code_review_feedback"] = state[StateFields.CODE_REVIEW_FEEDBACK]
-        logger.info(f"Including code review feedback for revision #{current_revisions}")
-    
-    # Run the agent with all inputs
-    result = agent.run(**inputs)
-    
-    return {StateFields.CODE_GENERATION_RESULT: result}
+    # The agent's run method should return a CodeGenerationOutput object,
+    # which we can convert to a dict for the state.
+    return {StateFields.CODE_GENERATION_RESULT: result.model_dump()}
 
 def code_quality_analysis_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Analyze code quality and provide feedback for improvements."""
-    phase_type = state.get(StateFields.CURRENT_PHASE_TYPE, "general")
-    phase_name = state.get(StateFields.CURRENT_PHASE_NAME, "Unknown Phase")
+    work_item = state.get("current_work_item", {})
+    work_item_id = work_item.get("id", "Unknown Work Item")
     
-    logger.info(f"Executing code quality review for '{phase_type}' code in phase '{phase_name}'")
+    logger.info(f"Executing code quality review for work item '{work_item_id}'")
 
-    # Create quality agent
     agent = create_agent_with_temperature(CodeQualityAgent, "Code Quality Agent", config)
     
-    # Run quality analysis
-    review_result = agent.run(
-        generated_code=state[StateFields.CODE_GENERATION_RESULT],
-        tech_stack=state[StateFields.TECH_STACK_RECOMMENDATION],
-        code_type=phase_type
-    )
+    # The new agent run method takes the work item and the full state
+    review_result = agent.run(work_item=work_item, state=state)
     
-    # Log key metrics
-    approved = "APPROVED" if review_result.get("approved", False) else "NEEDS REVISION"
-    critical_issues = len(review_result.get("critical_issues", []))
-    suggestions = len(review_result.get("suggestions", []))
+    approved = review_result.get("approved", False)
+    feedback_items = len(review_result.get("feedback", []))
     
-    logger.info(f"Code review result: {approved} with {critical_issues} critical issues and {suggestions} suggestions")
+    logger.info(f"Code review result: {'APPROVED' if approved else 'NEEDS REVISION'} with {feedback_items} feedback items.")
     
     return {StateFields.CODE_REVIEW_FEEDBACK: review_result}
 
+def test_execution_node(state: AgentState, config: dict) -> Dict[str, Any]:
+    """
+    Execute the generated tests for the current work item and return the results.
+    This node forms the core of the self-correction loop.
+    """
+    work_item = state.get("current_work_item", {})
+    work_item_id = work_item.get('id', "Unknown Work Item")
+    logger.info(f"Executing tests for work item: {work_item_id}")
+
+    code_gen_result = state.get(StateFields.CODE_GENERATION_RESULT, {})
+    generated_files = code_gen_result.get("generated_files", [])
+
+    if not generated_files:
+        logger.warning(f"No files generated for work item {work_item_id}. Skipping test execution.")
+        return {StateFields.TEST_VALIDATION_RESULT: {"status": "skipped", "message": "No files to test."}}
+
+    code_execution_tool = config["configurable"].get("code_execution_tool")
+    if not code_execution_tool:
+        logger.error("CodeExecutionTool not found in config. Cannot run tests.")
+        return {StateFields.TEST_VALIDATION_RESULT: {"status": "error", "message": "CodeExecutionTool is not configured."}}
+
+    # Write files to the execution directory
+    try:
+        for file_info in generated_files:
+            file_path = Path(code_execution_tool.work_dir) / file_info['path']
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(file_info['content'])
+        logger.info(f"Wrote {len(generated_files)} files to {code_execution_tool.work_dir} for testing.")
+    except Exception as e:
+        logger.error(f"Failed to write files for testing: {e}")
+        return {StateFields.TEST_VALIDATION_RESULT: {"status": "error", "message": f"File write error: {e}"}}
+
+    # Determine the test command based on the framework
+    tech_stack = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+    frontend_framework = tech_stack.get("frontend_framework", "").lower()
+    backend_framework = tech_stack.get("backend_framework", "").lower()
+    
+    test_command = "pytest" # Default to pytest for python backends
+    if "react" in frontend_framework or "vue" in frontend_framework:
+        # A more robust solution would be to check for package.json and install first
+        test_command = "npm install && npm test"
+    
+    logger.info(f"Running test command: '{test_command}'")
+    
+    # Execute the tests
+    exec_result = code_execution_tool.run(command=test_command, timeout_seconds=300)
+
+    # Process the results
+    passed = exec_result.get("return_code", 1) == 0
+    test_report = {
+        "status": "passed" if passed else "failed",
+        "stdout": exec_result.get("stdout"),
+        "stderr": exec_result.get("stderr"),
+        "passed": passed,
+        "summary": "Tests passed successfully." if passed else "Tests failed. See logs for details."
+    }
+
+    logger.info(f"Test execution for {work_item_id} finished with status: {test_report['status']}")
+    
+    return {StateFields.TEST_VALIDATION_RESULT: test_report}
+
+def decide_on_code_quality(state: AgentState) -> str:
+    """
+    Decision function that checks the code quality review and decides whether to
+    proceed to testing or request revisions.
+    """
+    feedback = state.get(StateFields.CODE_REVIEW_FEEDBACK, {})
+    work_item_id = state.get("current_work_item", {}).get("id", "unknown")
+    revision_counts = state.get(StateFields.REVISION_COUNTS, {})
+    current_revisions = revision_counts.get(work_item_id, 0)
+    max_revisions = 2
+
+    if feedback.get("approved"):
+        logger.info(f"Code quality for work item '{work_item_id}' approved. Proceeding to testing.")
+        return "proceed_to_testing"
+        
+    if current_revisions >= max_revisions:
+        logger.warning(f"Max revisions ({max_revisions}) reached for work item '{work_item_id}'. Proceeding despite quality issues.")
+        return "proceed_to_testing"
+
+    logger.info(f"Code quality for work item '{work_item_id}' needs revision.")
+    return "revise"
+
+def decide_on_test_results(state: AgentState) -> str:
+    """
+    Decision function that checks the test execution results and decides whether to
+    approve the work item or request revisions.
+    """
+    test_result = state.get(StateFields.TEST_VALIDATION_RESULT, {})
+    work_item_id = state.get("current_work_item", {}).get("id", "unknown")
+    
+    revision_counts = state.get(StateFields.REVISION_COUNTS, {})
+    current_revisions = revision_counts.get(work_item_id, 0)
+    max_revisions = 2
+
+    if test_result.get("passed"):
+        logger.info(f"Tests passed for work item '{work_item_id}'. Approving.")
+        return StateFields.APPROVE
+
+    if current_revisions >= max_revisions:
+        logger.warning(f"Max revisions ({max_revisions}) reached for work item '{work_item_id}'. Approving despite test failures.")
+        return StateFields.APPROVE
+
+    logger.info(f"Tests failed for work item '{work_item_id}'. Requesting revision (attempt {current_revisions + 1}/{max_revisions}).")
+    return StateFields.REVISE
+
 def phase_completion_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Complete the current phase and prepare for the next one."""
-    current_index = state.get(StateFields.CURRENT_PHASE_INDEX, 0)
-    phase_name = state.get(StateFields.CURRENT_PHASE_NAME, f"Phase {current_index}")
-    phase_type = state.get(StateFields.CURRENT_PHASE_TYPE, "unknown")
+    """Complete the current work item and prepare for the next one."""
+    work_item = state.get("current_work_item", {})
+    work_item_id = work_item.get("id", "Unknown Work Item")
     
-    # Calculate phase duration if possible
-    phase_start_time = state.get("current_phase_start_time", time.time())
-    phase_duration = time.time() - phase_start_time
+    # Mark the work item as complete
+    completed_work_items = state.get("completed_work_items", [])
+    updated_work_item = {**work_item, "status": "completed"}
+    completed_work_items.append(updated_work_item)
     
-    logger.info(f"Completing phase '{phase_name}' ({phase_type}) - Duration: {phase_duration:.2f}s")
+    # Calculate duration
+    start_time = state.get("current_work_item_start_time", time.time())
+    duration = time.time() - start_time
+    
+    logger.info(f"Completing Work Item '{work_item_id}' - Duration: {duration:.2f}s")
     
     # Create return state
     result = {
-        StateFields.CURRENT_PHASE_INDEX: current_index + 1,
-        "completed_phases": state.get("completed_phases", []) + [phase_name]
+        "completed_work_items": completed_work_items,
     }
     
-    # Track phase execution time
-    if "phase_execution_times" not in state:
-        result["phase_execution_times"] = {}
-    else:
-        result["phase_execution_times"] = state["phase_execution_times"].copy()
-    
-    result["phase_execution_times"][phase_name] = phase_duration
+    # Track execution time
+    execution_times = state.get("work_item_execution_times", {})
+    execution_times[work_item_id] = duration
+    result["work_item_execution_times"] = execution_times
     
     return result
 
 def increment_revision_count_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Increment the revision count for the current phase type."""
-    phase_type = state.get(StateFields.CURRENT_PHASE_TYPE, "unknown")
-    
-    # Get current revision counts
+    """Increment the revision count for the current work item."""
     revision_counts = state.get(StateFields.REVISION_COUNTS, {}).copy()
+    work_item = state.get("current_work_item", {})
+    work_item_id = work_item.get('id', "Unknown Work Item")
+    current_count = revision_counts.get(work_item_id, 0)
+    revision_counts[work_item_id] = current_count + 1
     
-    # Increment count for current phase
-    current_count = revision_counts.get(phase_type, 0)
-    revision_counts[phase_type] = current_count + 1
-    
-    logger.info(f"Incrementing revision count for '{phase_type}' to {current_count + 1}")
+    logger.info(f"Incrementing revision count for work item '{work_item_id}' to {current_count + 1}")
     
     return {StateFields.REVISION_COUNTS: revision_counts}
 
-# --- Testing Nodes ---
+def integration_node(state: AgentState, config: dict) -> Dict[str, Any]:
+    """
+    Merge the work item's code into the main project and run integration tests.
+    This simulates a CI/CD integration step.
+    """
+    work_item = state.get("current_work_item", {})
+    work_item_id = work_item.get('id', "Unknown Work Item")
+    logger.info(f"--- Running Integration Step for Work Item: {work_item_id} ---")
 
-def testing_module_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Execute test generation and validation as a single logical step."""
-    logger.info("Executing comprehensive testing module")
-    
-    # Create the agents
-    test_gen_agent = create_agent_with_temperature(TestCaseGeneratorAgent, "Test Case Generator Agent", config)
-    test_val_agent = create_agent_with_temperature(TestValidationAgent, "Test Validation Agent", config)
+    code_gen_result = state.get(StateFields.CODE_GENERATION_RESULT, {})
+    generated_files = code_gen_result.get("generated_files", [])
 
-    # Generate tests
-    test_gen_result = test_gen_agent.run(
-        code_generation_result=state[StateFields.CODE_GENERATION_RESULT],
-        brd_analysis=state.get(StateFields.REQUIREMENTS_ANALYSIS, {}),
-        tech_stack_recommendation=state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
-    )
-    
-    # Validate test results are stored properly
-    if not test_gen_result:
-        logger.warning("Test generation failed or produced no output")
-        test_result = {"status": "error", "message": "Test generation failed"}
-        return {"test_generation_result": test_result, StateFields.TEST_VALIDATION_RESULT: {}}
-    
-    # Log test generation metrics
-    test_count = len(test_gen_result.get("generated_files", []))
-    logger.info(f"Generated {test_count} test files")
-    
-    # Run validation on the generated tests
-    project_dir = config["configurable"]["run_output_dir"]
-    validation_result = test_val_agent.run(project_dir=project_dir)
-    
-    # Log validation metrics
-    passed = validation_result.get("passed", 0)
-    failed = validation_result.get("failed", 0)
-    success_rate = validation_result.get("success_rate", 0)
-    coverage = validation_result.get("coverage_percentage", 0)
-    
-    logger.info(f"Test validation: {passed} passed, {failed} failed, {success_rate}% success rate, {coverage}% coverage")
+    if not generated_files:
+        logger.warning(f"No files generated for work item {work_item_id}. Skipping integration.")
+        return {
+            StateFields.INTEGRATION_TEST_RESULT: {
+                "status": "skipped",
+                "message": "No files to merge or test.",
+                "passed": True  # Skipped is considered a pass
+            }
+        }
 
-    return {
-        "test_generation_result": test_gen_result,
-        StateFields.TEST_VALIDATION_RESULT: validation_result
+    code_execution_tool = config["configurable"].get("code_execution_tool")
+    final_project_dir = config["configurable"].get("run_output_dir")
+
+    if not code_execution_tool or not final_project_dir:
+        msg = "CodeExecutionTool or run_output_dir not configured. Cannot run integration step."
+        logger.error(msg)
+        return {
+            StateFields.INTEGRATION_TEST_RESULT: {
+                "status": "error", "message": msg, "passed": False
+            }
+        }
+
+    temp_work_dir = Path(code_execution_tool.work_dir)
+    final_project_path = Path(final_project_dir)
+
+    # 1. Merge files from the temp sandbox to the final project directory
+    try:
+        for file_info in generated_files:
+            source_path = temp_work_dir / file_info['path']
+            destination_path = final_project_path / file_info['path']
+            
+            if source_path.exists():
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+                logger.info(f"Merged file: {destination_path}")
+            else:
+                logger.warning(f"Source file not found in sandbox, cannot merge: {source_path}")
+    except Exception as e:
+        msg = f"Failed to merge files into project: {e}"
+        logger.error(msg)
+        return {StateFields.INTEGRATION_TEST_RESULT: {"status": "error", "message": msg, "passed": False}}
+
+    # 2. Run integration tests in the main project directory
+    logger.info(f"Running integration tests in final project directory: {final_project_dir}")
+    # Determine the test command based on the framework
+    tech_stack = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+    frontend_framework = tech_stack.get("frontend_framework", "").lower()
+    
+    test_command = "pytest" # Default to pytest
+    if "react" in frontend_framework or "vue" in frontend_framework:
+        test_command = "npm install && npm test"
+        
+    # Execute tests in the final project directory, not the sandbox
+    exec_result = code_execution_tool.run(command=test_command, working_directory=str(final_project_path))
+
+    passed = exec_result.get("return_code", 1) == 0
+    test_report = {
+        "status": "passed" if passed else "failed",
+        "stdout": exec_result.get("stdout"),
+        "stderr": exec_result.get("stderr"),
+        "passed": passed,
+        "summary": "Integration tests passed." if passed else "Integration tests failed."
     }
+
+    logger.info(f"Integration test for {work_item_id} finished with status: {test_report['status']}")
+    
+    return {StateFields.INTEGRATION_TEST_RESULT: test_report}
+
+def decide_on_integration_test_results(state: AgentState) -> str:
+    """
+    Decision function that checks the integration test results.
+    For now, it logs failures but proceeds. In the future, this could trigger a rollback or a new work item.
+    """
+    test_result = state.get(StateFields.INTEGRATION_TEST_RESULT, {})
+    work_item_id = state.get("current_work_item", {}).get("id", "unknown")
+    
+    if test_result.get("passed"):
+        logger.info(f"Integration tests passed for work item '{work_item_id}'. Proceeding.")
+        return "proceed"
+    else:
+        logger.error(f"CRITICAL: Integration tests failed after merging work item '{work_item_id}'.")
+        logger.error(f"Stderr: {test_result.get('stderr')}")
+        # In a more advanced system, this could trigger a rollback or a new high-priority bug ticket.
+        # For now, we log the failure and proceed.
+        return "proceed_with_warning"
+
+# --- Human-in-the-Loop Nodes (Restored) ---
+
+def human_approval_node(state: AgentState) -> dict:
+    """
+    A placeholder node where the workflow pauses for human approval.
+    This is for BRD analysis approval. The actual interruption happens *before* this node is executed.
+    """
+    logger.info("Human approval node reached. The workflow should have paused before this.")
+    return {}
+
+def human_approval_tech_stack_node(state: AgentState) -> dict:
+    """Pauses the workflow to wait for human approval of the tech stack recommendation.
+    Upon approval, integrates the selected tech stack into the workflow state.
+    """
+    logger.info("Executing human_approval_tech_stack_node.")
+    
+    # Retrieve the raw tech stack recommendation from the state
+    tech_stack_recommendation_raw = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+    
+    # Convert to Pydantic model for easier access and validation
+    try:
+        tech_stack_output = ComprehensiveTechStackOutput(**tech_stack_recommendation_raw)
+    except Exception as e:
+        logger.error(f"Failed to parse tech_stack_recommendation into ComprehensiveTechStackOutput in human_approval_tech_stack_node: {e}", exc_info=True)
+        tech_stack_output = ComprehensiveTechStackOutput() # Fallback to empty model
+
+    # Extract feedback if available
+    user_feedback = state.get(StateFields.USER_FEEDBACK, {})
+    decision = user_feedback.get("decision")
+    selected_stack_data = user_feedback.get("selected_stack")
+
+    if decision == "proceed" and selected_stack_data:
+        logger.info(f"Human approved tech stack with selections: {selected_stack_data}")
+        
+        # Create a SelectedTechStack instance from the feedback data
+        selected_tech_stack = SelectedTechStack(
+            frontend_selection=selected_stack_data.get("frontend_selection"),
+            backend_selection=selected_stack_data.get("backend_selection"),
+            database_selection=selected_stack_data.get("database_selection"),
+            cloud_selection=selected_stack_data.get("cloud_selection"),
+            architecture_selection=selected_stack_data.get("architecture_selection"),
+            tool_selection=selected_stack_data.get("tool_selection")
+        )
+        
+        # Update the tech_stack_output with the user's selection
+        tech_stack_output.selected_stack = selected_tech_stack
+        
+        # Update the state with the modified ComprehensiveTechStackOutput
+        return {StateFields.TECH_STACK_RECOMMENDATION: tech_stack_output.model_dump() }
+    
+    elif decision == "revise":
+        logger.info("Human requested revision for tech stack.")
+        # No changes to tech_stack_recommendation needed, agent will re-run.
+        return {}
+    
+    elif decision == "end":
+        logger.info("Human terminated workflow during tech stack approval.")
+        return {}
+
+    else:
+        # Initial pause or unexpected decision
+        logger.info(f"Pausing for human approval for tech stack. Decision: {decision}")
+        return {
+            StateFields.HUMAN_APPROVAL_REQUEST: ApprovalPayload(
+                step_name="tech_stack_recommendation",
+                display_name="Technology Stack Recommendation",
+                data=tech_stack_output.model_dump(), # Send the full output with options
+                instructions="Please review the recommended technology stack. You can approve to continue, request revisions with specific feedback, or select different options from the provided choices.",
+                is_revision=False,
+                previous_feedback=None
+            ).model_dump()
+        }
+
+def human_approval_system_design_node(state: AgentState) -> dict:
+    """
+    Human approval node for system design.
+    The actual interruption happens *before* this node is executed.
+    """
+    logger.info("System design approval node reached. The workflow should have paused before this.")
+    return {}
+
+def human_approval_plan_node(state: AgentState) -> dict:
+    """
+    Human approval node for implementation plan.
+    The actual interruption happens *before* this node is executed.
+    """
+    logger.info("Implementation plan approval node reached. The workflow should have paused before this.")
+    return {}
+
+def should_request_brd_approval(state: AgentState) -> str:
+    """
+    Decision function to always trigger human approval for BRD analysis.
+    This allows the 'interrupt_before' to work correctly in non-async workflows.
+    """
+    logger.info("Decision: Should request BRD approval? -> Yes")
+    return "request_approval"
+
+def decide_after_brd_approval(state: AgentState) -> str:
+    """
+    Determines the next step after a human has reviewed the BRD analysis.
+    Reads 'human_feedback' from the state, injected by the API.
+    """
+    human_feedback = state.get("human_feedback", {})
+    decision = human_feedback.get("decision") if isinstance(human_feedback, dict) else human_feedback
+    logger.info(f"BRD Decision point: Received human feedback -> '{decision}'")
+
+    if decision == "proceed":
+        return "proceed"
+    elif decision == "revise":
+        return "revise"
+    elif decision == "end":
+        return "end"
+    
+    logger.warning(f"Unknown or missing human_feedback: '{decision}'. Ending workflow.")
+    return "end"
+
+def decide_after_tech_stack_approval(state: AgentState) -> str:
+    """
+    Determines the next step after a human has reviewed the tech stack recommendation.
+    """
+    human_feedback = state.get("human_feedback", {})
+    decision = human_feedback.get("decision") if isinstance(human_feedback, dict) else human_feedback
+    logger.info(f"Tech Stack Decision point: Received human feedback -> '{decision}'")
+
+    if decision == "proceed":
+        return "proceed"
+    elif decision == "revise":
+        return "revise"
+    elif decision == "end":
+        return "end"
+    
+    logger.warning(f"Unknown or missing human_feedback: '{decision}'. Ending workflow.")
+    return "end"
+
+def decide_after_system_design_approval(state: AgentState) -> str:
+    """
+    Determines the next step after a human has reviewed the system design.
+    """
+    human_feedback = state.get("human_feedback", {})
+    decision = human_feedback.get("decision") if isinstance(human_feedback, dict) else human_feedback
+    logger.info(f"System Design Decision point: Received human feedback -> '{decision}'")
+
+    if decision == "proceed":
+        return "proceed"
+    elif decision == "revise":
+        return "revise"
+    elif decision == "end":
+        return "end"
+    
+    logger.warning(f"Unknown or missing human_feedback: '{decision}'. Ending workflow.")
+    return "end"
+
+def decide_after_plan_approval(state: AgentState) -> str:
+    """
+    Determines the next step after a human has reviewed the implementation plan.
+    """
+    human_feedback = state.get("human_feedback", {})
+    decision = human_feedback.get("decision") if isinstance(human_feedback, dict) else human_feedback
+    logger.info(f"Plan Decision point: Received human feedback -> '{decision}'")
+
+    if decision == "proceed":
+        return "proceed"
+    elif decision == "revise":
+        return "revise"
+    elif decision == "end":
+        return "end"
+    
+    logger.warning(f"Unknown or missing human_feedback: '{decision}'. Ending workflow.")
+    return "end"
+
+# --- Finalization Node ---
 
 def finalize_workflow(state: AgentState, config: dict) -> Dict[str, Any]:
     """Create final workflow summary and consolidate results."""
@@ -475,50 +861,19 @@ def finalize_workflow(state: AgentState, config: dict) -> Dict[str, Any]:
 # --- Conditional Edge Functions ---
 
 def has_next_phase(state: AgentState) -> str:
-    """Check if there are more development phases to process."""
-    plan = state.get(StateFields.IMPLEMENTATION_PLAN, {})
-    
-    # Try to get phases from nested structure first (ComprehensivePlanOutput format)
-    if "implementation_plan" in plan:
-        nested_plan = plan["implementation_plan"]
-        phases = nested_plan.get("development_phases", [])
-    else:
-        # Fallback to direct structure
-        phases = plan.get("development_phases", [])
-    
-    current_index = state.get(StateFields.CURRENT_PHASE_INDEX, 0)
-    
-    if current_index < len(phases):
-        next_phase = phases[current_index].get("name", f"Phase {current_index + 1}")
-        logger.info(f"Next phase available: {next_phase}")
-        return StateFields.NEXT_PHASE
-    else:
-        logger.info("No more phases available")
+    """
+    Decision function that checks if there is another work item to process.
+    """
+    if state.get("is_complete"): # Check for the old flag for backward compatibility
+        logger.info("Decision: Workflow is complete based on 'is_complete' flag.")
         return StateFields.WORKFLOW_COMPLETE
 
-def should_retry_code_generation(state: AgentState) -> str:
-    """Decide whether to approve code or request revisions."""
-    feedback = state.get(StateFields.CODE_REVIEW_FEEDBACK, {})
-    approved = feedback.get("approved", False)
-    
-    phase_type = state.get(StateFields.CURRENT_PHASE_TYPE, "unknown")
-    revision_counts = state.get(StateFields.REVISION_COUNTS, {})
-    current_revisions = revision_counts.get(phase_type, 0)
-    max_revisions = 2
-    
-    # Check if code is approved
-    if approved:
-        logger.info(f"Code for phase type '{phase_type}' approved")
-        return StateFields.APPROVE
-    
-    # Check if max revisions reached
-    if current_revisions >= max_revisions:
-        logger.warning(f"Max revisions ({max_revisions}) reached for phase type '{phase_type}'. Continuing despite issues.")
-        return StateFields.APPROVE
-    
-    # Request revision
-    logger.info(f"Code for phase type '{phase_type}' needs revision (attempt {current_revisions + 1}/{max_revisions})")
-    return StateFields.REVISE
+    if state.get("current_work_item"):
+        logger.info("Decision: Proceeding to next work item.")
+        return StateFields.NEXT_PHASE
+    else:
+        logger.info("Decision: No more work items to process, workflow is complete.")
+        return StateFields.WORKFLOW_COMPLETE
 
 def decide_on_architecture_quality(state: AgentState) -> str:
     """Decide whether to approve architecture or request revisions."""
@@ -779,14 +1134,14 @@ def plan_compiler_node(state: AgentState, config: dict) -> Dict[str, Any]:
     return planning_node(state, config)
 
 def test_case_generation_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Legacy compatibility function that maps to testing_module_node."""
+    """Legacy compatibility function that maps to test_execution_node."""
     logger.info("Using test_case_generation_node (legacy compatibility)")
-    return testing_module_node(state, config)
+    return test_execution_node(state, config)
 
 def test_validation_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Legacy compatibility function that maps to testing_module_node."""
+    """Legacy compatibility function that maps to test_execution_node."""
     logger.info("Using test_validation_node (legacy compatibility)")
-    return testing_module_node(state, config)
+    return test_execution_node(state, config)
 
 # Legacy quality nodes that map to code_quality_analysis_node
 def architecture_quality_node(state: AgentState, config: dict) -> Dict[str, Any]:
@@ -840,9 +1195,9 @@ def implementation_module(state: AgentState, config: dict) -> Dict[str, Any]:
     return code_generation_dispatcher_node(state, config)
 
 def testing_module(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Legacy module that maps to testing_module_node."""
+    """Legacy module that maps to test_execution_node."""
     logger.info("Using testing_module (legacy compatibility)")
-    return testing_module_node(state, config)
+    return test_execution_node(state, config)
 
 # Legacy decision functions
 def check_workflow_completion(state: AgentState) -> str:
@@ -864,18 +1219,16 @@ def should_retry_tests(state: AgentState) -> str:
     return "continue"
 
 def should_iterate_implementation(state: AgentState) -> str:
-    """Legacy decision function that maps to should_retry_code_generation."""
-    logger.info("Using should_iterate_implementation (legacy compatibility)")
-    return should_retry_code_generation(state)
+    """DEPRECATED: Decide whether to iterate on the implementation phase."""
+    return "continue" if state.get("should_iterate") else "end"
 
 def determine_phase_generators(state: AgentState) -> str:
-    """Legacy decision function that maps to has_next_phase."""
-    logger.info("Using determine_phase_generators (legacy compatibility)")
-    return has_next_phase(state)
+    """DEPRECATED: Determine which generators to run for the current phase."""
+    return state.get("current_phase", "end")
 
 # Helper functions
 def checkpoint_state(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Create a checkpoint from the current state."""
+    """Save the current state to a checkpoint."""
     logger.info("Creating checkpoint of workflow state")
     checkpoint_id = f"checkpoint_{int(time.time())}"
     
@@ -889,7 +1242,7 @@ def checkpoint_state(state: AgentState, config: dict) -> Dict[str, Any]:
 def phase_dispatcher_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Legacy function that maps to phase_iterator_node."""
     logger.info("Using phase_dispatcher_node (legacy compatibility)")
-    return phase_iterator_node(state, config)
+    return work_item_iterator_node(state, config)
 
 # --- Specialized Generator Node Functions ---
 
@@ -977,6 +1330,5 @@ def code_optimizer_node(state: AgentState, config: dict) -> Dict[str, Any]:
     # Call dispatcher with the modified state
     return code_generation_dispatcher_node(state_with_phase, config)
 
-# Enhanced LangGraph-based node functions for better reliability
 # End of graph_nodes.py
 

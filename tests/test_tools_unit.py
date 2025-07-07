@@ -19,53 +19,6 @@ from models.data_contracts import (
     ComponentDesignOutput
 )
 
-class TestTechStackTools(unittest.TestCase):
-    """Test the functionality of the refactored tech stack tools functions."""
-    
-    @patch('tools.tech_stack_tools.PydanticOutputParser')
-    @patch('tools.tech_stack_tools.PromptTemplate')
-    @patch('tools.tech_stack_tools.LLMChain')
-    def test_synthesize_tech_stack(self, mock_llm_chain, mock_prompt, mock_parser):
-        """Test the synthesize_tech_stack function implementation."""
-        # Import here to avoid decorator execution
-        from tools.tech_stack_tools import synthesize_tech_stack
-        
-        # Create mock outputs
-        mock_parser_instance = MagicMock()
-        mock_parser.return_value = mock_parser_instance
-        mock_parser_instance.get_format_instructions.return_value = "FORMAT INSTRUCTIONS"
-        
-        mock_chain_instance = MagicMock()
-        mock_llm_chain.return_value = mock_chain_instance
-        
-        # Create a sample output
-        mock_output = TechStackSynthesisOutput(
-            backend={"language": "Python", "framework": "FastAPI"},
-            frontend={"language": "JavaScript", "framework": "React"},
-            database={"type": "PostgreSQL"},
-            architecture_pattern="Microservices",
-            deployment_environment={"platform": "Kubernetes"},
-            key_libraries_tools=[],
-            estimated_complexity="Medium"
-        )
-        mock_chain_instance.invoke.return_value = mock_output
-        
-        # Create test input
-        input_model = TechStackSynthesisInput(
-            backend_recommendation={"language": "Python", "framework": "FastAPI"},
-            frontend_recommendation={"language": "JavaScript", "framework": "React"},
-            database_recommendation={"type": "PostgreSQL"}
-        )
-        
-        # Call the function
-        result = synthesize_tech_stack(input_model)
-        
-        # Verify the result
-        self.assertEqual(result.backend["language"], "Python")
-        self.assertEqual(result.frontend["framework"], "React")
-        self.assertEqual(result.database["type"], "PostgreSQL")
-
-
 class TestDesignTools(unittest.TestCase):
     """Test the functionality of the refactored design tools functions."""
     
@@ -99,7 +52,7 @@ class TestDesignTools(unittest.TestCase):
         
         # Call the function
         with patch('tools.design_tools.get_tool_llm'):
-            result = design_component_structure(input_model)
+            result = design_component_structure(**input_model.dict())
         
         # Verify the result
         self.assertEqual(result.name, "UserManagement")

@@ -34,49 +34,28 @@ class BaseCodeGeneratorAgent(BaseAgent, ABC):
     def __init__(self, 
                  llm: BaseLanguageModel, 
                  memory, 
-                 agent_name: str, 
-                 temperature: float,
-                 output_dir: str, 
-                 code_execution_tool=None, 
-                 rag_retriever: Optional[BaseRetriever] = None,
-                 message_bus=None):
+                 **kwargs):
         """
         Initialize the base code generator agent.
         
         Args:
             llm: The language model to use for generation
             memory: The memory instance for the agent
-            agent_name: The name of the agent
-            temperature: The temperature to use for generation
-            output_dir: Directory to save generated files
-            code_execution_tool: Tool for executing code if needed
-            rag_retriever: Retriever for augmenting generation with relevant context
-            message_bus: Message bus for inter-agent communication
+            **kwargs: Additional arguments including agent_name, temperature, output_dir, etc.
         """
         super().__init__(
             llm=llm,
             memory=memory,
-            agent_name=agent_name,
-            temperature=temperature,
-            rag_retriever=rag_retriever,
-            message_bus=message_bus
+            **kwargs
         )
-        self.output_dir = output_dir
-        self.code_execution_tool = code_execution_tool
+        self.output_dir = kwargs.get("output_dir", "output")
+        self.code_execution_tool = kwargs.get("code_execution_tool")
         os.makedirs(self.output_dir, exist_ok=True)
         
         # Initialize enhanced memory (inherits from BaseAgent)
         self._init_enhanced_memory()
         
-        # Initialize RAG context if not already done by subclass
-        if not hasattr(self, 'rag_manager'):
-            self.rag_manager = get_rag_manager()
-            if self.rag_manager:
-                self.logger.info("RAG manager available for enhanced code generation")
-            else:
-                self.logger.warning("RAG manager not available - proceeding with basic code generation")
-        
-        self.log_info(f"Initialized {agent_name} with output directory: {output_dir}")
+        self.log_info(f"Initialized {self.agent_name} with output directory: {self.output_dir}")
 
     def run(self, **kwargs) -> Dict[str, Any]:
         """

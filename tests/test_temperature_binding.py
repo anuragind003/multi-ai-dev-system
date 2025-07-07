@@ -26,7 +26,7 @@ def test_gemini_temperature_binding():
     memory_instance = SharedMemory()
     
     # Create test agent
-    test_agent = BRDAnalystAgent(llm=llm_instance, memory=memory_instance)
+    test_agent = BRDAnalystAgent(llm=llm_instance, memory=memory_instance, temperature=0.1)
     
     # Sample BRD excerpt for testing
     sample_brd = """

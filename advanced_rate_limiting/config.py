@@ -152,9 +152,14 @@ class AdvancedRateLimitSystem:
             # Record error
             error_type = type(e).__name__
             self.rate_limiter.record_error(func_name, error_type)
+
+            # CRITICAL FIX: Check for unrecoverable quota errors
+            if "ResourceExhausted" in str(e) or "429" in str(e):
+                logger.critical("Unrecoverable ResourceExhausted error detected. Activating HALT mode.")
+                self.rate_limiter.set_mode(RateLimitMode.HALT)
             
-            # Check for auto-escalation
-            if self.config.enable_auto_escalation:
+            # Check for auto-escalation for other errors
+            elif self.config.enable_auto_escalation:
                 self._check_auto_escalation()
             
             raise e

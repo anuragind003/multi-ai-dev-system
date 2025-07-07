@@ -14,6 +14,8 @@ import asyncio
 import traceback
 import uuid
 from datetime import datetime
+import logging
+import sys
 
 # Import components from their correct locations
 from enhanced_memory_manager import EnhancedSharedProjectMemory as SharedProjectMemory
@@ -32,13 +34,13 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 try:
     cfg = get_system_config()
 except RuntimeError:
-    print("WARNING: SystemConfig not initialized. Attempting to initialize now for serve_chain.")
+    logging.warning("SystemConfig not initialized. Attempting to initialize now for serve_chain.")
     # Attempt to load a default configuration
     adv_workflow_cfg = AdvancedWorkflowConfig.load_from_multiple_sources()
     initialize_system_config(adv_workflow_cfg)
     cfg = get_system_config()
 
-print("Initializing global components for serve_chain...")
+logging.info("Initializing global components for serve_chain...")
 
 # Generate a single run ID for the server instance
 SERVER_INSTANCE_ID = str(uuid.uuid4())
@@ -61,11 +63,11 @@ GLOBAL_CODE_EXECUTION_TOOL = CodeExecutionTool(output_dir=os.path.join(API_OUTPU
 GLOBAL_RAG_MANAGER = ProjectRAGManager(
     project_root=PROJECT_ROOT,
     embeddings=GLOBAL_EMBEDDING_MODEL,
-    environment=cfg.workflow.environment
+    environment=cfg.workflow_config.environment
 )
-print("Indexing project code for RAG (once at server startup)...")
+logging.info("Indexing project code for RAG (once at server startup)...")
 GLOBAL_RAG_MANAGER.index_project_code()
-print("RAG indexing complete.")
+logging.info("RAG indexing complete.")
 
 # Global LLM-specific kwargs based on provider
 GLOBAL_LLM_SPECIFIC_KWARGS = {}
@@ -90,7 +92,7 @@ elif cfg.llm_provider == "anthropic":
 # --- End of Global Components Initialization ---
 
 
-def create_workflow_runnable() -> Runnable:
+def create_workflow_runnable(memory_hub: Any) -> Runnable:
     """
     Create a runnable for the Multi-AI Development System workflow.
     This preserves the temperature-optimized agent strategy (0.1-0.4).
@@ -142,7 +144,7 @@ def create_workflow_runnable() -> Runnable:
             # Create configurable components dictionary
             configurable_components = {
                 "llm": GLOBAL_LLM,
-                "memory": memory_for_run,
+                "memory": memory_hub,
                 "rag_manager": GLOBAL_RAG_MANAGER,
                 "code_execution_tool": code_execution_tool_for_run,
                 "run_output_dir": run_output_dir,
@@ -159,7 +161,7 @@ def create_workflow_runnable() -> Runnable:
             workflow = get_workflow(workflow_type)
 
             # Create initial state
-            initial_state = create_initial_agent_state(brd_content, cfg.workflow)
+            initial_state = create_initial_agent_state(brd_content, cfg.workflow_config)
             initial_state["workflow_id"] = run_id
             initial_state["temperature_strategy"] = temperature_strategy
 
@@ -198,7 +200,7 @@ def create_workflow_runnable() -> Runnable:
         except Exception as e:
             # Log the error properly
             error_trace = traceback.format_exc()
-            print(f"Error in execute_workflow: {e}\n{error_trace}")
+            logging.error(f"Error in execute_workflow: {e}\n{error_trace}")
             return {"error": str(e), "status": "failed", "trace": error_trace}
 
     async def batch_execute_workflows(batch_inputs: Dict[str, Any], config: Optional[RunnableConfig] = None) -> Dict[str, Any]:

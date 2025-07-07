@@ -8,12 +8,13 @@ import time
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from pathlib import Path
 
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
-from models.data_contracts import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput, WorkItem
 from tools.code_generation_utils import parse_llm_output_into_files
 
 # Enhanced memory and RAG imports
@@ -273,235 +274,126 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
         
         self.prompt_template = self.prompt_template.partial(format_instructions=multi_file_format)
 
-    def _generate_code(self, llm: BaseLanguageModel, invoke_config: Dict, **kwargs) -> Dict[str, Any]:
+    def _create_prompt_template(self) -> PromptTemplate:
+        """Creates the prompt template for the agent."""
+        prompt_string = """
+        You are a world-class database engineer. Your task is to write clean, efficient, and well-documented database schemas, migrations, and queries.
+        You must follow all instructions precisely. The scripts you generate will be part of a larger project.
+
+        {rag_context}
+
+        **Technology Stack:**
+        - Database Management System: {database_management_system}
+        - ORM/Query Builder: {orm}
+
+        **Work Item:**
+        - Description: {work_item_description}
+        - File Path: {file_path}
+        - Example Snippet (for reference):
+        ```
+        {example_code_snippet}
+        ```
+
+        **Instructions:**
+        1.  Generate the complete SQL/script for the file specified in `File Path`.
+        2.  You MUST also generate the corresponding test data or a validation script.
+        3.  Format your response clearly, separating the implementation script and test script with the specified tags.
+
+        **Output Format:**
+        Provide your response in the following format, and do not include any other text or explanations.
+
+        [CODE]
+        ```sql
+        -- Your generated database script here
+        ```
+        [/CODE]
+
+        [TESTS]
+        ```sql
+        -- Your generated test data or validation script here
+        ```
+        [/TESTS]
         """
-        Generate all database artifacts in a single step using a comprehensive prompt.
-        
-        Args:
-            llm: Language model to use for generation
-            invoke_config: Configuration for LLM invocation
-            **kwargs: Additional arguments including tech_stack, system_design, etc.
-            
-        Returns:
-            Dictionary conforming to the CodeGenerationOutput model
+        return PromptTemplate(
+            template=prompt_string,
+            input_variables=[
+                "work_item_description",
+                "file_path",
+                "database_management_system",
+                "orm",
+                "example_code_snippet",
+                "rag_context"
+            ],
+        )
+
+    def _generate_code(self, llm, invoke_config, work_item: WorkItem, tech_stack: dict) -> dict:
         """
-        self.log_info("Starting comprehensive database code generation")
-        start_time = time.time()
-        
-        # Extract required inputs with validation
-        tech_stack = kwargs.get('tech_stack', {})
-        system_design = kwargs.get('system_design', {})
-        requirements_analysis = kwargs.get('requirements_analysis', {})
-        code_review_feedback = kwargs.get('code_review_feedback')
-        
-        # Track if this is a revision based on feedback
-        is_revision = code_review_feedback is not None
-        generation_type = "revision" if is_revision else "initial generation"
+        Generates database-related code or scripts.
+        """
+        prompt_template = self._create_prompt_template()
+        chain = prompt_template | llm
+
+        query = f"Task: {work_item.description}\nFile to be created/modified: {work_item.file_path}"
+        rag_context = self._get_rag_context(query)
+
+        logger.info(f"Running DatabaseGeneratorAgent for work item: {work_item.description}")
         
         try:
-            # Validate inputs with defaults
-            if not isinstance(tech_stack, dict):
-                self.log_warning("Invalid tech stack - using default")
-                tech_stack = self._create_default_tech_stack()
-                
-            if not isinstance(system_design, dict):
-                self.log_warning("Invalid system design - using default")
-                system_design = self._create_default_system_design()
+            result = chain.invoke({
+                "work_item_description": work_item.description,
+                "file_path": work_item.file_path,
+                "database_management_system": tech_stack.get("database", "PostgreSQL"),
+                "orm": tech_stack.get("orm", "SQLAlchemy"),
+                "example_code_snippet": work_item.example or "No example provided.",
+                "rag_context": rag_context,
+            })
             
-            # Extract database type from tech stack
-            db_type = self._extract_database_type(tech_stack)
-            self.log_info(f"Using database type: {db_type}")
+            logger.info(f"DatabaseGeneratorAgent completed for work item: {work_item.description}")
             
-            # Determine migration tool based on tech stack
-            migration_tool = self._determine_migration_tool(tech_stack)
-            self.log_info(f"Using migration tool: {migration_tool}")
-            
-            # Extract data model from system design
-            data_model = self._extract_data_model(system_design)
-            
-            # Prune system design to focus on database-relevant aspects
-            pruned_design = self._prune_system_design_for_db(system_design)
-            
-            # Get RAG context for database best practices
-            rag_context = self._get_database_rag_context(db_type)
-            
-            # Format tech stack for prompt
-            tech_stack_info = json.dumps(tech_stack, indent=2)
-            
-            # Prepare code review feedback section if available
-            code_review_section = ""
-            if is_revision and isinstance(code_review_feedback, dict):
-                code_review_section = "## Code Review Feedback to Address\n"
-                
-                if "critical_issues" in code_review_feedback:
-                    code_review_section += "Critical Issues:\n"
-                    for issue in code_review_feedback["critical_issues"]:
-                        if isinstance(issue, dict):
-                            code_review_section += f"- {issue.get('issue', '')}\n"
-                            if issue.get('fix'):
-                                code_review_section += f"  Suggested fix: {issue['fix']}\n"
-                
-                if "suggestions" in code_review_feedback:
-                    code_review_section += "Suggestions:\n"
-                    for suggestion in code_review_feedback["suggestions"]:
-                        code_review_section += f"- {suggestion}\n"
-              # Detect project domain for domain-specific requirements
-            project_domain = self._detect_project_domain(tech_stack)
-            domain_requirements = self._get_domain_specific_requirements(project_domain)
-            
-            # Create the prompt with all necessary inputs
-            prompt = self.prompt_template.format(
-                db_type=db_type,
-                migration_tool=migration_tool,
-                project_domain=project_domain,
-                tech_stack_info=tech_stack_info,
-                system_design=json.dumps(pruned_design, indent=2),
-                data_model=json.dumps(data_model, indent=2),
-                domain_specific_requirements=domain_requirements,
-                rag_context=rag_context,
-                code_review_feedback=code_review_section
-            )
-            
-            # Set up temperature for the generation
-            adjusted_temp = self._get_complexity_based_temperature(
-                db_type, 
-                self._estimate_schema_complexity(system_design)
-            )
-            
-            # Use binding pattern for temperature
-            llm_with_temp = llm.bind(
-                temperature=adjusted_temp,
-                max_tokens=self.max_tokens
-            )
-            
-            # Add monitoring context
-            invoke_config["agent_context"] = f"{self.agent_name}:{db_type}_generation"
-            invoke_config["temperature_used"] = adjusted_temp
-            invoke_config["is_revision"] = is_revision
-            
-            # Execute LLM call to generate all database artifacts
-            self.log_info(f"Generating {db_type} database artifacts with temperature {adjusted_temp}")
-            response = llm_with_temp.invoke(
-                prompt,
-                config=invoke_config
-            )
-            
-            # Extract content from response
-            content = response.content if hasattr(response, 'content') else str(response)
-            
-            # Record activity in memory
-            self.memory.store_agent_activity(
-                agent_name=self.agent_name,
-                activity_type="database_generation",
-                prompt=str(prompt),
-                response=content[:1000] + "..." if len(content) > 1000 else content,
-                metadata={
-                    "db_type": db_type, 
-                    "temperature": adjusted_temp,
-                    "is_revision": is_revision
-                }
-            )            # Parse the multi-file output
-            parsed_files = parse_llm_output_into_files(content)
-              # Convert GeneratedFile objects to CodeFile objects
-            generated_files = []
-            for parsed_file in parsed_files:
-                from models.data_contracts import CodeFile
-                code_file = CodeFile(
-                    file_path=parsed_file.file_path,
-                    code=parsed_file.content  # GeneratedFile uses 'content', CodeFile uses 'code'
-                )
-                generated_files.append(code_file)
-            
-            # Handle case where parsing fails
-            if not generated_files:
-                self.log_warning("Failed to parse multi-file output, attempting alternate parsing")
-                # Try to salvage content as a single schema file
-                schema_content = self._extract_code_blocks(content)
-                schema_file_path = f"db/schema.{self._get_file_extension_for_db(db_type)}"
-                if schema_content:
-                    from models.data_contracts import CodeFile
-                    generated_files = [
-                        CodeFile(
-                            file_path=schema_file_path,
-                            code=schema_content
-                        )
-                    ]
-            
-            # The generated_files list already contains CodeFile objects, no need to convert
-            code_files = generated_files
-            
-            # Create structured output
-            output = CodeGenerationOutput(
-                files=code_files,                summary=f"Generated {len(code_files)} database artifacts for {db_type} using {migration_tool}",
-                status="success" if code_files else "error",
-                metadata={
-                    "db_type": db_type,
-                    "migration_tool": migration_tool,
-                    "is_revision": is_revision,
-                    "generation_type": generation_type,
-                    "file_count": len(generated_files),
-                    "agent": self.agent_name,
-                    "temperature_used": adjusted_temp,
-                    "execution_time": time.time() - start_time
-                }
-            )
-              # Log success message
-            self.log_success(
-                f"Database {generation_type} complete: {len(code_files)} files generated"
-            )
-            
-            # Save files to disk
-            self._save_files(code_files)
-            
-            # Publish event if message bus is available
-            if self.message_bus:
-                self.message_bus.publish("database.generated", {
-                    "db_type": db_type,
-                    "file_count": len(code_files),
-                    "is_revision": is_revision,
-                    "status": "success"
-                })
-            
-            # Store result in enhanced memory for cross-tool access
-            output_dict = output.dict()
-            self.enhanced_set("database_generation_result", output_dict, context="database_generation")
-            
-            # Convert CodeFile objects to dictionaries before storing to avoid JSON serialization errors
-            code_files_dict = [
-                {
-                    "file_path": cf.file_path,
-                    "code": cf.code,
-                    "file_type": "database"
-                } for cf in code_files
-            ]
-            self.store_cross_tool_data("database_files", code_files_dict, f"Database files for {db_type}")
-            
-            # Store database patterns for reuse
-            self.enhanced_set("database_patterns", {
-                "db_type": db_type,
-                "migration_tool": migration_tool,
-                "file_count": len(code_files),
-                "domain": self._detect_project_domain(tech_stack),
-                "generation_type": generation_type
-            }, context="database_patterns")
-            
-            # Return as dictionary
-            return output_dict
-            
+            parsed_output = self._parse_output(result.content)
+            files = self._create_files_from_parsed_output(parsed_output, work_item)
+
+            return CodeGenerationOutput(
+                files=files,
+                summary=f"Successfully generated database scripts for: {work_item.description}"
+            ).dict()
+
         except Exception as e:
-            self.log_error(f"Database generation failed: {str(e)}", exc_info=True)            # Return error output using the standardized format
-            error_output = CodeGenerationOutput(
-                files=[],
-                summary=f"Error generating database code: {str(e)}",
-                status="error",
-                metadata={
-                    "error": str(e),
-                    "db_type": db_type if 'db_type' in locals() else "unknown",
-                    "agent": self.agent_name,
-                    "timestamp": datetime.now().isoformat()
-                }
-            )
-            return error_output.dict()    
+            logger.error(f"Error running DatabaseGeneratorAgent: {e}", exc_info=True)
+            return self.get_default_response()
+            
+    def _parse_output(self, llm_output: str) -> dict:
+        """Parses the LLM's output to extract the implementation and test code."""
+        code = llm_output.split("[CODE]")[1].split("[/CODE]")[0].strip()
+        test_code = llm_output.split("[TESTS]")[1].split("[/TESTS]")[0].strip()
+
+        code = code.replace("```sql", "").replace("```", "").strip()
+        test_code = test_code.replace("```sql", "").replace("```", "").strip()
+        
+        return {"code": code, "test_code": test_code}
+
+    def _create_files_from_parsed_output(self, parsed_output: dict, work_item: WorkItem) -> list[GeneratedFile]:
+        """Creates a list of GeneratedFile objects from the parsed LLM output."""
+        files = []
+        
+        if parsed_output.get("code"):
+            files.append(GeneratedFile(file_path=work_item.file_path, content=parsed_output["code"]))
+        
+        if parsed_output.get("test_code"):
+            test_file_path = self._get_test_file_path(work_item.file_path)
+            files.append(GeneratedFile(file_path=test_file_path, content=parsed_output["test_code"]))
+            
+        return files
+
+    def _get_test_file_path(self, file_path_str: str) -> str:
+        """Derives a conventional test file path from a source file path."""
+        p = Path(file_path_str)
+        # e.g., 'db/migrations/001_create_users.sql' -> 'tests/db/001_test_data.sql'
+        test_filename = f"{p.stem}_test_data{p.suffix}"
+        
+        new_path = p.parent.parent / 'tests' / p.parent.name / test_filename
+        return str(new_path)
+
     # --- Helper methods for database generation ---
     
     def _extract_database_type(self, tech_stack: Dict[str, Any]) -> str:
@@ -1007,3 +899,48 @@ class DatabaseGeneratorAgent(BaseCodeGeneratorAgent):
         }
         
         return domain_requirements.get(domain, domain_requirements["generic"])
+
+    def run(self, work_item: WorkItem, tech_stack: dict) -> dict:
+        """
+        Runs the agent to generate database-related code or scripts.
+        """
+        prompt_template = self._create_prompt_template()
+        chain = self._create_chain(prompt_template)
+
+        # Get RAG context
+        query = f"Task: {work_item.description}\nFile to be created/modified: {work_item.file_path}"
+        rag_context = self._get_rag_context(query)
+
+        logger.info(f"Running DatabaseGeneratorAgent for work item: {work_item.description}")
+        
+        try:
+            result = chain.invoke({
+                "work_item_description": work_item.description,
+                "file_path": work_item.file_path,
+                "database_management_system": tech_stack.get("database", "PostgreSQL"),
+                "orm": tech_stack.get("orm", "SQLAlchemy"),
+                "example_code_snippet": work_item.example or "No example provided.",
+                "rag_context": rag_context,
+            })
+            
+            logger.info(f"DatabaseGeneratorAgent completed for work item: {work_item.description}")
+            return self._parse_output(result['text'])
+
+        except Exception as e:
+            logger.error(f"Error running DatabaseGeneratorAgent: {e}", exc_info=True)
+            return {
+                "code": f"-- Error generating code: {e}",
+                "test_code": f"-- Error generating test code: {e}"
+            }
+            
+    def _parse_output(self, llm_output: str) -> dict:
+        # Implementation of _parse_output method
+        pass
+
+    def _create_chain(self, prompt_template):
+        # Implementation of _create_chain method
+        pass
+
+    def _get_rag_context(self, query: str) -> str:
+        # Implementation of _get_rag_context method
+        pass

@@ -1,19 +1,32 @@
 import React from 'react';
-import { Hero } from '../components/ui/Hero';
-import { ProductGrid } from '../components/data-display/ProductGrid';
-import { Product } from '../types';
+import { useQuery } from '@tanstack/react-query';
+import { fetchUsers } from '../services/api';
+import { User } from '../types/User';
 
-const products: Product[] = [
-  { id: 1, name: 'Product 1', description: 'Description 1', price: 19.99, imageUrl: 'https://via.placeholder.com/150' },
-  { id: 2, name: 'Product 2', description: 'Description 2', price: 29.99, imageUrl: 'https://via.placeholder.com/150' },
-  { id: 3, name: 'Product 3', description: 'Description 3', price: 39.99, imageUrl: 'https://via.placeholder.com/150' },
-];
+const HomePage: React.FC = () => {
+  const { data: users, isLoading, isError, error } = useQuery<User[]>(
+    ['users'],
+    fetchUsers
+  );
 
-export const HomePage: React.FC = () => {
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (isError) {
+    return <div>Error: {error.message}</div>;
+  }
+
   return (
     <div>
-      <Hero />
-      <ProductGrid products={products} />
+      <h1>Home Page</h1>
+      <ul>
+        {users?.map((user) => (
+          <li key={user.id}>{user.name}</li>
+        ))}
+      </ul>
     </div>
   );
 };
+
+export default HomePage;

@@ -204,6 +204,10 @@ class BaseAgent(ABC, EnhancedMemoryMixin):
         # Add this back - but implement as a separate method in BaseAgent
         self._initialize_specialized_prompts()
 
+        self.output_dir = kwargs.get("output_dir", "output")
+        self.code_execution_tool = kwargs.get("code_execution_tool")
+        self.rag_retriever = kwargs.get("rag_retriever")
+
     def log_start(self, message: str):
         """Log start of agent execution."""
         monitoring.log_agent_activity(self.agent_name, message, "START")
@@ -1014,201 +1018,37 @@ class BaseAgent(ABC, EnhancedMemoryMixin):
         return result
     
     # ENHANCED: Advanced RAG context retrieval with query optimization
-    def get_rag_context(
-        self, 
-        query: str, 
-        task_goal: str = "",
-        max_docs: int = 3,
-        search_type: str = "similarity",
-        search_kwargs: Optional[Dict[str, Any]] = None,
-        optimize_query: bool = True
-    ) -> str:
+    def get_rag_context(self, query: str, n_docs: int = 5) -> str:
         """
-        Enhanced RAG context retrieval with query optimization and intelligent formatting.
-        
-        Args:
-            query: Base search query
-            task_goal: Description of what the context will be used for
-            max_docs: Maximum documents to retrieve
-            search_type: Search method (similarity, mmr, etc.)
-            search_kwargs: Additional search parameters
-            optimize_query: Whether to optimize query using LLM
-            
-        Returns:
-            str: Formatted context from retrieved documents
+        Retrieves relevant context from the project's codebase using the RAG retriever.
         """
         if not self.rag_retriever:
-            return ""
+            logger.info("RAG retriever not available, skipping context retrieval.")
+            return "No codebase context is available."
         
+        logger.info(f"Retrieving RAG context for query: '{query}'")
         try:
-            # NEW: Optimize query if requested and task goal provided
-            if optimize_query and task_goal and len(query.strip()) > 10:
-                optimized_queries = self._optimize_rag_queries(query, task_goal)
-                
-                # If optimization successful, use multiple queries and merge results
-                if optimized_queries:
-                    self.log_info(f"Using {len(optimized_queries)} optimized queries for RAG retrieval")
-                    all_docs = []
-                    
-                    for i, opt_query in enumerate(optimized_queries):
-                        try:
-                            # Apply custom search parameters if provided
-                            kwargs = {"search_type": search_type}
-                            if search_kwargs:
-                                kwargs.update(search_kwargs)
-                                
-                            # Get documents for this query
-                            query_docs = self.rag_retriever.invoke(opt_query, **kwargs)
-                            
-                            # Process results (handle different return types)
-                            if isinstance(query_docs, dict) and "documents" in query_docs:
-                                all_docs.extend(query_docs["documents"])
-                            elif isinstance(query_docs, list):
-                                all_docs.extend(query_docs)
-                                
-                        except Exception as query_error:
-                            self.log_warning(f"Error with optimized query {i+1}: {query_error}")
-                    
-                    # Deduplicate documents (based on content)
-                    unique_docs = []
-                    seen_content = set()
-                    
-                    for doc in all_docs:
-                        # Create a hash of the first 100 chars to identify similar documents
-                        content_hash = hash(doc.page_content[:100]) if hasattr(doc, 'page_content') else hash(str(doc)[:100])
-                        
-                        if content_hash not in seen_content:
-                            unique_docs.append(doc)
-                            seen_content.add(content_hash)
-                    
-                    # If we found documents, format and return context
-                    if unique_docs:
-                        return self._format_rag_context(unique_docs[:max_docs], task_goal)
+            documents = self.rag_retriever.get_relevant_documents(query)
             
-            # Fallback to standard query if optimization disabled or failed
-            kwargs = {"search_type": search_type}
-            if search_kwargs:
-                kwargs.update(search_kwargs)
-                
-            docs = self.rag_retriever.invoke(query, **kwargs)
-            
-            # Process results (handle different return types)
-            if isinstance(docs, dict) and "documents" in docs:
-                docs_list = docs["documents"]
-            elif isinstance(docs, list):
-                docs_list = docs
-            else:
-                self.log_warning(f"Unexpected RAG retriever response format: {type(docs)}")
-                return ""
-                
-            if not docs_list:
-                return ""
-            
-            # Format and return context
-            return self._format_rag_context(docs_list[:max_docs], task_goal)
-            
+            if not documents:
+                return "No relevant code found in the existing project."
+
+            context_str = "\n\n---\n\n".join([
+                f"File Path: {doc.metadata.get('source', 'unknown')}\n\n```\n{doc.page_content}\n```"
+                for doc in documents[:n_docs]
+            ])
+            return f"Review this existing code from the project before proceeding:\n\n{context_str}"
         except Exception as e:
-            self.log_warning(f"RAG context retrieval failed: {e}")
-            return ""
+            logger.error(f"Error retrieving RAG context: {e}", exc_info=True)
+            return "An error occurred while retrieving codebase context."
     
-    def _optimize_rag_queries(self, original_query: str, task_goal: str) -> List[str]:
-        """Optimize RAG queries using LLM to improve retrieval quality."""
-        try:
-            # Use analytical temperature for query optimization (always low)
-            llm_analytical = self._get_llm_with_temperature(0.1)
-            
-            # Generate optimized queries
-            prompt = self.query_optimization_template.format(
-                original_query=original_query,
-                task_goal=task_goal
-            )
-            
-            response = llm_analytical.invoke(prompt)
-            response_text = response.content if hasattr(response, 'content') else str(response)
-            
-            # Extract queries from response
-            queries = []
-            query_pattern = r'\d+\.\s*(.*)'
-            matches = re.findall(query_pattern, response_text)
-            
-            if matches:
-                # Clean up queries and remove any that are too similar to original
-                for match in matches:
-                    clean_query = match.strip()
-                    queries.append(clean_query)
-                    
-                self.log_info(f"Generated {len(queries)} optimized RAG queries")
-                return queries
-            else:
-                # Fallback to original query if no matches found
-                self.log_warning("Query optimization failed to return valid queries")
-                return [original_query]
-                
-        except Exception as e:
-            self.log_warning(f"Query optimization failed: {e}")
-            return [original_query]
-    
-    def _format_rag_context(self, docs: List[Any], task_goal: str) -> str:
-        """Format RAG context with intelligent summarization based on task goal."""
-        try:
-            context_parts = []
-            
-            # If we have task goal, add it as context header
-            if task_goal:
-                context_parts.append(f"CONTEXT RELEVANT TO: {task_goal}")
-            
-            # Process each document
-            for i, doc in enumerate(docs, 1):
-                # Get document content
-                if hasattr(doc, 'page_content'):
-                    content = doc.page_content
-                else:
-                    content = str(doc)
-                
-                # For very long documents, summarize rather than hard truncate
-                if len(content) > 2000:
-                    # First 800 chars + middle 400 chars + last 800 chars with markers
-                    content = (
-                        f"{content[:800]}\n"
-                        f"[...content summarized...]\n"
-                        f"{content[len(content)//2-200:len(content)//2+200]}\n"
-                        f"[...content summarized...]\n"
-                        f"{content[-800:]}"
-                    )
-            
-                # Add metadata if available
-                metadata_str = ""
-                if hasattr(doc, 'metadata') and doc.metadata:
-                    useful_metadata = {k: v for k, v in doc.metadata.items() 
-                                      if not k.startswith('_') and k not in ['chunk_id', 'embeddings']}
-                    
-                    if useful_metadata:
-                        metadata_str = f"\nSource: {json.dumps(useful_metadata, default=str)}"
-                
-                # Format document content with metadata
-                context_parts.append(f"CONTEXT ITEM {i}:{metadata_str}\n{content}")
-            
-            # Join all context parts
-            return "\n\n".join(context_parts)
-            
-        except Exception as e:
-            self.log_warning(f"Context formatting failed: {e}")
-            
-            # Fallback to simple formatting
-            try:
-                simple_contexts = []
-                for i, doc in enumerate(docs, 1):
-                    content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
-                    # Simple truncation if needed in fallback mode
-                    if len(content) > 1000:
-                        content = f"{content[:1000]}... [truncated]"
-                    simple_contexts.append(f"Context {i}: {content}")
-                
-                return "\n\n".join(simple_contexts)
-            except:
-                # Ultra-fallback if everything fails
-                return "Context retrieval succeeded but formatting failed."
-    
+    def _create_chain(self, prompt_template: PromptTemplate, tools: Optional[List] = None):
+        """
+        Creates an LLM chain with the given prompt template.
+        """
+        # Implementation of _create_chain method
+        pass
+
     # NEW: Advanced reasoning methods
     def perform_step_by_step_reasoning(self, problem_description: str, context: str = "", 
                                      previous_steps: str = "") -> Dict[str, Any]:
@@ -1471,171 +1311,10 @@ class BaseAgent(ABC, EnhancedMemoryMixin):
         """Main execution method for the agent."""
         pass
 
-    # Add this new helper method for consistent text extraction
-
-            
-
-    def self_reflect(self, task_description, result, issues_identified="", improvements_made=""):
-        """Robust self-reflection handling template variations."""
-        try:
-            # Create a dictionary with all possible parameters
-            all_params = {
-                "task_description": task_description,
-                "previous_attempt": json.dumps(result, indent=2) if isinstance(result, dict) else str(result),
-                "issues_identified": issues_identified,
-                "improvements_made": improvements_made,
-                # Use agent_name consistently, but provide fallbacks for old templates
-                "agent_name": self.agent_name,
-                "agent_role": self.agent_name,  # Legacy support
-                "role": self.agent_name,        # Legacy support
-                "agentt_role": self.agent_name  # Legacy support with typo
-            }
-
-            # Detailed diagnostics
-            self.logger.info(f"SELF_REFLECT - Agent: {self.agent_name}")
-            
-            # Debug log the template variables
-            self.log_info(f"Self-reflection template input variables: {getattr(self.self_reflection_template, 'input_variables', ['unknown'])}")
-            
-            # Try using template if available
-            try:
-                if hasattr(self.self_reflection_template, 'format'):
-                    # Only include parameters that are in the template's input_variables
-                    if hasattr(self.self_reflection_template, 'input_variables'):
-                        valid_context = {
-                            k: v for k, v in all_params.items() 
-                            if k in self.self_reflection_template.input_variables
-                        }
-                        # Debug log the keys being used
-                        self.log_info(f"Self-reflection using keys: {list(valid_context.keys())}")
-                        prompt_with_context = self.self_reflection_template.format(**valid_context)
-                    else:
-                        prompt_with_context = self.self_reflection_template.format(**all_params)
-                else:
-                    # Fallback template
-                    prompt_with_context = f"""
-                    You are {self.agent_name} performing self-reflection.
-                    
-                    Task: {task_description}
-                    
-                    Previous attempt: 
-                    {all_params['previous_attempt']}
-                    
-                    Issues identified: {issues_identified}
-                    
-                    Improvements made: {improvements_made}
-                    
-                    Analyze the previous attempt and suggest improvements.
-                    """
-            except Exception as format_error:
-                self.log_warning(f"Template formatting failed: {format_error}, using fallback format")
-                # Extra fallback if formatting fails
-                prompt_with_context = f"You are {self.agent_name}. Review this: {all_params['previous_attempt']}"
-    
-        # Use analytical temperature for reflection
-            reflection_llm = self._get_llm_with_temperature(0.1)
-            reflection_response = reflection_llm.invoke(prompt_with_context)
-            return reflection_response.content if hasattr(reflection_response, 'content') else reflection_response
-        except Exception as e:
-            self.log_warning(f"Self-reflection failed: {str(e)}")
-            return None
-    
-    def create_strict_json_template(self, stage_name, instructions, example_json):
-        """Create a template for strict JSON output."""
-        return JsonHandler.create_strict_json_template(stage_name, instructions, example_json)
-    
-    def create_strict_json_llm(self, max_tokens=4096, model_override=None):
-        """Create an LLM configured for strict JSON output."""
-        return JsonHandler.create_strict_json_llm(self.llm, max_tokens, model_override)
-    
-    def parse_json_with_error_tracking(self, response, pydantic_model=None, default_response=None):
-        """Parse JSON with robust error handling."""
-        return JsonHandler.parse_json_with_error_tracking(
-            response, 
-            agent_instance=self,
-            pydantic_model=pydantic_model, 
-            default_response=default_response
-        )
-
-    # Add these helper methods to BaseAgent class
-
-    def validate_json_structure(self, json_data: Dict[str, Any], expected_fields: List[str], 
-                            optional_fields: List[str] = None) -> Dict[str, Any]:
-        """Validate JSON structure against expected fields."""
-        return JsonHandler.validate_json_against_schema(json_data, expected_fields, optional_fields)
-
-    def transform_json(self, json_data: Dict[str, Any], mapping: Dict[str, str],
-                    default_structure: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Transform JSON from one structure to another."""
-        return JsonHandler.transform_json_structure(json_data, mapping, default_structure)
-
-    def merge_json(self, primary: Dict[str, Any], secondary: Dict[str, Any],
-                override_conflicts: bool = True) -> Dict[str, Any]:
-        """Merge two JSON objects with conflict resolution."""
-        return JsonHandler.merge_json_objects(primary, secondary, override_conflicts)
-
-    def fix_agent_json(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Fix common JSON issues specific to this agent."""
-        return JsonHandler.fix_common_agent_json_issues(self.agent_name, json_data)
-    
-    # Add these methods for backward compatibility
-    def _parse_json_with_robust_fallbacks(self, response_text, default_response=None):
-        """Legacy method that delegates to the centralized JsonHandler."""
-        return JsonHandler._parse_json_with_robust_fallbacks(
-            response_text, 
-            default_response=default_response,
-            agent_instance=self
-        )
-
-    # Add these methods
-    def _thoroughly_clean_json(self, text: str) -> str:
-        """For backward compatibility - delegates to centralized JsonHandler."""
-        return JsonHandler._thoroughly_clean_json(text)
-        
-    # Add this helper to BaseAgent class
-    def _extract_text_content(self, response):
-        """Extract text content from various response types."""
-        from multi_ai_dev_system.tools.json_handler import JsonHandler
-        return JsonHandler._extract_text_content(response)
-        
-    def _extract_structured_content(self, text: str) -> Dict[str, Any]:
-        """For backward compatibility - delegates to centralized JsonHandler."""
-        return JsonHandler._extract_structured_content(text)
-        
-    def _detect_model_provider(self, llm):
-        """For backward compatibility - delegates to centralized JsonHandler."""
-        return JsonHandler._detect_model_provider(llm)
-        
-    def _preprocess_json_text(self, text: str) -> str:
-        """For backward compatibility - delegates to centralized JsonHandler."""
-        return JsonHandler._preprocess_json_text(text)
-    
-
-    # In the BaseAgent class, locate the check_template_variables method and modify it:
-    def check_template_variables(self, text: str) -> bool:
-        """Check for unresolved template variables in generated text."""
-        if not text:
-            return False
-            
-        # More precise pattern that only matches standalone template variables
-        # not common field names containing "id"
-        pattern = r'\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}'
-        
-        # Find all potential template variables
-        matches = re.findall(pattern, text)
-        
-        if matches:
-            # Filter out common field names that are valid in JSON
-            suspicious_matches = [
-                match for match in matches 
-                if match not in ['id', 'name', 'type', 'value'] and len(match) > 2
-            ]
-            
-            if suspicious_matches:
-                self.log_warning(f"Detected suspicious template patterns: {suspicious_matches} - rejecting")
-                return True
-                
-        return False
+    @abstractmethod
+    async def arun(self, **kwargs: Any) -> Any:
+        """Asynchronous run method for the agent."""
+        pass
 
     def _initialize_specialized_prompts(self):
         """Initialize specialized prompt templates used by the BaseAgent class."""

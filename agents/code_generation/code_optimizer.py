@@ -23,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # Import proper dependencies
-from models.data_contracts import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput, WorkItem
 from tools.code_generation_utils import parse_llm_output_into_files
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 import monitoring
@@ -347,7 +347,7 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
                 
                 # Create the final output object
                 output = CodeGenerationOutput(
-                    generated_files=optimized_files,
+                    generated_files=[GeneratedFile(**f) for f in optimized_files],
                     summary=f"Successfully optimized {len(optimized_files)} files.",
                     status="success",
                     metadata={
@@ -1130,7 +1130,75 @@ class CodeOptimizerAgent(BaseCodeGeneratorAgent):
             except Exception as e:
                 self.log_error(f"Failed to save file {file.file_path}: {str(e)}")
 
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Optimizes specific code files based on a work item.
+        """
+        logger.info(f"CodeOptimizerAgent starting work item: {work_item.id}")
 
+        # The optimizer needs context of the whole project so far.
+        # We can collect all previously generated files from the completed work items.
+        all_files = []
+        for completed_item in state.get("completed_work_items", []):
+            code_gen_result = completed_item.get("code_generation_result", {})
+            all_files.extend(code_gen_result.get("generated_files", []))
+        
+        # Create a dictionary of file paths to content for easier access
+        project_context_files = {f['path']: f['content'] for f in all_files}
+
+        prompt = self._create_work_item_prompt(work_item, project_context_files, state)
+
+        response = self.llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+        
+        # The optimizer's output will contain the full, modified files.
+        optimized_files = parse_llm_output_into_files(content)
+
+        return CodeGenerationOutput(
+            generated_files=[GeneratedFile(**f) for f in optimized_files],
+            summary=f"Optimized {len(optimized_files)} files for work item {work_item.id}."
+        )
+
+    def _create_work_item_prompt(self, work_item: WorkItem, project_files: Dict[str, str], state: Dict[str, Any]) -> str:
+        
+        files_to_optimize_str = ""
+        # The work item's acceptance criteria should list the files to optimize.
+        files_to_optimize_paths = work_item.acceptance_criteria
+        
+        for path in files_to_optimize_paths:
+            if path in project_files:
+                files_to_optimize_str += f"### FILE: {path}\n```\n{project_files[path]}\n```\n\n"
+
+        if not files_to_optimize_str:
+            return "No files found to optimize for this work item."
+
+        return f"""
+        You are a world-class software engineer specializing in code optimization.
+        Your task is to analyze the provided code snippet and rewrite it to be more performant, readable, and maintainable, without altering its core functionality.
+        You should consider algorithm complexity, memory usage, and best practices for the given language.
+
+        {files_to_optimize_str}
+
+        **Technology Context:**
+        - Language/Framework: {self._determine_file_language(files_to_optimize_paths[0])}
+
+        **Optimization Goals:**
+        1. **Performance:** Optimize algorithms, reduce unnecessary computations.
+        2. **Readability:** Improve variable names, add comments where necessary, simplify logic.
+        3. **Best Practices:** Refactor to align with modern best practices for the language.
+        4. **Security:** Patch any obvious security vulnerabilities.
+
+        **Instructions:**
+        - Return the COMPLETE, optimized versions of the files listed above.
+        - Do NOT modify any other files.
+        - Use the multi-file output format.
+
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        ### FILE: path/to/optimized/file.ext
+        ```filetype
+        // The *full*, optimized content of the file goes here.
+        ```
+        """
 
     def get_default_response(self) -> Dict[str, Any]:
         """Returns a default error response."""

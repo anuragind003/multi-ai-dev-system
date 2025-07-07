@@ -18,8 +18,18 @@ from graph_nodes import (
     system_design_node,
     planning_node,
     
+    # --- Add Human-in-the-Loop Imports ---
+    human_approval_node,
+    human_approval_tech_stack_node,
+    human_approval_system_design_node,
+    human_approval_plan_node,
+    decide_after_brd_approval,
+    should_request_brd_approval,
+    decide_after_tech_stack_approval,
+    decide_after_system_design_approval,
+    decide_after_plan_approval,
+    
     # Phase control nodes
-    phase_iterator_node,
     phase_completion_node,
     increment_revision_count_node,
     
@@ -28,12 +38,11 @@ from graph_nodes import (
     code_quality_analysis_node,
     
     # Testing and finalization
-    testing_module_node,
     finalize_workflow,
     
     # Decision functions
     has_next_phase,
-    should_retry_code_generation,
+    decide_on_code_quality,
     
     # Initialization
     initialize_workflow_state,
@@ -77,7 +86,10 @@ from graph_nodes import (
     
     # Helper functions
     checkpoint_state,
-    phase_dispatcher_node
+    phase_dispatcher_node,
+    work_item_iterator_node,
+    test_execution_node,
+    decide_on_test_results
 )
 import monitoring
 from platform_config import get_platform_client
@@ -109,10 +121,24 @@ def create_phased_workflow() -> StateGraph:
         )
     )
     workflow.add_node(
+        "human_approval_brd_node",
+        RunnableLambda(human_approval_node).with_config(
+            tags=["Human Feedback"],
+            metadata={"description": "Pauses the workflow to wait for human approval of the BRD analysis."}
+        )
+    )
+    workflow.add_node(
         "tech_stack_node", 
         RunnableLambda(tech_stack_recommendation_node).with_config(
             tags=["Planning", "Architecture"], 
             metadata={"description": "Recommends an optimal technology stack based on the analyzed requirements."}
+        )
+    )
+    workflow.add_node(
+        "human_approval_tech_stack_node",
+        RunnableLambda(human_approval_tech_stack_node).with_config(
+            tags=["Human Feedback"],
+            metadata={"description": "Pauses the workflow to wait for human approval of the tech stack recommendation."}
         )
     )
     workflow.add_node(
@@ -123,6 +149,13 @@ def create_phased_workflow() -> StateGraph:
         )
     )
     workflow.add_node(
+        "human_approval_system_design_node",
+        RunnableLambda(human_approval_system_design_node).with_config(
+            tags=["Human Feedback"],
+            metadata={"description": "Pauses the workflow to wait for human approval of the system design."}
+        )
+    )
+    workflow.add_node(
         "planning_node", 
         RunnableLambda(planning_node).with_config(
             tags=["Planning"],
@@ -130,45 +163,45 @@ def create_phased_workflow() -> StateGraph:
         )
     )
     workflow.add_node(
-        "phase_iterator_node", 
-        RunnableLambda(phase_iterator_node).with_config(
+        "human_approval_plan_node",
+        RunnableLambda(human_approval_plan_node).with_config(
+            tags=["Human Feedback"],
+            metadata={"description": "Pauses the workflow to wait for human approval of the implementation plan."}
+        )
+    )
+    workflow.add_node(
+        "work_item_iterator_node", 
+        RunnableLambda(work_item_iterator_node).with_config(
             tags=["Control Flow"],
-            metadata={"description": "Sets the context for the current implementation phase or completes the workflow."}
+            metadata={"description": "Iterates through the work item backlog to process the next pending item."}
         )
     )
     workflow.add_node(
-        "generate_code_node", 
+        "code_generation_dispatcher_node",
         RunnableLambda(code_generation_dispatcher_node).with_config(
-            tags=["Implementation", "Code Generation"],
-            metadata={"description": "Dispatches to the correct code generator (Backend, Frontend, etc.) based on the current phase."}
+            tags=["Code Generation"],
+            metadata={"description": "Dispatches the current work item to the appropriate specialized code generation agent."}
         )
     )
     workflow.add_node(
-        "review_code_node", 
-        RunnableLambda(code_quality_analysis_node).with_config(
-            tags=["Quality Assurance", "Review"],
-            metadata={"description": "Reviews the newly generated code for quality, bugs, and adherence to standards."}
+        "test_execution_node",
+        RunnableLambda(test_execution_node).with_config(
+            tags=["Testing"],
+            metadata={"description": "Executes the unit tests for the generated code to validate correctness."}
         )
     )
     workflow.add_node(
-        "increment_revision_node",
+        "phase_completion_node",
+        RunnableLambda(phase_completion_node).with_config(
+            tags=["Control Flow"],
+            metadata={"description": "Marks the current work item as complete and records metrics."}
+        )
+    )
+    workflow.add_node(
+        "increment_revision_count_node",
         RunnableLambda(increment_revision_count_node).with_config(
             tags=["Control Flow", "Revision"],
             metadata={"description": "Increments the revision counter for the current phase before retrying generation."}
-        )
-    )
-    workflow.add_node(
-        "phase_complete_node", 
-        RunnableLambda(phase_completion_node).with_config(
-            tags=["Control Flow"],
-            metadata={"description": "Marks the current phase as complete and prepares for the next iteration."}
-        )
-    )
-    workflow.add_node(
-        "testing_module_node", 
-        RunnableLambda(testing_module_node).with_config(
-            tags=["Quality Assurance", "Testing"],
-            metadata={"description": "Generates and runs a full suite of tests (unit, integration) against the generated codebase."}
         )
     )
     workflow.add_node(
@@ -179,46 +212,111 @@ def create_phased_workflow() -> StateGraph:
         )
     )
 
-    # --- 2. Define Edges --- (updated references to match new node names)
+    # --- 2. Define Edges ---
     workflow.set_entry_point("initialize_state_node")
-    
-    # Planning Phase
     workflow.add_edge("initialize_state_node", "brd_analysis_node")
-    workflow.add_edge("brd_analysis_node", "tech_stack_node")
-    workflow.add_edge("tech_stack_node", "system_design_node")
-    workflow.add_edge("system_design_node", "planning_node")
-    workflow.add_edge("planning_node", "phase_iterator_node")
-
-    # Phased Implementation Loop
+    
+    # workflow.add_edge("brd_analysis_node", "human_approval_brd_node")
     workflow.add_conditional_edges(
-        "phase_iterator_node",
+        "brd_analysis_node",
+        should_request_brd_approval,
+        {
+            "request_approval": "human_approval_brd_node"
+        }
+    )
+
+    # --- 3. Define Interrupt Points ---
+    workflow.add_interrupt_point("human_approval_brd_node")
+    workflow.add_interrupt_point("human_approval_tech_stack_node")
+    
+    # --- 4. Define Conditional Edges ---
+    workflow.add_conditional_edges(
+        "human_approval_brd_node",
+        decide_after_brd_approval,
+        {
+            "proceed": "tech_stack_node",
+            "revise": "brd_analysis_node",
+            "end": END
+        }
+    )
+    workflow.add_conditional_edges(
+        "human_approval_tech_stack_node",
+        decide_after_tech_stack_approval,
+        {
+            "proceed": "system_design_node",
+            "revise": "tech_stack_node",
+            "end": END
+        }
+    )
+
+    # --- 5. Continue the Main Workflow ---
+    workflow.add_edge("tech_stack_node", "human_approval_tech_stack_node")
+    workflow.add_edge("system_design_node", "human_approval_system_design_node")
+    
+    workflow.add_conditional_edges(
+        "human_approval_system_design_node",
+        decide_after_system_design_approval,
+        {
+            "proceed": "planning_node",
+            "revise": "system_design_node",
+            "end": END,
+        },
+    )
+
+    workflow.add_edge("planning_node", "human_approval_plan_node")
+
+    workflow.add_conditional_edges(
+        "human_approval_plan_node",
+        decide_after_plan_approval,
+        {
+            "proceed": "work_item_iterator_node",
+            "revise": "planning_node",
+            "end": END,
+        },
+    )
+    # --- END OF ADDED STEPS ---
+
+    # This is the main implementation loop
+    workflow.add_conditional_edges(
+        "work_item_iterator_node",
         has_next_phase,
         {
-            StateFields.NEXT_PHASE: "generate_code_node",
-            StateFields.WORKFLOW_COMPLETE: "testing_module_node" 
+            StateFields.NEXT_PHASE: "code_generation_dispatcher_node",
+            StateFields.WORKFLOW_COMPLETE: "finalize_workflow"
         }
     )
     
-    # The 'Generate -> Review -> Revise' Cycle
-    workflow.add_edge("generate_code_node", "review_code_node")
-    workflow.add_conditional_edges(
-        "review_code_node",
-        should_retry_code_generation,
-        {
-            StateFields.APPROVE: "phase_complete_node",
-            StateFields.REVISE: "increment_revision_node" 
-        }
-    )
-    
-    # Increment revision count before going back to generate code
-    workflow.add_edge("increment_revision_node", "generate_code_node")
-    
-    # After a phase is approved, go to the next phase
-    workflow.add_edge("phase_complete_node", "phase_iterator_node")
+    # After generation, run quality analysis
+    workflow.add_edge("code_generation_dispatcher_node", "code_quality_analysis_node")
 
-    # Finalization
-    workflow.add_edge("testing_module_node", "finalize_node")
-    workflow.add_edge("finalize_node", END)
+    # After quality analysis, decide whether to test or revise
+    workflow.add_conditional_edges(
+        "code_quality_analysis_node",
+        decide_on_code_quality,
+        {
+            "proceed_to_testing": "test_execution_node",
+            "revise": "increment_revision_count_node"
+        }
+    )
+
+    # After testing, decide whether to approve or revise
+    workflow.add_conditional_edges(
+        "test_execution_node",
+        decide_on_test_results,
+        {
+            StateFields.APPROVE: "phase_completion_node",
+            StateFields.REVISE: "increment_revision_count_node"
+        }
+    )
+    
+    # The self-correction loop (for both quality and testing failures)
+    workflow.add_edge("increment_revision_count_node", "code_generation_dispatcher_node")
+    
+    # After a phase (work item) is completed, go back to the iterator
+    workflow.add_edge("phase_completion_node", "work_item_iterator_node")
+
+    # Finalize the workflow once the loop is complete
+    workflow.add_edge("finalize_workflow", END)
 
     return workflow
 
@@ -317,7 +415,6 @@ def create_basic_workflow() -> StateGraph:
     workflow.add_node("quality_review_node", code_quality_analysis_node)
     
     # Testing and finalization
-    workflow.add_node("testing_module_node", testing_module_node)
     workflow.add_node("finalize_node", finalize_workflow)
     
     # Define linear flow
@@ -330,8 +427,8 @@ def create_basic_workflow() -> StateGraph:
     workflow.add_edge("system_design_node", "planning_node")
     workflow.add_edge("planning_node", "code_generation_node")
     workflow.add_edge("code_generation_node", "quality_review_node")
-    workflow.add_edge("quality_review_node", "testing_module_node")
-    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("quality_review_node", "test_execution_node")
+    workflow.add_edge("test_execution_node", "finalize_node")
     workflow.add_edge("finalize_node", END)
     
     return workflow
@@ -369,7 +466,6 @@ def create_iterative_workflow(config: Dict[str, Any] = None) -> StateGraph:
     
     # Quality and testing nodes
     workflow.add_node("quality_review_node", code_quality_analysis_node)
-    workflow.add_node("testing_module_node", testing_module_node)
     workflow.add_node("finalize_node", finalize_workflow)
 
     # Define flow
@@ -393,14 +489,14 @@ def create_iterative_workflow(config: Dict[str, Any] = None) -> StateGraph:
     # Conditional path for testing - retry entire implementation if needed
     workflow.add_conditional_edges(
         "quality_review_node",
-        should_retry_code_generation,
+        decide_on_code_quality,
         {
             StateFields.REVISE: "architecture_generation_node",
-            StateFields.APPROVE: "testing_module_node"
+            StateFields.APPROVE: "test_execution_node"
         }
     )
     
-    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("test_execution_node", "finalize_node")
     workflow.add_edge("finalize_node", END)
 
     return workflow
@@ -429,7 +525,6 @@ def create_modular_workflow() -> StateGraph:
     workflow.add_node("implementation_module_node", implementation_module)
     workflow.add_node("quality_module_node", code_quality_analysis_node)
     workflow.add_node("planning_node", planning_node)
-    workflow.add_node("testing_module_node", testing_module_node)
     workflow.add_node("finalize_node", finalize_workflow)
     
     # Set entry point to initialization
@@ -447,14 +542,14 @@ def create_modular_workflow() -> StateGraph:
     # Add conditional edge from quality to implementation for iterations
     workflow.add_conditional_edges(
         "quality_module_node",
-        should_retry_code_generation,
+        decide_on_code_quality,
         {
             StateFields.REVISE: "implementation_module_node",
-            StateFields.APPROVE: "testing_module_node"
+            StateFields.APPROVE: "test_execution_node"
         }
     )
     
-    workflow.add_edge("testing_module_node", "finalize_node")
+    workflow.add_edge("test_execution_node", "finalize_node")
     workflow.add_edge("finalize_node", END)
     
     return workflow
@@ -626,8 +721,8 @@ def create_enhanced_phased_workflow() -> StateGraph:
         )
     )
     workflow.add_node(
-        "phase_iterator_node", 
-        RunnableLambda(phase_iterator_node).with_config(
+        "work_item_iterator_node", 
+        RunnableLambda(work_item_iterator_node).with_config(
             tags=["Control"], 
             metadata={"description": "Manages phase iteration and tracks current generation phase."}
         )
@@ -640,10 +735,10 @@ def create_enhanced_phased_workflow() -> StateGraph:
         )
     )
     workflow.add_node(
-        "code_quality_analysis_node", 
+        "code_quality_analysis_node",
         RunnableLambda(code_quality_analysis_node).with_config(
-            tags=["Quality", "Review"], 
-            metadata={"description": "Performs comprehensive code quality analysis and review."}
+            tags=["Code Quality"],
+            metadata={"description": "Performs static analysis on generated code for quality and security."}
         )
     )
     workflow.add_node(
@@ -658,13 +753,6 @@ def create_enhanced_phased_workflow() -> StateGraph:
         RunnableLambda(increment_revision_count_node).with_config(
             tags=["Control"], 
             metadata={"description": "Increments revision count for iterative improvement cycles."}
-        )
-    )
-    workflow.add_node(
-        "testing_module_node", 
-        RunnableLambda(testing_module_node).with_config(
-            tags=["Testing", "Quality"], 
-            metadata={"description": "Generates and validates comprehensive test suites."}
         )
     )
     workflow.add_node(
@@ -683,14 +771,14 @@ def create_enhanced_phased_workflow() -> StateGraph:
     workflow.add_edge("brd_analysis_node", "tech_stack_node")
     workflow.add_edge("tech_stack_node", "system_design_node")
     workflow.add_edge("system_design_node", "planning_node")
-    workflow.add_edge("planning_node", "phase_iterator_node")
-    workflow.add_edge("phase_iterator_node", "code_generation_dispatcher_node")
+    workflow.add_edge("planning_node", "work_item_iterator_node")
+    workflow.add_edge("work_item_iterator_node", "code_generation_dispatcher_node")
     workflow.add_edge("code_generation_dispatcher_node", "code_quality_analysis_node")
     
     # Conditional edge for code quality
     workflow.add_conditional_edges(
         "code_quality_analysis_node",
-        should_retry_code_generation,
+        decide_on_code_quality,
         {
             "retry": "increment_revision_count_node",
             "continue": "phase_completion_node"
@@ -704,12 +792,12 @@ def create_enhanced_phased_workflow() -> StateGraph:
         "phase_completion_node",
         has_next_phase,
         {
-            "continue": "phase_iterator_node",
-            "finalize": "testing_module_node"
+            "continue": "work_item_iterator_node",
+            "finalize": "test_execution_node"
         }
     )
     
-    workflow.add_edge("testing_module_node", "finalize_workflow")
+    workflow.add_edge("test_execution_node", "finalize_workflow")
     workflow.add_edge("finalize_workflow", END)
     
     return workflow
@@ -736,19 +824,24 @@ def get_workflow(workflow_type: str = "enhanced", platform_enabled: bool = False
         # Create the workflow
         workflow_graph = workflow_factories[workflow_type]()
         
-        # Add enhanced checkpointer for resumable workflows
+        # --- Configure Checkpointer and Interrupts ---
         compile_kwargs = {}
-        if workflow_type == "resumable":
-            # Create enhanced memory manager for this workflow run
-            memory_manager = get_project_memory("./output/current_run")
-            enhanced_checkpointer = EnhancedMemoryCheckpointer(
-                memory_manager=memory_manager,
-                backend_type="hybrid"
-            )
-            compile_kwargs["checkpointer"] = enhanced_checkpointer
-            monitoring.log_agent_activity("Workflow Builder", "Added Enhanced Memory checkpoint support", "INFO")
         
-        # Compile with enhanced configuration
+        # Use a standard memory checkpointer for all workflows
+        memory_checkpointer = MemorySaver()
+        compile_kwargs["checkpointer"] = memory_checkpointer
+
+        # Add the human approval interrupts for the workflows that use them
+        if workflow_type in ["phased", "enhanced", "resumable", "modular", "iterative"]:
+             compile_kwargs["interrupt_before"] = [
+                 "human_approval_brd_node",
+                 "human_approval_tech_stack_node", 
+                 "human_approval_system_design_node",
+                 "human_approval_plan_node"
+             ]
+             monitoring.log_agent_activity("Workflow Builder", "Enabled Human-in-the-Loop for all major phases", "INFO")
+
+        # Compile with the dynamic configuration
         compiled_workflow = workflow_graph.compile(**compile_kwargs)
         
         monitoring.log_agent_activity("Workflow Builder", f"Successfully built {workflow_type} workflow", "SUCCESS")

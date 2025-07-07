@@ -12,7 +12,7 @@ from datetime import datetime
 
 # Ensure correct import paths
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.retrievers import BaseRetriever
 
 # MODIFIED: Fix import paths - use absolute imports instead of relative imports
@@ -29,7 +29,7 @@ import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 import logging
-from models.data_contracts import GeneratedFile, CodeGenerationOutput
+from models.data_contracts import GeneratedFile, CodeGenerationOutput, WorkItem
 from tools.code_generation_utils import parse_llm_output_into_files
 
 # Enhanced memory and RAG imports
@@ -2288,3 +2288,133 @@ ENHANCED ACCESSIBILITY (Sensitive Domain):
             architecture += "ANGULAR ARCHITECTURE PATTERNS:\n- Feature module organization\n- Smart/dumb component pattern"
         
         return architecture
+
+    def _create_prompt_template(self) -> PromptTemplate:
+        """Creates the prompt template for the agent."""
+        prompt_string = """
+        You are a world-class frontend developer specializing in modern JavaScript frameworks.
+        Your task is to write clean, component-based, and well-documented frontend code.
+        You must follow all instructions, including file paths and component names, precisely.
+
+        {rag_context}
+
+        **Technology Stack:**
+        - Framework: {framework}
+        - CSS Framework: {css_framework}
+        - Testing Framework: {testing_framework}
+
+        **Work Item:**
+        - Description: {work_item_description}
+        - File Path: {file_path}
+        - Example Snippet (for reference):
+        ```
+        {example_code_snippet}
+        ```
+
+        **Instructions:**
+        1.  Generate the complete code for the file specified in `File Path`.
+        2.  You MUST also generate the corresponding unit tests.
+        3.  Format your response clearly, separating the implementation code and test code with the specified tags.
+
+        **Output Format:**
+        Provide your response in the following format, and do not include any other text or explanations.
+
+        [CODE]
+        ```javascript
+        // Your generated frontend code here
+        ```
+        [/CODE]
+
+        [TESTS]
+        ```javascript
+        // Your generated unit tests here
+        ```
+        [/TESTS]
+        """
+        return PromptTemplate(
+            template=prompt_string,
+            input_variables=[
+                "work_item_description",
+                "file_path",
+                "framework",
+                "css_framework",
+                "testing_framework",
+                "example_code_snippet",
+                "rag_context"
+            ],
+        )
+
+    async def _generate_code(self, llm, invoke_config, work_item: WorkItem, tech_stack: dict) -> dict:
+        """
+        Generates frontend code and tests for a given work item asynchronously.
+        """
+        prompt_template = self._create_prompt_template()
+        chain = prompt_template | llm
+
+        query = f"Task: {work_item.description}\nFile to be created/modified: {work_item.file_path}"
+        rag_context = self._get_rag_context(query)
+        
+        logger.info(f"Running FrontendGeneratorAgent for work item: {work_item.description}")
+
+        try:
+            result = await chain.ainvoke({
+                "work_item_description": work_item.description,
+                "file_path": work_item.file_path,
+                "framework": tech_stack.get("frontend_framework", "React"),
+                "css_framework": tech_stack.get("css_framework", "Tailwind CSS"),
+                "testing_framework": tech_stack.get("frontend_testing_framework", "Jest"),
+                "example_code_snippet": work_item.example or "No example provided.",
+                "rag_context": rag_context
+            })
+
+            logger.info(f"FrontendGeneratorAgent completed for work item: {work_item.description}")
+            
+            parsed_output = self._parse_output(result.content)
+            files = self._create_files_from_parsed_output(parsed_output, work_item)
+
+            return CodeGenerationOutput(
+                files=files,
+                summary=f"Successfully generated frontend code and tests for: {work_item.description}"
+            ).dict()
+            
+        except Exception as e:
+            logger.error(f"Error running FrontendGeneratorAgent: {e}", exc_info=True)
+            return self.get_default_response()
+            
+    def _parse_output(self, llm_output: str) -> dict:
+        """Parses the LLM's output to extract the implementation and test code."""
+        code = llm_output.split("[CODE]")[1].split("[/CODE]")[0].strip()
+        test_code = llm_output.split("[TESTS]")[1].split("[/TESTS]")[0].strip()
+
+        code = code.replace("```javascript", "").replace("```", "").strip()
+        test_code = test_code.replace("```javascript", "").replace("```", "").strip()
+        
+        return {"code": code, "test_code": test_code}
+
+    def _create_files_from_parsed_output(self, parsed_output: dict, work_item: WorkItem) -> list[GeneratedFile]:
+        """Creates a list of GeneratedFile objects from the parsed LLM output."""
+        files = []
+        
+        if parsed_output.get("code"):
+            files.append(GeneratedFile(file_path=work_item.file_path, content=parsed_output["code"]))
+        
+        if parsed_output.get("test_code"):
+            test_file_path = self._get_test_file_path(work_item.file_path)
+            files.append(GeneratedFile(file_path=test_file_path, content=parsed_output["test_code"]))
+            
+        return files
+
+    def _get_test_file_path(self, file_path_str: str) -> str:
+        """Derives a conventional test file path from a source file path."""
+        p = Path(file_path_str)
+        parts = list(p.parts)
+        
+        try:
+            src_index = parts.index('src')
+            parts[src_index] = 'tests'
+        except ValueError:
+            parts.insert(0, 'tests')
+            
+        filename = f"test_{p.stem}{p.suffix}" # e.g., test_App.vue
+        new_path = Path(*parts[:-1]) / filename
+        return str(new_path)

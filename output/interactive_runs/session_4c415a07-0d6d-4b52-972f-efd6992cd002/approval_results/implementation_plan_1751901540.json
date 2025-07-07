@@ -1,0 +1,358 @@
+{
+  "session_id": "session_4c415a07-0d6d-4b52-972f-efd6992cd002",
+  "approval_type": "implementation_plan",
+  "timestamp": 1751901540,
+  "approval_data": {
+    "type": "implementation_plan",
+    "timestamp": 1751901540.1802113,
+    "project_overview": "Failed to generate plan: Object of type ComprehensiveTechStackOutput is not JSON serializable",
+    "development_phases": [],
+    "timeline_estimation": {},
+    "risk_assessment": [],
+    "resource_requirements": [],
+    "deliverables": [],
+    "dependencies": [],
+    "raw_plan": "plan=ImplementationPlan(project_summary={'title': 'Error Plan', 'description': 'Failed to generate plan: Object of type ComprehensiveTechStackOutput is not JSON serializable', 'overall_complexity': 'N/A', 'estimated_duration': 'N/A', 'key_challenges': [], 'success_criteria': []}, phases=[], resource_allocation=[], risks_and_mitigations=[], timeline={}, tech_stack={}, metadata={'generated_at': '2025-07-07T20:48:58.841592', 'version': '1.0', 'author': 'Multi-AI Dev System', 'tags': [], 'notes': 'Generated due to error'}) summary='Error generating implementation plan: Object of type ComprehensiveTechStackOutput is not JSON serializable' metadata=PlanMetadata(generated_at='2025-07-07T20:48:58.841592', version='1.0', author='Multi-AI Dev System', tags=[], notes='Error occurred during plan compilation.')"
+  },
+  "workflow_state_snapshot": {
+    "requirements_analysis": {
+      "project_name": "Hello World Task List",
+      "project_summary": "A simple web application to manage a list of tasks.",
+      "project_goals": [
+        "Allow a user to add a task",
+        "Allow a user to see their list of tasks"
+      ],
+      "target_audience": [
+        "Users who want to manage a list of tasks"
+      ],
+      "business_context": "This project aims to provide a basic task management tool.",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "description": "A user can create a new task with a text description.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-002",
+          "description": "A user can see a list of all created tasks.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-003",
+          "description": "The application must load quickly.",
+          "category": "non_functional",
+          "priority": 2
+        },
+        {
+          "id": "REQ-004",
+          "description": "The application must be secure.",
+          "category": "non_functional",
+          "priority": 2
+        }
+      ],
+      "functional_requirements": [
+        "A user can create a new task with a text description.",
+        "A user can see a list of all created tasks."
+      ],
+      "non_functional_requirements": [
+        "The application must load quickly.",
+        "The application must be secure."
+      ],
+      "stakeholders": [
+        "Users"
+      ],
+      "success_criteria": [
+        "Users can successfully add tasks.",
+        "Users can successfully view their task list.",
+        "The application loads quickly.",
+        "The application is secure."
+      ],
+      "constraints": [],
+      "assumptions": [],
+      "risks": [],
+      "domain_specific_details": {},
+      "quality_assessment": {
+        "clarity_score": 9.0,
+        "completeness_score": 8.0,
+        "consistency_score": 10.0,
+        "recommendations": []
+      },
+      "gap_analysis": {
+        "identified_gaps": [],
+        "recommendations_for_completion": []
+      }
+    },
+    "tech_stack_recommendation": {
+      "tech_stack_result": "frontend_options=[TechStackComponent(name='React', language='JavaScript', reasoning=\"React is a popular and efficient library for building user interfaces. Its component-based architecture promotes reusability and maintainability. It has a large community and extensive documentation, making it easier to find solutions and support. It's well-suited for single-page applications (SPAs) and provides a good user experience.\", key_libraries=['React Router (for navigation)', 'Axios or Fetch API (for making API requests)', 'Material UI or Bootstrap (for UI components)'], pros=['Component-based architecture for reusability', 'Large community and extensive documentation', 'Efficient rendering with virtual DOM', 'Good performance and user experience'], cons=['Requires understanding of JavaScript and JSX', 'Can have a steeper learning curve initially', 'Requires additional libraries for routing and state management'], selected=False), TechStackComponent(name='Vue.js', language='JavaScript', reasoning=\"Vue.js is a progressive framework that's easy to learn and integrate into existing projects. It offers a good balance between simplicity and power, making it suitable for this project. It has excellent documentation and a growing community.\", key_libraries=['Vue Router (for navigation)', 'Axios or Fetch API (for making API requests)', 'Vuetify or BootstrapVue (for UI components)'], pros=['Easy to learn and integrate', 'Progressive framework, can be used incrementally', 'Excellent documentation', 'Good performance'], cons=['Smaller community compared to React', \"Ecosystem might not be as mature as React's\"], selected=False), TechStackComponent(name='HTML, CSS, JavaScript (Vanilla)', language='JavaScript', reasoning='For a simple task list application, using vanilla JavaScript, HTML, and CSS can be a viable option. It avoids the overhead of a framework, leading to faster initial load times and a smaller bundle size. This approach is suitable for small projects where simplicity and performance are prioritized.', key_libraries=[], pros=['No framework dependencies, smaller bundle size', 'Fast initial load times', 'Simple to understand and debug'], cons=['More manual DOM manipulation', 'Can become complex for larger applications', 'Less structure and organization compared to frameworks'], selected=False)] backend_options=[TechStackComponent(name='Node.js with Express', language='JavaScript', reasoning='Node.js with Express provides a lightweight and efficient backend solution. JavaScript is used on both the frontend and backend, which simplifies development. Express offers a flexible framework for building REST APIs, and its non-blocking, event-driven architecture is well-suited for handling concurrent requests.', key_libraries=['Express (web framework)', 'body-parser (for parsing request bodies)', 'cors (for handling CORS)', 'mongoose or Sequelize (for database interaction)'], pros=['JavaScript on both frontend and backend (full-stack JavaScript)', 'Large community and extensive documentation', 'Fast development with Express', 'Good performance with non-blocking I/O'], cons=['Callback hell can be an issue (can be mitigated with async/await)', 'Requires careful error handling'], selected=False), TechStackComponent(name='Python with Flask', language='Python', reasoning=\"Flask is a microframework that's easy to learn and use. Python's readability and extensive libraries make it a good choice for backend development. It's suitable for building REST APIs and can be deployed easily.\", key_libraries=['Flask (web framework)', 'Flask-RESTful (for building REST APIs)', 'SQLAlchemy (for database interaction)'], pros=['Easy to learn and use', \"Python's readability and extensive libraries\", 'Good for building REST APIs', 'Large community and good documentation'], cons=['Can be slower than Node.js in some cases', 'Requires understanding of Python'], selected=False), TechStackComponent(name='Go with Gin', language='Go', reasoning=\"Go is known for its performance and efficiency. Gin is a lightweight web framework that's easy to use and provides good performance. Go's concurrency features make it well-suited for handling concurrent requests.\", key_libraries=['Gin (web framework)', 'GORM or sqlx (for database interaction)'], pros=['High performance and efficiency', 'Good concurrency support', 'Fast compilation times', 'Easy to deploy'], cons=['Steeper learning curve than Node.js or Python', 'Smaller community compared to Node.js or Python'], selected=False)] database_options=[TechStackComponent(name='PostgreSQL', language=None, reasoning=\"PostgreSQL is a robust and reliable relational database. It offers strong data integrity, ACID properties, and supports complex queries. It's a good choice for applications that require data consistency and scalability.\", key_libraries=['psycopg2 (for Python)', 'pg (for Node.js)'], pros=['Robust and reliable', 'Strong data integrity and ACID properties', 'Supports complex queries', 'Good scalability'], cons=['Can be more complex to set up and manage than simpler databases', 'Requires more resources than simpler databases'], selected=False), TechStackComponent(name='MongoDB', language=None, reasoning=\"MongoDB is a NoSQL database that's easy to use and flexible. It's well-suited for applications with evolving data models. It offers good performance and scalability.\", key_libraries=['mongoose (for Node.js)', 'pymongo (for Python)'], pros=['Easy to use and flexible', 'Good performance and scalability', 'Schema-less design allows for evolving data models', 'Good for rapid development'], cons=['Data consistency can be an issue compared to relational databases', 'Querying can be more complex than with relational databases'], selected=False), TechStackComponent(name='SQLite', language=None, reasoning=\"SQLite is a lightweight, file-based database that's easy to set up and use. It's suitable for small applications or prototypes where simplicity is prioritized. It doesn't require a separate database server.\", key_libraries=['sqlite3 (built-in for Python)', 'sqlite3 (for Node.js)'], pros=['Easy to set up and use', 'No separate database server required', 'Good for small applications and prototypes', 'File-based, simple to deploy'], cons=['Not suitable for high-traffic applications', 'Limited scalability', 'Not ideal for complex queries'], selected=False)] cloud_options=[TechStackComponent(name='AWS (Amazon Web Services)', language=None, reasoning=\"AWS offers a wide range of services and is a mature platform. It provides scalability, reliability, and a global infrastructure. It's a good choice for applications that require high availability and scalability.\", key_libraries=['AWS SDK (for interacting with AWS services)'], pros=['Wide range of services', 'Scalability and reliability', 'Global infrastructure', 'Mature platform'], cons=['Can be complex to manage', 'Can be expensive if not managed properly', 'Steeper learning curve'], selected=False), TechStackComponent(name='Google Cloud Platform (GCP)', language=None, reasoning=\"GCP offers competitive pricing and a strong focus on data analytics and machine learning. It provides a good balance of features and ease of use. It's a good choice for applications that require data processing and analysis.\", key_libraries=['Google Cloud Client Libraries (for interacting with GCP services)'], pros=['Competitive pricing', 'Strong focus on data analytics and machine learning', 'Good balance of features and ease of use', 'Good for data-intensive applications'], cons=['Smaller market share than AWS', 'Some services may not be as mature as AWS equivalents'], selected=False), TechStackComponent(name='Heroku', language=None, reasoning=\"Heroku is a Platform-as-a-Service (PaaS) that simplifies deployment and management. It's easy to use and suitable for small to medium-sized applications. It abstracts away much of the infrastructure management.\", key_libraries=[], pros=['Easy to deploy and manage', 'Focus on developer experience', 'Good for small to medium-sized applications', 'Abstracts away infrastructure management'], cons=['Can be more expensive than other options', 'Limited customization options', 'Vendor lock-in'], selected=False)] architecture_options=[ArchitecturePatternOption(pattern='Monolithic Architecture', scalability_score=4.0, maintainability_score=6.0, development_speed_score=8.0, overall_score=6.0, reasoning=\"For a simple task list application, a monolithic architecture is a good starting point. It's easier to develop and deploy initially. However, as the application grows, it can become harder to scale and maintain. This is a good starting point for a small project.\"), ArchitecturePatternOption(pattern='Microservices Architecture', scalability_score=8.0, maintainability_score=7.0, development_speed_score=4.0, overall_score=6.0, reasoning='While microservices offer excellent scalability and maintainability, they introduce complexity that might be overkill for a simple task list application. The overhead of managing multiple services and their communication can slow down development initially. This is not recommended for this project.'), ArchitecturePatternOption(pattern='Serverless Architecture', scalability_score=9.0, maintainability_score=7.0, development_speed_score=6.0, overall_score=7.0, reasoning='Serverless architecture can be a good option for this project, especially if using a cloud provider like AWS or GCP. It allows for automatic scaling and reduces operational overhead. However, it can introduce complexities in debugging and monitoring. This is a viable option, but may be overkill.')] tool_options=[TechStackComponent(name='Git', language=None, reasoning='Git is essential for version control and collaboration. It allows developers to track changes, revert to previous versions, and collaborate effectively.', key_libraries=[], pros=['Version control', 'Collaboration', 'Branching and merging'], cons=['Requires learning the Git commands'], selected=False), TechStackComponent(name='VS Code', language=None, reasoning='VS Code is a popular and versatile code editor with excellent support for various languages and frameworks. It offers features like code completion, debugging, and integrated terminal.', key_libraries=[], pros=['Code completion', 'Debugging', 'Integrated terminal', 'Extensible with plugins'], cons=['Can be resource-intensive'], selected=False), TechStackComponent(name='Postman', language=None, reasoning='Postman is a useful tool for testing APIs. It allows developers to send requests, inspect responses, and debug API interactions.', key_libraries=[], pros=['API testing', 'Request and response inspection', 'Collaboration'], cons=['Requires learning the Postman interface'], selected=False)] risks=[TechRisk(category='Security', description='The application is vulnerable to cross-site scripting (XSS) attacks if user input is not properly sanitized. This could allow attackers to inject malicious scripts into the application.', severity='High', likelihood='Medium', mitigation='Implement proper input validation and output encoding to prevent XSS attacks. Use a Content Security Policy (CSP) to restrict the sources from which the browser can load resources.'), TechRisk(category='Performance', description='The application may suffer from slow loading times if the database queries are not optimized or if the frontend code is not optimized.', severity='Medium', likelihood='Medium', mitigation='Optimize database queries by adding indexes and using efficient query patterns. Minimize the size of the frontend code by using code splitting and minification. Implement caching where appropriate.'), TechRisk(category='Scalability', description='The application may not scale well if the chosen database or backend framework cannot handle a large number of users or tasks.', severity='Medium', likelihood='Low', mitigation='Choose a database and backend framework that can scale. Consider using a database that supports horizontal scaling. Implement caching to reduce the load on the database.')] synthesis=TechStackSynthesisOutput(backend={'language': 'JavaScript', 'framework': 'Node.js with Express', 'reasoning': 'Node.js with Express provides a lightweight and efficient backend solution. Using JavaScript on both the frontend and backend simplifies development and allows for full-stack JavaScript development.'}, frontend={'language': 'JavaScript', 'framework': 'React', 'reasoning': 'React provides a good balance of features, performance, and community support for building the user interface. It allows for a component-based architecture, making the code reusable and maintainable.'}, database={'type': 'PostgreSQL', 'reasoning': \"PostgreSQL is a robust and reliable relational database that provides strong data integrity and supports complex queries. It's a good choice for applications that require data consistency.\"}, architecture_pattern='Monolithic Architecture', deployment_environment={'cloud_provider': 'Heroku', 'reasoning': 'Heroku simplifies deployment and management, making it easy to deploy and scale the application. It abstracts away much of the infrastructure management.'}, key_libraries_tools=[LibraryTool(name='React Router', purpose='For handling navigation in the React frontend.'), LibraryTool(name='Axios', purpose='For making API requests from the frontend.'), LibraryTool(name='Express', purpose='For building the backend API.'), LibraryTool(name='Postman', purpose='For testing the API.'), LibraryTool(name='Git', purpose='For version control and collaboration.'), LibraryTool(name='VS Code', purpose='For code editing and development.')], estimated_complexity='Low') selected_stack=None"
+    },
+    "system_design": {
+      "architecture": {
+        "pattern": "Microservices (Simple)",
+        "justification": "While a monolithic architecture could suffice for this simple application, adopting a microservices approach, even in a simplified form, allows for better scalability and maintainability as the application grows. It also allows for independent deployment of components.",
+        "key_benefits": [
+          "Improved scalability",
+          "Independent deployment of components",
+          "Easier maintenance"
+        ],
+        "potential_drawbacks": [
+          "Increased complexity compared to a monolith (even in a simple form)",
+          "Requires more infrastructure"
+        ]
+      },
+      "components": [
+        {
+          "name": "Frontend",
+          "description": "Handles user interaction and displays the task list.",
+          "category": "frontend",
+          "technologies": [
+            "HTML",
+            "CSS",
+            "JavaScript"
+          ],
+          "dependencies": [
+            "Backend API"
+          ],
+          "responsibilities": [
+            "Displaying the task list",
+            "Handling user input (adding tasks)",
+            "Making API calls to the backend"
+          ],
+          "design_patterns": [
+            "MVC (Model-View-Controller) - simplified"
+          ]
+        },
+        {
+          "name": "Backend API",
+          "description": "Provides an API for managing tasks.",
+          "category": "backend",
+          "technologies": [
+            "Node.js",
+            "Express.js"
+          ],
+          "dependencies": [
+            "Database"
+          ],
+          "responsibilities": [
+            "Exposing API endpoints for task creation and retrieval",
+            "Validating user input",
+            "Interacting with the database"
+          ],
+          "design_patterns": [
+            "RESTful API"
+          ]
+        },
+        {
+          "name": "Database",
+          "description": "Stores the task data.",
+          "category": "backend",
+          "technologies": [
+            "MongoDB"
+          ],
+          "dependencies": [],
+          "responsibilities": [
+            "Storing task data",
+            "Providing data access to the Backend API"
+          ],
+          "design_patterns": []
+        }
+      ],
+      "data_model": {
+        "schema_type": "Document",
+        "tables": [
+          {
+            "name": "tasks",
+            "purpose": "Stores task information.",
+            "fields": [
+              {
+                "name": "id",
+                "type": "String",
+                "constraints": [
+                  "PRIMARY KEY"
+                ],
+                "description": "Unique identifier for the task."
+              },
+              {
+                "name": "description",
+                "type": "String",
+                "constraints": [
+                  "NOT NULL"
+                ],
+                "description": "The text description of the task."
+              },
+              {
+                "name": "created_at",
+                "type": "Date",
+                "constraints": [],
+                "description": "Timestamp of when the task was created."
+              }
+            ],
+            "relationships": []
+          }
+        ],
+        "relationships": [],
+        "justification": "MongoDB (Document database) is chosen for its flexibility and ease of use for this simple application. It allows for a schema-less design, which simplifies the development process."
+      },
+      "api_endpoints": {
+        "style": "REST",
+        "base_url": "/api/tasks",
+        "authentication": "None (for simplicity, no authentication is required)",
+        "endpoints": [
+          {
+            "method": "POST",
+            "path": "/",
+            "purpose": "Create a new task.",
+            "parameters": [
+              {
+                "description": "The task description",
+                "type": "string",
+                "name": "description"
+              }
+            ],
+            "response": {
+              "201": {
+                "description": "Task created successfully",
+                "example": {
+                  "id": "task_id",
+                  "description": "Task description",
+                  "created_at": "timestamp"
+                }
+              },
+              "400": {
+                "description": "Bad Request - Invalid input"
+              }
+            },
+            "authentication_required": false,
+            "rate_limiting_applied": false
+          },
+          {
+            "method": "GET",
+            "path": "/",
+            "purpose": "Get all tasks.",
+            "parameters": [],
+            "response": {
+              "200": {
+                "description": "List of tasks",
+                "example": [
+                  {
+                    "id": "task_id",
+                    "description": "Task description",
+                    "created_at": "timestamp"
+                  }
+                ]
+              }
+            },
+            "authentication_required": false,
+            "rate_limiting_applied": false
+          }
+        ],
+        "error_handling": "Standard HTTP status codes (400, 500, etc.) with JSON responses containing error messages.",
+        "rate_limiting_strategy": null
+      },
+      "security": {
+        "authentication_method": "None (for simplicity)",
+        "authorization_strategy": "None (for simplicity)",
+        "data_encryption": {
+          "at_rest": "Not applicable (for simplicity)",
+          "in_transit": "HTTPS (TLS/SSL) for all communication between frontend and backend."
+        },
+        "security_measures": [
+          {
+            "category": "Input Validation",
+            "implementation": "Validate all user input on the backend to prevent injection attacks (e.g., XSS, SQL injection).",
+            "mitigation": "XSS, SQL Injection",
+            "priority": "High"
+          },
+          {
+            "category": "HTTPS",
+            "implementation": "Enforce HTTPS for all communication.",
+            "mitigation": "Man-in-the-middle attacks, data interception",
+            "priority": "High"
+          },
+          {
+            "category": "Dependency Management",
+            "implementation": "Regularly update dependencies to address known vulnerabilities.",
+            "mitigation": "Vulnerability Exploitation",
+            "priority": "Medium"
+          }
+        ],
+        "vulnerability_mitigation_strategies": [
+          "Input validation",
+          "Use of parameterized queries (if applicable)",
+          "Regular dependency updates",
+          "HTTPS enforcement"
+        ],
+        "compliance_standards": []
+      },
+      "scalability_and_performance": {
+        "caching": "Implement client-side caching for the task list to reduce server load and improve loading times.",
+        "database_optimization": "Use appropriate indexes in MongoDB to optimize query performance.",
+        "load_balancing": "Consider load balancing if the application grows and experiences high traffic."
+      },
+      "deployment_strategy": {
+        "environment": "Cloud-based (e.g., AWS, Google Cloud, Azure) or a simple hosting solution.",
+        "deployment_method": "Containerization (Docker) for the backend and frontend, and a managed database service (e.g., MongoDB Atlas).",
+        "infrastructure_as_code": "Consider using infrastructure-as-code tools (e.g., Terraform, CloudFormation) for automated deployment and management."
+      },
+      "monitoring_and_logging": {
+        "logging": "Implement logging for both frontend and backend components to track errors and application behavior.",
+        "monitoring": "Use monitoring tools (e.g., Prometheus, Grafana) to monitor application performance and resource usage."
+      },
+      "error_handling_strategy": "Centralized error handling in the backend to return consistent error responses with appropriate HTTP status codes. Implement client-side error handling to display user-friendly error messages.",
+      "development_phases_overview": [
+        {
+          "name": "Phase 1: Setup and Backend Development",
+          "description": "Setting up the development environment, creating the backend API (Node.js, Express.js), and connecting to the database (MongoDB).",
+          "priority": "High",
+          "dependencies": [],
+          "tasks": [
+            "Set up development environment (Node.js, MongoDB)",
+            "Create the backend API (Express.js)",
+            "Implement API endpoints for task creation and retrieval",
+            "Connect to MongoDB and define the data model"
+          ],
+          "estimated_duration": "1 week"
+        },
+        {
+          "name": "Phase 2: Frontend Development",
+          "description": "Developing the frontend (HTML, CSS, JavaScript) to interact with the backend API.",
+          "priority": "High",
+          "dependencies": [
+            "Phase 1: Setup and Backend Development"
+          ],
+          "tasks": [
+            "Design the user interface",
+            "Implement the frontend logic to display the task list",
+            "Implement the functionality to add new tasks",
+            "Implement API calls to the backend"
+          ],
+          "estimated_duration": "1 week"
+        },
+        {
+          "name": "Phase 3: Testing and Deployment",
+          "description": "Testing the application and deploying it to a hosting environment.",
+          "priority": "High",
+          "dependencies": [
+            "Phase 1: Setup and Backend Development",
+            "Phase 2: Frontend Development"
+          ],
+          "tasks": [
+            "Write unit tests and integration tests",
+            "Deploy the application to a hosting environment (e.g., cloud provider)",
+            "Test the deployed application"
+          ],
+          "estimated_duration": "1 week"
+        }
+      ],
+      "key_risks": [
+        "Security vulnerabilities (e.g., XSS, SQL injection) - mitigated by input validation and HTTPS.",
+        "Performance issues (e.g., slow loading times) - mitigated by caching and database optimization.",
+        "Scalability limitations - addressed by the microservices architecture (though simple in this case)."
+      ],
+      "design_justification": "The design prioritizes simplicity and ease of development while considering scalability and security. The microservices approach, while slightly more complex initially, provides a foundation for future growth. The tech stack is chosen for its ease of use and rapid development capabilities. The security measures are implemented to protect the application from common web vulnerabilities. The development phases are structured to ensure a smooth and iterative development process.",
+      "data_flow": "1. User interacts with the Frontend (e.g., clicks 'Add Task').\n2. Frontend sends a POST request to the Backend API's /api/tasks endpoint with the task description.\n3. Backend API validates the input.\n4. Backend API saves the task data to the MongoDB database.\n5. Backend API returns a success response (201) with the task details to the Frontend.\n6. Frontend displays the newly created task in the task list.\n7. When the user loads the page or refreshes, the Frontend sends a GET request to the Backend API's /api/tasks endpoint.\n8. Backend API retrieves all tasks from the MongoDB database.\n9. Backend API returns the task list to the Frontend.\n10. Frontend displays the task list."
+    },
+    "implementation_plan": "plan=ImplementationPlan(project_summary={'title': 'Error Plan', 'description': 'Failed to generate plan: Object of type ComprehensiveTechStackOutput is not JSON serializable', 'overall_complexity': 'N/A', 'estimated_duration': 'N/A', 'key_challenges': [], 'success_criteria': []}, phases=[], resource_allocation=[], risks_and_mitigations=[], timeline={}, tech_stack={}, metadata={'generated_at': '2025-07-07T20:48:58.841592', 'version': '1.0', 'author': 'Multi-AI Dev System', 'tags': [], 'notes': 'Generated due to error'}) summary='Error generating implementation plan: Object of type ComprehensiveTechStackOutput is not JSON serializable' metadata=PlanMetadata(generated_at='2025-07-07T20:48:58.841592', version='1.0', author='Multi-AI Dev System', tags=[], notes='Error occurred during plan compilation.')"
+  }
+}

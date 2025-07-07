@@ -27,7 +27,7 @@ from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 import monitoring
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
-from models.data_contracts import GeneratedFile, CodeGenerationOutput, CodeFile
+from models.data_contracts import GeneratedFile, CodeGenerationOutput, CodeFile, WorkItem
 from tools.code_generation_utils import parse_llm_output_into_files
 
 # Enhanced memory and RAG imports
@@ -2187,3 +2187,63 @@ module.exports = {{
                 }
             ]
         }
+
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Generates DevOps/integration artifacts for a single work item.
+        """
+        logger.info(f"IntegrationGenerator starting work item: {work_item.id} - {work_item.description}")
+
+        prompt = self._create_work_item_prompt(work_item, state)
+        
+        response = self.llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+
+        generated_files = parse_llm_output_into_files(content)
+
+        return CodeGenerationOutput(
+            generated_files=[FileOutput(**f) for f in generated_files],
+            summary=f"Generated {len(generated_files)} files for integration work item {work_item.id}."
+        )
+
+    def _create_work_item_prompt(self, work_item: WorkItem, state: Dict[str, Any]) -> str:
+        # We can provide the whole state as context, but let's summarize for the prompt
+        tech_stack_summary = json.dumps(state.get("tech_stack_recommendation", {}), indent=2)
+        system_design_summary = json.dumps(state.get("system_design", {}), indent=2)
+
+        return f"""
+        You are a senior DevOps engineer specializing in CI/CD, containerization, and cloud infrastructure.
+        Your task is to implement a single work item related to project integration and deployment.
+
+        **System Context:**
+        - Tech Stack:
+        ```json
+        {tech_stack_summary}
+        ```
+        - System Design:
+        ```json
+        {system_design_summary}
+        ```
+
+        **Current Work Item: {work_item.id}**
+        - **Description:** {work_item.description}
+        - **Acceptance Criteria:**
+        {chr(10).join(f'  - {c}' for c in work_item.acceptance_criteria)}
+        
+        **Instructions:**
+        1. Write the necessary files (e.g., Dockerfile, docker-compose.yml, .github/workflows/ci.yml) to implement THIS work item.
+        2. Adhere to all acceptance criteria.
+        3. If the work item involves a script (like a build script), also generate a simple validation script (e.g., a shell script that runs the build script and checks for an exit code).
+        4. Your output must be in the multi-file format.
+
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        ### FILE: path/to/your/file.yml
+        ```yaml
+        # CI/CD Pipeline or Docker Compose content here
+        ```
+
+        ### FILE: path/to/your/Dockerfile
+        ```dockerfile
+        # Dockerfile content here
+        ```
+        """

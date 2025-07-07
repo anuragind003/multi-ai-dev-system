@@ -17,6 +17,7 @@ from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from tools.code_generation_utils import parse_llm_output_into_files
+from models.data_contracts import WorkItem, CodeGenerationOutput, GeneratedFile
 
 import logging
 logger = logging.getLogger(__name__)
@@ -543,4 +544,45 @@ Provide the monitoring specifications."""
         
         return self.generate_devops_infrastructure(
             domain, language, framework, scale, deployment_targets, features
-        ) 
+        )
+
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Generates DevOps infrastructure files for a single work item.
+        """
+        logger.info(f"DevOpsInfrastructureAgent starting work item: {work_item.id}")
+
+        prompt = self._create_work_item_prompt(work_item, state)
+        response = self.llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+        generated_files = parse_llm_output_into_files(content)
+
+        return CodeGenerationOutput(
+            generated_files=[FileOutput(**f) for f in generated_files],
+            summary=f"Generated {len(generated_files)} DevOps files for work item {work_item.id}."
+        )
+
+    def _create_work_item_prompt(self, work_item: WorkItem, state: Dict[str, Any]) -> str:
+        tech_stack_summary = json.dumps(state.get("tech_stack_recommendation", {}), indent=2)
+
+        return f"""
+        You are a senior DevOps engineer. Your task is to create the infrastructure-as-code files described in the work item.
+
+        **Work Item: {work_item.id}**
+        - **Description:** {work_item.description}
+        - **Acceptance Criteria:**
+        {chr(10).join(f'  - {c}' for c in work_item.acceptance_criteria)}
+
+        **System Context:**
+        - Tech Stack: {tech_stack_summary}
+
+        **Instructions:**
+        - Create the files necessary to satisfy the work item (e.g., Dockerfile, CI/CD pipeline, etc.).
+        - Use the multi-file output format.
+
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        ### FILE: path/to/your/file.yml
+        ```yaml
+        # File content here
+        ```
+        """ 

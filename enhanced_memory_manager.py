@@ -21,7 +21,11 @@ import threading
 import json
 import pickle
 import gzip
+import base64
 from collections import OrderedDict, defaultdict
+from datetime import datetime
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +368,55 @@ class EnhancedMemoryManager:
         cleanup_thread = threading.Thread(target=cleanup, daemon=True)
         cleanup_thread.start()
 
+    def get_chat_history_for_session(self, session_id: str) -> BaseChatMessageHistory:
+        """
+        Retrieves or creates a chat message history for a given session.
+        This is required for integration with LangChain's RunnableWithMessageHistory.
+        """
+        with self._lock:
+            context = "chat_history"
+            history = self.get(session_id, default=None, context=context)
+            if history is None:
+                history = ChatMessageHistory()
+                self.set(session_id, history, context=context)
+            return history
+
+    def store_agent_activity(self, agent_name: str, activity_type: str, prompt: str = "", response: str = "", metadata: dict = None):
+        """
+        Store a record of agent activity.
+        
+        Args:
+            agent_name: Name of the agent
+            activity_type: Type of activity (e.g., 'brd_analysis', 'code_generation')
+            prompt: The prompt given to the agent
+            response: The agent's response
+            metadata: Additional structured data
+        """
+        try:
+            timestamp = datetime.now().isoformat()
+            activity_record = {
+                "timestamp": timestamp,
+                "agent_name": agent_name,
+                "activity_type": activity_type,
+                "prompt": prompt,
+                "response": response,
+                "metadata": metadata or {}
+            }
+            
+            # Use a unique key for each activity record
+            # IMPORTANT: Added timestamp to key to ensure uniqueness
+            activity_key = f"activity_{agent_name}_{activity_type}_{timestamp}"
+            
+            # Store in a dedicated context for agent activity
+            self.set(
+                activity_key,
+                activity_record,
+                context="agent_activity"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error storing agent activity: {e}")
+
 # Backend Implementations
 
 class MemoryBackendInterface(ABC):
@@ -462,14 +515,37 @@ class SQLiteBackend(MemoryBackendInterface):
     
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         try:
-            self._memory.set(key, value, immediate=True)
+            # Use pickle for robust serialization, then encode to base64
+            # to ensure the data is a JSON-serializable string.
+            serialized_value = pickle.dumps(value)
+            encoded_value = base64.b64encode(serialized_value).decode('utf-8')
+            self._memory.set(key, encoded_value, immediate=True)
             return True
         except Exception as e:
-            logger.error(f"SQLite backend error: {e}")
+            logger.error(f"SQLite backend error on set: {e}")
             return False
     
     def get(self, key: str, default: Any = None) -> Any:
-        return self._memory.get(key, default)
+        stored_value = self._memory.get(key, None)
+        if stored_value is None:
+            return default
+        
+        try:
+            # Handle new format: base64-encoded string
+            if isinstance(stored_value, str):
+                decoded_bytes = base64.b64decode(stored_value.encode('utf-8'))
+                return pickle.loads(decoded_bytes)
+            
+            # Handle potential old format: raw bytes
+            if isinstance(stored_value, bytes):
+                return pickle.loads(stored_value)
+
+            # If it's neither, we can't deserialize it.
+            logger.warning(f"Cannot deserialize memory value for key '{key}' of type {type(stored_value)}")
+            return stored_value
+        except Exception as e:
+            logger.error(f"Failed to deserialize value for key '{key}': {e}")
+            return default
     
     def delete(self, key: str) -> bool:
         try:
@@ -750,38 +826,55 @@ class EnhancedSharedProjectMemory:
             return self._original_memory.get(key, default)
     
     def store_agent_result(self, agent_name: str, result: Any, execution_time: float = None, **kwargs):
-        """Store agent result (same as original)."""
-        return self._original_memory.store_agent_result(
-            agent_name, result, execution_time, **kwargs
-        )
-    
-    def store_agent_activity(self, agent_name: str, activity_type: str, prompt: str = "", response: str = "", metadata: dict = None):
-        """Store agent activity for tracking and logging."""
-        activity_data = {
-            "agent_name": agent_name,
-            "activity_type": activity_type,
-            "prompt": prompt,
-            "response": response,
-            "metadata": metadata or {},
-            "timestamp": time.time()
+        """
+        Stores the result of an agent's execution.
+
+        Args:
+            agent_name (str): The name of the agent.
+            result (Any): The result to be stored.
+            execution_time (float, optional): The execution time. Defaults to None.
+        """
+        key = f"agent_result_{agent_name}"
+        data = {
+            "result": result,
+            "timestamp": datetime.now().isoformat(),
+            "execution_time": execution_time,
+            **kwargs
         }
+        self.set(key, data, context="agent_results")
         
-        # Store in enhanced memory with agent context
-        self._enhanced_memory.set(
-            f"activity_{agent_name}_{activity_type}", 
-            activity_data, 
-            context=f"agent_{agent_name}"
-        )
+    def store_agent_activity(self, agent_name: str, activity_type: str, prompt: str = "", response: str = "", metadata: dict = None):
+        """
+        Store a record of agent activity.
         
-        # Also store in original memory with correct signature
-        if hasattr(self._original_memory, 'store_agent_activity'):
-            return self._original_memory.store_agent_activity(agent_name, activity_type, prompt, response, metadata)
-        
-        return True
-    
+        Args:
+            agent_name: Name of the agent
+            activity_type: Type of activity (e.g., 'brd_analysis', 'code_generation')
+            prompt: The prompt given to the agent
+            response: The agent's response
+            metadata: Additional structured data
+        """
+        # This method is now redundant because it's in the parent EnhancedMemoryManager.
+        # We can either remove it or keep it for full backward compatibility.
+        # For now, let's delegate to the main implementation.
+        self._enhanced_memory.store_agent_activity(agent_name, activity_type, prompt, response, metadata)
+
     def get_agent_result(self, agent_name: str, default=None):
-        """Get agent result (same as original)."""
-        return self._original_memory.get_agent_result(agent_name, default)
+        """
+        Retrieves the result of a specific agent.
+
+        Args:
+            agent_name (str): The name of the agent.
+            default (Any, optional): The default value to return if the agent result is not found. Defaults to None.
+
+        Returns:
+            The result of the agent, or the default value if the agent result is not found.
+        """
+        key = f"agent_result_{agent_name}"
+        value = self.get(key, default, context="agent_results")
+        if value is not None:
+            return value["result"]
+        return default
     
     def get_all_agent_results(self):
         """Get all agent results (same as original)."""
@@ -798,6 +891,14 @@ class EnhancedSharedProjectMemory:
         if value is not None:
             return value
         return self._original_memory.get_workflow_state()
+    
+    def get_chat_history_for_session(self, session_id: str) -> BaseChatMessageHistory:
+        """
+        Retrieves or creates a chat message history for a given session.
+        This delegates to the underlying EnhancedMemoryManager and is required
+        for integration with LangChain's RunnableWithMessageHistory.
+        """
+        return self._enhanced_memory.get_chat_history_for_session(session_id)
     
     def get_performance_stats(self):
         """Get performance stats (enhanced with new metrics)."""

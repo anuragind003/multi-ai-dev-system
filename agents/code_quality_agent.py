@@ -24,7 +24,10 @@ from models.data_contracts import (
     CodeQualityReviewInput,
     CodeQualityReviewOutput,
     CodeIssue,
-    SecurityVulnerability
+    SecurityVulnerability,
+    WorkItem,
+    CodeGenerationOutput,
+    GeneratedFile
 )
 
 # Enhanced memory and RAG imports
@@ -237,11 +240,83 @@ class CodeQualityAgent(BaseAgent):
         
         return default_response.dict()
     
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Performs a focused code quality review for a single work item.
+        """
+        logger.info(f"CodeQualityAgent reviewing work item: {work_item.id}")
+        
+        code_gen_result = state.get("code_generation_result", {})
+        generated_files = code_gen_result.get("generated_files", [])
+
+        if not generated_files:
+            logger.warning(f"No files provided for quality review of work item {work_item.id}.")
+            return {"approved": True, "feedback": ["No files to review."]}
+
+        prompt = self._create_work_item_review_prompt(work_item, generated_files, state.get("tech_stack_recommendation", {}))
+
+        # Define the desired output structure
+        output_schema = {
+            "title": "Code Quality Review",
+            "description": "A review of the generated code for a single work item.",
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "title": "Approval Status",
+                    "description": "True if the code passes quality checks, False otherwise.",
+                    "type": "boolean"
+                },
+                "feedback": {
+                    "title": "Feedback Items",
+                    "description": "A list of specific feedback points, suggestions, or required changes.",
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            },
+            "required": ["approved", "feedback"]
+        }
+
+        chain = self.llm.with_structured_output(output_schema)
+        review_result = chain.invoke(prompt)
+
+        logger.info(f"Review for {work_item.id} complete. Approved: {review_result.get('approved')}")
+        return review_result
+
+    def _create_work_item_review_prompt(self, work_item: WorkItem, generated_files: List[Dict[str, Any]], tech_stack: Dict[str, Any]) -> str:
+        code_str = ""
+        for file_data in generated_files:
+            code_str += f"### FILE: {file_data['path']}\n```\n{file_data['content']}\n```\n\n"
+
+        return f"""
+        You are a senior developer acting as a code reviewer. Your task is to perform a quality and security review on the code generated for a specific work item.
+
+        **Work Item Context:**
+        - **ID:** {work_item.id}
+        - **Description:** {work_item.description}
+        - **Acceptance Criteria:**
+        {chr(10).join(f'  - {c}' for c in work_item.acceptance_criteria)}
+
+        **Tech Stack:**
+        {json.dumps(tech_stack, indent=2)}
+
+        **Code to Review:**
+        {code_str}
+
+        **Review Instructions:**
+        1.  **Check against Acceptance Criteria**: Does the code fully implement all acceptance criteria?
+        2.  **Security Analysis**: Look for common vulnerabilities (e.g., hardcoded secrets, injection risks, insecure dependencies).
+        3.  **Code Quality**: Check for code smells, anti-patterns, maintainability issues, and adherence to best practices for the given tech stack.
+        4.  **Decision**: Based on your review, decide if the code is `approved`. It should only be approved if there are no critical issues.
+
+        Provide your feedback as a JSON object with two keys: `approved` (boolean) and `feedback` (a list of strings explaining your reasoning and any required changes).
+        """
+
     def run_comprehensive_analysis(self, code_generation_result: dict, tech_stack_recommendation: dict) -> Dict[str, Any]:
         """
-        Enhanced multi-stage code quality analysis with specialized LLM analysis per language and category.
-        Optimized for token efficiency.
+        DEPRECATED: This method is part of the old, phase-based workflow.
+        The new workflow uses the `run` method for work-item-based review.
         """
+        logger.warning("run_comprehensive_analysis is deprecated and should not be used in the new workflow.")
         # Create and validate the input with Pydantic
         try:
             input_data = CodeQualityAnalysisInput(
@@ -922,7 +997,7 @@ class CodeQualityAgent(BaseAgent):
         """Select important files based on naming patterns"""
         # Score files by importance
         file_scores = []
-        important_patterns = ['main', 'app', 'index', 'core', 'base', 'api', 'auth', 'security']
+        important_patterns = ['main', 'app', 'index', 'server', 'auth', 'user', 'security']
         
         for file in files:
             basename = os.path.basename(file).lower()
@@ -966,300 +1041,6 @@ class CodeQualityAgent(BaseAgent):
         if quick_wins:
             self.log_info(f"   Quick wins identified: {len(quick_wins)}")
     
-    def run(self, generated_code: Dict[str, Any], tech_stack: Dict[str, Any] = None, 
-            code_type: str = "general") -> Dict[str, Any]:
-        """
-        Review code quality and produce standardized feedback that can be used by generator agents.
-        
-        Args:
-            generated_code: Code generation result with 'generated_files'
-            tech_stack: Technology stack information
-            code_type: Type of code being reviewed (database, backend, frontend, etc.)
-            
-        Returns:
-            Dict with approval status and actionable feedback for revision
-        """
-        # Extract generated files first, then validate
-        generated_files = generated_code.get("generated_files", {})
-        if isinstance(generated_code.get("files"), dict):
-            # Handle case where files are stored under "files" key
-            generated_files = generated_code.get("files", {})
-        
-        # Validate input with Pydantic
-        try:
-            input_data = CodeQualityReviewInput(
-                code_files=generated_files,
-                tech_stack=tech_stack,
-                code_type=code_type
-            )
-        except Exception as e:
-            self.log_warning(f"Invalid input data: {e}")
-            default_output = CodeQualityReviewOutput(
-                overall_score=0.0,
-                has_critical_issues=True,
-                critical_issues=[{"issue": f"Invalid input format: {str(e)}", "severity": "High"}]
-            )
-            return default_output.dict()
-            
-        self.log_start(f"Starting code quality review for {input_data.code_type} code")
-        
-        # Use the validated generated files
-        generated_files = input_data.code_files
-        if not generated_files:
-            self.log_warning("No files provided for quality review")
-            default_output = CodeQualityReviewOutput(
-                overall_score=10.0,
-                has_critical_issues=False,
-                critical_issues=[]
-            )
-            return default_output.dict()  # Approve empty set by default
-        
-        try:
-            # Determine which language-specific criteria to use based on tech stack
-            language = self._determine_language(code_type, tech_stack)
-            
-            # Create a review prompt with the code content
-            # For large codebases, sample representative files instead of all files
-            file_samples = self._select_representative_files(generated_files)
-            review_prompt = self._create_review_prompt(file_samples, tech_stack, code_type, language)
-            
-            # Use a low temperature for deterministic, structured output
-            binding_args = {"temperature": 0.1, "max_tokens": 2048}
-            json_llm = self.llm.bind(**binding_args)
-            
-            # Add context for monitoring
-            invoke_config = {
-                "agent_context": f"{self.agent_name}:code_review:{code_type}",
-                "temperature_used": binding_args["temperature"],
-                "language": language,
-                "files_analyzed": len(file_samples)
-            }
-            
-            # Get structured review feedback
-            response = json_llm.invoke(review_prompt, config=invoke_config)
-            response_text = response.content if hasattr(response, 'content') else str(response)
-            
-            # Parse the JSON response with robust error handling
-            try:
-                # Try to find and extract JSON from response
-                json_match = re.search(r'```json\s*([\s\S]*?)\s*```|`([\s\S]*?)`|\{[\s\S]*\}', response_text)
-                if json_match:
-                    json_str = json_match.group(1) or json_match.group(2) or json_match.group(0)
-                    review_result = json.loads(json_str)
-                else:
-                    # Try direct parsing if no explicit JSON block
-                    review_result = json.loads(response_text)
-                    
-                # Ensure required fields are present and convert old format to new
-                if "overall_score" not in review_result:
-                    review_result["overall_score"] = 5.0  # Default score
-                if "has_critical_issues" not in review_result:
-                    review_result["has_critical_issues"] = len(review_result.get("critical_issues", [])) > 0
-                if "critical_issues" not in review_result:
-                    review_result["critical_issues"] = []
-                    
-                # Handle legacy format conversion
-                if "approved" in review_result:
-                    if not review_result["approved"] and "overall_score" not in review_result:
-                        review_result["overall_score"] = 3.0  # Low score for disapproved code
-                    elif review_result["approved"] and "overall_score" not in review_result:
-                        review_result["overall_score"] = 8.0  # High score for approved code
-                        
-            except Exception as json_err:
-                self.log_warning(f"Failed to parse review response as JSON: {json_err}")
-                review_result = {
-                    "overall_score": 0.0,
-                    "has_critical_issues": True,
-                    "critical_issues": [{"issue": "The code review generated invalid output format", "severity": "High"}]
-                }
-        
-            # Log review outcome
-            approval_status = "APPROVED" if not review_result.get("has_critical_issues", True) else "NEEDS REVISION" 
-            overall_score = review_result.get("overall_score", 0.0)
-            critical_count = len(review_result["critical_issues"])
-            self.log_info(f"Code review complete: {approval_status} with score {overall_score}/10 and {critical_count} critical issues")
-            
-            # Ensure result matches the Pydantic model
-            try:
-                validated_result = CodeQualityReviewOutput(**review_result)
-                
-                # Log review outcome
-                approval_status = "APPROVED" if not validated_result.has_critical_issues else "NEEDS REVISION" 
-                overall_score = validated_result.overall_score
-                critical_count = len(validated_result.critical_issues)
-                self.log_info(f"Code review complete: {approval_status} with score {overall_score}/10 and {critical_count} critical issues")
-                
-                # Store result in enhanced memory for cross-tool access
-                result_dict = validated_result.dict()
-                self.enhanced_set("code_quality_review_result", result_dict, context="code_quality_review")
-                self.store_cross_tool_data("quality_metrics", {
-                    "overall_score": validated_result.overall_score,
-                    "has_critical_issues": validated_result.has_critical_issues,
-                    "critical_count": critical_count,
-                    "code_type": code_type,
-                    "language": language
-                }, f"Code quality metrics for {code_type}")
-                
-                return result_dict
-            except Exception as validation_error:
-                self.log_warning(f"Result validation error: {validation_error}")
-                # Ensure we return something that matches the expected structure
-                default_output = CodeQualityReviewOutput(
-                    overall_score=0.0,
-                    has_critical_issues=True,
-                    critical_issues=[{
-                        "issue": f"Output validation error: {str(validation_error)}",
-                        "severity": "High"
-                    }]
-                )
-                return default_output.dict()
-            
-        except Exception as e:
-            self.log_error(f"Code quality review failed: {str(e)}")
-            default_output = CodeQualityReviewOutput(
-                overall_score=0.0,
-                has_critical_issues=True,
-                critical_issues=[{
-                    "issue": f"Error in code review process: {str(e)}",
-                    "severity": "High"
-                }]
-            )
-            return default_output.dict()
-    
-    def _create_review_prompt(self, file_samples: Dict[str, str], tech_stack: dict, code_type: str, language: str) -> str:
-        """
-        Creates a prompt for the LLM to review code and provide structured feedback.
-        
-        Args:
-            file_samples: Dict of file paths to code content
-            tech_stack: Technology stack information
-            code_type: Type of code being reviewed
-            language: Programming language of the code
-            
-        Returns:
-            A prompt string for the LLM
-        """
-        # Format code sections with proper syntax highlighting
-        code_sections = []
-        for file_path, content in file_samples.items():
-            # Determine file language for syntax highlighting
-            file_language = self._determine_file_language(file_path)
-            
-            # For large files, include only the first part to save tokens
-            if len(content) > 1500:
-                displayed_content = content[:1500] + "\n[...file truncated...]"
-            else:
-                displayed_content = content
-                
-            code_sections.append(f"# FILE: {file_path}\n```{file_language}\n{displayed_content}\n```\n")
-        
-        code_to_review = "\n\n".join(code_sections)
-        
-        # Get language-specific review criteria
-        review_criteria = self._get_language_specific_criteria(language, code_type)
-        
-        # Example JSON structure for the LLM to follow
-        json_format_example = """{
-  "overall_score": 6.5,
-  "has_critical_issues": true,
-  "critical_issues": [
-    {
-      "file": "path/to/file.py",
-      "issue": "Description of the critical issue",
-      "severity": "High",
-      "fix": "Recommended fix for the issue"
-    }
-  ],
-  "code_structure_analysis": {
-    "organization": "Good",
-    "maintainability": "Needs improvement"
-  },
-  "important_recommendations": [
-    "Add error handling in module X",
-    "Improve naming conventions in class Y"
-  ]
-}"""
-
-        # Create the review prompt
-        prompt = f"""You are an expert code reviewer specializing in {language} for {code_type} components.
-        
-CODE TO REVIEW:
-{code_to_review}
-
-TECHNOLOGY STACK:
-{json.dumps(tech_stack, indent=2) if tech_stack else "Not specified"}
-
-REVIEW CRITERIA:
-{review_criteria}
-
-Your task is to act as a strict code reviewer. Analyze the code and provide structured feedback:
-1. Provide an overall quality score (0-10) based on code quality, security, maintainability
-2. Set "has_critical_issues" to true if there are issues that must be fixed before deployment
-3. List all critical issues with file path, description, severity, and recommended fix
-4. Provide code structure analysis and important recommendations for improvement
-
-RESPOND WITH ONLY A VALID JSON OBJECT using this exact format:
-{json_format_example}
-
-DO NOT include any text before or after the JSON.
-"""
-        return prompt
-
-    def _select_representative_files(self, generated_files: Dict[str, str], max_files: int = 8) -> Dict[str, str]:
-        """
-        Select a representative subset of files to review when there are many files.
-        Prioritizes main files, complex files, and files with critical functionality.
-        
-        Args:
-            generated_files: Dictionary of file paths to content
-            max_files: Maximum number of files to include in review
-            
-        Returns:
-            Dict of selected file paths to content
-        """
-        if len(generated_files) <= max_files:
-            return generated_files
-            
-        # Score files by importance
-        scored_files = []
-        for path, content in generated_files.items():
-            score = 0
-            
-            # Important file patterns
-            important_patterns = ['main', 'app', 'index', 'server', 'auth', 'user', 'security']
-            if any(pattern in path.lower() for pattern in important_patterns):
-                score += 10
-            
-            # File size (larger files might be more complex/important)
-            lines = content.count('\n') + 1
-            score += min(20, lines // 50)  # Cap at 20 points for size
-            
-            # Check content for important components
-            if 'class' in content.lower():
-                score += 5
-            if 'def ' in content.lower() or 'function' in content.lower():
-                score += 5
-            if 'import' in content.lower():
-                score += 2
-                
-            scored_files.append((path, content, score))
-            
-        # Sort by score (descending) and take top max_files
-        scored_files.sort(key=lambda x: x[2], reverse=True)
-        return [(path, content) for path, content, _ in scored_files[:max_files]]
-    
-    def _get_complexity_based_temperature(self, file_size: int, language: str) -> float:
-        """Determine analysis temperature based on code complexity (file size as proxy)"""
-        if language == "python":
-            # Python: lower temp for larger files (more complex)
-            return max(0.1, min(0.5, 0.5 - (file_size / 10000)))
-        elif language in ["javascript", "typescript"]:
-            # JS/TS: moderate temp for medium complexity
-            return max(0.2, min(0.7, 0.5 - (file_size / 20000)))
-        else:
-            # Default: use base temperature
-            return 0.2
-    
     def _select_security_critical_files(self, generated_files: dict) -> List[Tuple[str, str]]:
         """Select files critical for security analysis"""
         # Heuristic: prioritize files with 'auth', 'login', 'password', 'token' in the path or content
@@ -1276,157 +1057,17 @@ DO NOT include any text before or after the JSON.
         # Limit to top 5 critical files for focused analysis
         return critical_files[:5]
     
-    def _get_language_specific_criteria(self, language: str, code_type: str) -> str:
-        """Get detailed review criteria based on language and code type"""
-        # General criteria for all languages
-        criteria = [
-            "Code readability and clarity",
-            "Proper use of language features",
-            "Adherence to naming conventions",
-            "Code structure and organization",
-            "Error handling and resilience",
-            "Performance considerations",
-            "Security best practices",
-            "Documentation and comments"
-        ]
-        
-        # Language-specific criteria
+    def _get_complexity_based_temperature(self, file_size: int, language: str) -> float:
+        """Determine analysis temperature based on code complexity (file size as proxy)"""
         if language == "python":
-            criteria.append("PEP 8 compliance")
-            criteria.append("Effective use of list comprehensions and generators")
-            criteria.append("Proper use of virtual environments and dependencies")
-        elif language == "javascript":
-            criteria.append("ES6+ features usage")
-            criteria.append("Async/await implementation for asynchronous code")
-            criteria.append("Module system usage (CommonJS, ESModules)")
-        elif language == "typescript":
-            criteria.append("Type annotations and interfaces usage")
-            criteria.append("Proper handling of null and undefined")
-            criteria.append("Usage of generics and type guards")
-        elif language in ["html", "css"]:
-            criteria.append("Semantic HTML usage")
-            criteria.append("CSS specificity and organization")
-            criteria.append("Responsive design principles")
-        
-        # Criteria specific to code type (backend, frontend, etc.)
-        if code_type == "backend":
-            criteria.append("API design and documentation")
-            criteria.append("Database access patterns and ORM usage")
-            criteria.append("Authentication and authorization mechanisms")
-        elif code_type == "frontend":
-            criteria.append("State management best practices")
-            criteria.append("Component lifecycle methods usage")
-            criteria.append("Event handling and DOM manipulation")
-        
-        return "\n- " + "\n- ".join(criteria)
-    
-    def _create_python_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
-        """Create Python-specific analysis template."""
-        return ChatPromptTemplate.from_messages([
-            SystemMessage(content="Python code quality expert specializing in Pythonic code patterns and best practices."),
-            HumanMessage(content="""
-                Analyze these Python files:
-                
-                {code_files}
-                
-                # OUTPUT FORMAT
-                {format_instructions}
-                
-                Focus your analysis on:
-                1. Pythonic code (list comprehensions, generators, etc.)
-                2. PEP 8 compliance
-                3. Type hinting usage
-                4. Function/class design
-                5. Error handling patterns
-                6. Documentation (docstrings, comments)
-                7. Import organization
-                8. Resource management (context managers)
-                
-                Identify specific issues with file paths and line numbers when possible.
-                Provide concrete examples of how to improve the code.
-            """)
-        ])
-
-    def _create_javascript_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
-        """Create JavaScript-specific analysis template."""
-        return ChatPromptTemplate.from_messages([
-            SystemMessage(content="JavaScript code quality expert specializing in modern JS patterns and practices."),
-            HumanMessage(content="""
-                Analyze these JavaScript files:
-                
-                {code_files}
-                
-                # OUTPUT FORMAT
-                {format_instructions}
-                
-                Focus your analysis on:
-                1. Modern ES6+ features usage
-                2. Async pattern implementation
-                3. Error handling
-                4. DOM manipulation efficiency
-                5. Event handling patterns
-                6. Memory management
-                7. Framework-specific best practices
-                8. Module organization
-                
-                Identify specific issues with file paths and line numbers when possible.
-                Provide concrete examples of how to improve the code.
-            """)
-        ])
-
-    def _create_typescript_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
-        """Create TypeScript-specific analysis template."""
-        return ChatPromptTemplate.from_messages([
-            SystemMessage(content="TypeScript code quality expert specializing in type safety and TS patterns."),
-            HumanMessage(content="""
-                Analyze these TypeScript files:
-                
-                {code_files}
-                
-                # OUTPUT FORMAT
-                {format_instructions}
-                
-                Focus your analysis on:
-                1. Type system usage and correctness
-                2. Interface/type definitions
-                3. Proper typing of async operations
-                4. Type guards and narrowing
-                5. Generic usage
-                6. Null/undefined handling
-                7. TypeScript config optimization
-                8. Type-safe API interactions
-                
-                Identify specific issues with file paths and line numbers when possible.
-                Provide concrete examples of how to improve the code.
-            """)
-        ])
-
-    def _create_web_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
-        """Create HTML/CSS/Frontend-specific analysis template."""
-        return ChatPromptTemplate.from_messages([
-            SystemMessage(content="Web frontend expert specializing in HTML, CSS, and frontend best practices."),
-            HumanMessage(content="""
-                Analyze these web frontend files:
-                
-                {code_files}
-                
-                # OUTPUT FORMAT
-                {format_instructions}
-                
-                Focus your analysis on:
-                1. Semantic HTML usage
-                2. Accessibility compliance (WCAG)
-                3. Responsive design principles
-                4. CSS organization and specificity
-                5. Performance optimizations
-                6. Asset management
-                7. Cross-browser compatibility
-                8. Modern frontend practices
-                
-                Identify specific issues with file paths and line numbers when possible.
-                Provide concrete examples of how to improve the code.
-            """)
-        ])
+            # Python: lower temp for larger files (more complex)
+            return max(0.1, min(0.5, 0.5 - (file_size / 10000)))
+        elif language in ["javascript", "typescript"]:
+            # JS/TS: moderate temp for medium complexity
+            return max(0.2, min(0.7, 0.5 - (file_size / 20000)))
+        else:
+            # Default: use base temperature
+            return 0.2
     
     def _setup_message_subscriptions(self) -> None:
         """Set up message bus subscriptions if available"""

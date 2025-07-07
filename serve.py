@@ -7,8 +7,40 @@ temperature-optimized agent workflow (0.1-0.4) as an API.
 
 import os
 import sys
-import uvicorn
+import asyncio
+import logging
+from typing import Dict, Any
+
+# Fix Windows console output issues before any other imports
+if sys.platform.startswith('win'):
+    import io
+    import codecs
+    
+    # Ensure stdout and stderr are not closed and use UTF-8 encoding
+    try:
+        # Only wrap if not already wrapped
+        if not isinstance(sys.stdout, io.TextIOWrapper):
+            if hasattr(sys.stdout, 'buffer'):
+                sys.stdout = io.TextIOWrapper(
+                    sys.stdout.buffer,
+                    encoding='utf-8',
+                    errors='replace',
+                    line_buffering=True
+                )
+        if not isinstance(sys.stderr, io.TextIOWrapper):
+            if hasattr(sys.stderr, 'buffer'):
+                sys.stderr = io.TextIOWrapper(
+                    sys.stderr.buffer,
+                    encoding='utf-8',
+                    errors='replace',
+                    line_buffering=True
+                )
+    except Exception as e:
+        # If wrapping fails, continue with original streams
+        pass
+
 import time
+import uvicorn
 import argparse
 from pathlib import Path
 
@@ -21,14 +53,36 @@ try:
     import json
     from monitoring import metrics_collector
 except ImportError as e:
-    print(f"❌ Critical import error: {e}")
-    print("Please ensure all required dependencies are installed:")
-    print("  pip install -r requirements.txt")
+    logging.error(f"Critical import error: {e}")
+    logging.error("Please ensure all required dependencies are installed:")
+    logging.error("  pip install -r requirements.txt")
+    sys.exit(1)
+
+# --- Logging Setup ---
+# Initialize custom logging. This provides more control over format and output.
+
+# initialize_logging(console=True, file=True)
+
+# Use standard logger; Uvicorn will handle the configuration.
+logger = logging.getLogger(__name__)
+
+# --- System Initializer ---
+# This call handles all complex setup (config, memory, RAG).
+# It returns a status report and the initialized memory hub.
+try:
+    from system_initializer import initialize_multi_ai_system
+except ImportError as e:
+    # Use basic error output instead of logging.basicConfig() which conflicts with uvicorn
+    print(f"CRITICAL ERROR: Failed to import system_initializer: {e}", file=sys.stderr)
     sys.exit(1)
 
 def main():
     """Launch the LangServe API server for Multi-AI Development System."""
     start_time = time.time()
+    
+    # Configure logging first - REMOVED basicConfig to allow uvicorn to manage logging
+    # logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+    logger = logging.getLogger(__name__)
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Multi-AI Development System API Server")
@@ -38,63 +92,65 @@ def main():
     parser.add_argument("--port", type=int, default=8001, help="Port to run the server on")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
+
+    # --- Use the centralized system initializer ---
+    logger.info("--- Initializing Full System for API Server ---")
     
-    # Load configuration - similar to main.py but with API-specific defaults
-    api_config = AdvancedWorkflowConfig.load_from_multiple_sources(
-        config_file=args.config_file,
-        args=args
-    )
-    # Apply any API-specific adjustments
-    api_config._validate_and_adjust()
-    api_config.print_detailed_summary()
-    
-    # Initialize global system configuration
-    initialize_system_config(api_config)
-    
-    # Initialize LangSmith for tracing
-    langsmith_enabled = setup_langgraph_server(enable_server=True)
-    
-    if langsmith_enabled:
-        print("✅ LangSmith tracing enabled for API monitoring")
-        # Configure temperature categories for agent specialization
-        os.environ["LANGSMITH_TEMPERATURE_CATEGORIES"] = json.dumps({
-            "code_generation": 0.1,  # Deterministic code output
-            "analytical": 0.2,       # Analysis tasks (tech stack, test validation)
-            "creative": 0.3,         # BRD analysis 
-            "planning": 0.4          # Implementation planning
-        })
-    
-    # Create output directories if they don't exist
-    api_output_dir = os.path.join(os.getcwd(), "output", "api_workflow")
-    os.makedirs(api_output_dir, exist_ok=True)
-    
-    # Ensure static directory exists for examples.html
-    static_dir = os.path.join(os.path.dirname(__file__), "app", "static")
-    os.makedirs(static_dir, exist_ok=True)
-    
-    # Register shutdown handler for metrics saving
-    def save_metrics_on_exit():
-        print("\n📊 Saving API metrics...")
-        metrics_collector.save_metrics_to_file()
-    import atexit
-    atexit.register(save_metrics_on_exit)
+    try:
+        # This single call will load the config, initialize the memory hub,
+        # set up LangSmith, and initialize the RAG manager.
+        status_report = initialize_multi_ai_system()
+        
+        # Check if the system is ready before proceeding
+        if not status_report.get("initialization_summary", {}).get("system_ready", False):
+            logger.error("System initialization failed. Please check the logs. Server cannot start.")
+            sys.exit(1)
+
+        logger.info("--- System Initialization Complete ---")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize system: {e}")
+        sys.exit(1)
     
     # Use port from command line arguments or default
     port = args.port
     
+    # --- FIX: Pass the initialized memory hub to the FastAPI app ---
+    try:
+        logger.info("About to import FastAPI app...")
+        
+        from app.server_refactored import app
+        
+        logger.info("FastAPI app imported successfully")
+        
+        app.state.memory_hub = status_report.get("memory_hub_instance")
+        logger.info("Memory hub assigned to app.state")
+        
+    except Exception as e:
+        logger.error(f"Failed to configure FastAPI app: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        sys.exit(1)
+
     # Start the FastAPI server
-    print(f"🚀 Starting Multi-AI Development System API (startup: {time.time() - start_time:.2f}s)")
-    print(f"📚 API Documentation: http://localhost:{port}/docs")
-    print(f"🔗 API Endpoint: http://localhost:{port}/api/workflow")
-    print(f"📖 Examples page: http://localhost:{port}/static/examples.html")
+    logger.info(f"Starting Multi-AI Development System API (startup: {time.time() - start_time:.2f}s)")
+    logger.info(f"API Documentation: http://localhost:{port}/docs")
+    logger.info(f"API Endpoint: http://localhost:{port}/api/workflow")
+    logger.info(f"Examples page: http://localhost:{port}/static/examples.html")
     
     # The app is imported here to ensure all initialization happens first
-    uvicorn.run(
-        "app.server:app",
-        host="0.0.0.0",
-        port=port,
-        reload=False
-    )
+    try:
+        uvicorn.run(
+            app, # Pass the app instance directly
+            host="0.0.0.0",
+            port=port,
+            reload=False,
+            log_config=None,  # Disable uvicorn's logging configuration
+            access_log=False  # Disable access logging to prevent conflicts
+        )
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

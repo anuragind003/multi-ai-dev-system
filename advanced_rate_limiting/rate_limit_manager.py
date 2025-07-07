@@ -19,18 +19,19 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, auto
 from collections import deque, defaultdict
 
 logger = logging.getLogger(__name__)
 
 
 class RateLimitMode(Enum):
-    """Rate limiting modes with different strategies."""
-    NORMAL = "normal"
-    REDUCED = "reduced"
-    EMERGENCY = "emergency"
-    ADAPTIVE = "adaptive"
+    """Defines the operational modes for the rate limiter."""
+    NORMAL = auto()
+    REDUCED = auto()
+    EMERGENCY = auto()
+    ADAPTIVE = auto()
+    HALT = auto()  # New mode to stop all calls
 
 
 @dataclass
@@ -275,18 +276,23 @@ class RateLimitManager:
             logger.error("Auto-escalated from ADAPTIVE to EMERGENCY mode")
     
     def set_mode(self, mode: RateLimitMode):
-        """Set rate limiting mode."""
-        with self.lock:
-            old_mode = self.current_mode
-            self.current_mode = mode
-            self.mode_changed_at = time.time()
-            
-        logger.info(f"Rate limiting mode changed: {old_mode.value} -> {mode.value}")
+        """Set the rate limiting mode."""
+        if mode in RateLimitMode:
+            if self.current_mode != mode:
+                self.current_mode = mode
+                logger.warning(f"Rate limiting mode changed to {mode.name}")
+        else:
+            logger.error(f"Invalid rate limiting mode: {mode}")
     
     def wait_if_needed(self, attempt: int = 0) -> float:
         """Wait if needed to respect rate limits. Returns actual delay."""
         # Check for auto-escalation
         self._auto_escalate_mode()
+        
+        # Check if the system is in HALT mode
+        if self.current_mode == RateLimitMode.HALT:
+            logger.error("System is in HALT mode due to persistent unrecoverable errors. No new calls will be made.")
+            raise SystemExit("Rate limit quota likely exhausted. System halted.")
         
         # Calculate delays
         backoff_delay = self._calculate_delay(attempt)

@@ -3,6 +3,8 @@ from typing import List, Optional, Dict, Any, Union, ClassVar, Type
 from datetime import datetime
 import json
 
+# --- Core Data Contract Models ---
+
 class Requirement(BaseModel):
     id: str = Field(..., description="Unique identifier for the requirement")
     description: str = Field(..., description="Detailed description of the business requirement")
@@ -12,6 +14,16 @@ class Requirement(BaseModel):
 class BRDAnalysisOutput(BaseModel):
     requirements: List[Requirement] = Field(..., description="List of structured requirements")
     summary: str = Field(..., description="High-level summary of the BRD")
+
+class TechStackComponent(BaseModel):
+    """A generic container for a technology recommendation in the tech stack."""
+    name: str = Field(description="Name of the core technology or framework (e.g., 'React', 'Node.js', 'PostgreSQL').")
+    language: Optional[str] = Field(None, description="The primary programming language, if applicable (e.g., 'Python', 'JavaScript').")
+    reasoning: str = Field(description="Justification for why this component was chosen for the project.")
+    key_libraries: Optional[List[str]] = Field(default_factory=list, description="A list of key libraries or tools that complement this component.")
+    pros: Optional[List[str]] = Field(default_factory=list, description="List of advantages for this tech component.")
+    cons: Optional[List[str]] = Field(default_factory=list, description="List of disadvantages for this tech component.")
+    selected: bool = Field(False, description="Indicates if this component was selected by the user.")
 
 class TechOption(BaseModel):
     name: str = Field(..., description="Name of the technology/framework")
@@ -223,6 +235,18 @@ class MajorSystemComponent(BaseModel):
 class MajorSystemComponentOutput(BaseModel):
     components: List[MajorSystemComponent] = Field(..., description="A list of the major system components identified from the BRD.")
 
+class QualityAssessment(BaseModel):
+    """Assessment of BRD quality metrics."""
+    clarity_score: float = Field(description="Clarity score from 1-10")
+    completeness_score: float = Field(description="Completeness score from 1-10")
+    consistency_score: float = Field(description="Consistency score from 1-10")
+    recommendations: List[str] = Field(description="Recommendations to improve BRD quality", default_factory=list)
+
+class GapAnalysis(BaseModel):
+    """Analysis of gaps in the BRD."""
+    identified_gaps: List[str] = Field(description="Specific gaps or missing information identified", default_factory=list)
+    recommendations_for_completion: List[str] = Field(description="Recommendations to address the gaps", default_factory=list)
+
 class BRDRequirementsAnalysis(BaseModel):
     """Comprehensive BRD analysis output model with structured requirements and metadata."""
     project_name: str = Field(description="Name of the project extracted from the BRD")
@@ -231,12 +255,16 @@ class BRDRequirementsAnalysis(BaseModel):
     target_audience: List[str] = Field(description="List of target users or audience for the project", default_factory=list)
     business_context: str = Field(description="Business context and background information")
     requirements: List[Dict[str, Any]] = Field(description="List of structured requirements extracted from the BRD", default_factory=list)
+    functional_requirements: List[str] = Field(description="List of functional requirements extracted from the BRD", default_factory=list)
+    non_functional_requirements: List[str] = Field(description="List of non-functional requirements extracted from the BRD", default_factory=list)
+    stakeholders: List[str] = Field(description="List of project stakeholders", default_factory=list)
+    success_criteria: List[str] = Field(description="List of success criteria for the project", default_factory=list)
     constraints: List[str] = Field(description="List of constraints identified in the BRD", default_factory=list)
     assumptions: List[str] = Field(description="List of assumptions identified in the BRD", default_factory=list)
     risks: List[str] = Field(description="List of risks identified in the BRD", default_factory=list)
     domain_specific_details: Dict[str, Any] = Field(description="Domain-specific details and requirements", default_factory=dict)
-    quality_assessment: Optional[Dict[str, Any]] = Field(description="Assessment of BRD quality metrics", default=None)
-    gap_analysis: Optional[Dict[str, Any]] = Field(description="Analysis of gaps in the BRD", default=None)
+    quality_assessment: Optional[QualityAssessment] = Field(description="Assessment of BRD quality metrics", default=None)
+    gap_analysis: Optional[GapAnalysis] = Field(description="Analysis of gaps in the BRD", default=None)
     
     model_config = {
         "extra": "allow",  # Allow extra fields for flexibility
@@ -297,7 +325,234 @@ class TechStackSynthesisOutput(BaseModel):
             estimated_complexity="Medium"  # Default to medium if not specified
         )
 
-# Planning Tool Input Models
+# --- System Design Output Models (more detailed) ---
+# These are placed here to ensure they are defined before ComprehensiveSystemDesignOutput
+class ArchitecturePatternOutput(BaseModel):
+    """Output schema for architecture pattern selection."""
+    pattern: str = Field(description="The selected architecture pattern name")
+    justification: str = Field(description="Detailed justification for selecting this pattern")
+    key_benefits: List[str] = Field(
+        description="Key benefits of the selected pattern for this project",
+        default_factory=list
+    )
+    potential_drawbacks: List[str] = Field(
+        description="Potential drawbacks or challenges of the selected pattern",
+        default_factory=list
+    )
+
+class SystemComponentOutput(BaseModel):
+    """Model for a single system component."""
+    name: str = Field(description="Name of the system component")
+    description: Optional[str] = Field(None, description="Brief description of the component's purpose")
+    category: Optional[str] = Field(None, description="Category of the component (frontend, backend, etc.)")
+    technologies: List[str] = Field(default_factory=list, description="Key technologies used in this component")
+    dependencies: List[str] = Field(default_factory=list, description="Other components this component depends on")
+    responsibilities: List[str] = Field(default_factory=list, description="Key responsibilities of this component")
+    design_patterns: List[str] = Field(default_factory=list, description="Design patterns applied to this component")
+
+class InternalSubComponent(BaseModel):
+    """Model for an internal sub-component of a system component."""
+    name: str = Field(description="Name of the internal sub-component")
+    responsibility: str = Field(description="Main responsibility of this sub-component")
+    technologies: List[str] = Field(default_factory=list, description="Technologies used by this sub-component")
+
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):
+        # Allow direct string input, converting it to a dict for validation
+        if isinstance(obj, str):
+            obj = {"name": obj, "responsibility": f"Handles {obj} related logic"}
+        
+        # If it's a dict but 'responsibility' is missing, try to infer or set default
+        if isinstance(obj, dict) and "responsibility" not in obj:
+            obj["responsibility"] = f"Manages {obj.get('name', 'unknown')} functionality"
+        
+        return super().model_validate(obj, *args, **kwargs)
+
+class ComponentDesignOutput(BaseModel):
+    """Output schema for component structure design."""
+    name: str = Field(description="Name of the component")
+    responsibilities: List[str] = Field(
+        description="List of main responsibilities of the component",
+        default_factory=list
+    )
+    internal_components: List[InternalSubComponent] = Field(
+        description="List of internal sub-components",
+        default_factory=list
+    )
+    dependencies: List[str] = Field(
+        description="List of other components this component depends on",
+        default_factory=list
+    )
+    design_patterns: List[str] = Field(
+        description="List of design patterns applied to this component",
+        default_factory=list
+    )
+    
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):
+        # Custom validation logic to handle cases where 'internal_components' might be a string
+        if isinstance(obj, dict) and 'internal_components' in obj and isinstance(obj['internal_components'], str):
+            try:
+                # Attempt to parse the string as JSON
+                obj['internal_components'] = json.loads(obj['internal_components'])
+            except json.JSONDecodeError:
+                # If it's not valid JSON, treat it as a single component name
+                obj['internal_components'] = [{'name': obj['internal_components'], 'responsibility': f"Handles {obj['internal_components']} logic"}]
+        
+        # Ensure that each item in internal_components is a dict suitable for InternalSubComponent
+        if isinstance(obj, dict) and 'internal_components' in obj and isinstance(obj['internal_components'], list):
+            obj['internal_components'] = [
+                item if isinstance(item, dict) else {'name': item, 'responsibility': f"Handles {item} logic"} 
+                for item in obj['internal_components']
+            ]
+            
+        return super().model_validate(obj, *args, **kwargs)
+
+class TableField(BaseModel):
+    """Model for a field in a database table."""
+    name: str = Field(description="Name of the field")
+    type: str = Field(description="Data type of the field")
+    constraints: List[str] = Field(default_factory=list, description="Constraints on the field (e.g., 'PRIMARY KEY', 'NOT NULL', 'UNIQUE')")
+    description: Optional[str] = Field(None, description="Description of the field's purpose")
+
+class DatabaseTable(BaseModel):
+    """Model for a database table."""
+    name: str = Field(description="Name of the table")
+    purpose: str = Field(description="Purpose of this table in the system")
+    fields: List[TableField] = Field(
+        description="Fields in this table",
+        default_factory=list
+    )
+    relationships: List[Dict[str, str]] = Field(
+        description="Relationships with other tables (e.g., [{'type': 'one-to-many', 'target_table': 'users', 'on': 'user_id'}])",
+        default_factory=list
+    )
+
+class DataModelOutput(BaseModel):
+    """Output schema for data model design."""
+    schema_type: str = Field(description="Type of database schema (relational, document, etc.)")
+    tables: List[DatabaseTable] = Field(
+        description="Tables or collections in the data model",
+        default_factory=list
+    )
+    relationships: List[Dict[str, str]] = Field(
+        description="Overall relationships between main entities, if not covered by table-specific relationships",
+        default_factory=list
+    )
+    justification: Optional[str] = Field(None, description="Justification for the chosen data model schema type.")
+
+class ApiEndpoint(BaseModel):
+    """Model for a single API endpoint."""
+    method: str = Field(description="HTTP method (GET, POST, etc.)")
+    path: str = Field(description="URL path for the endpoint")
+    purpose: str = Field(description="Purpose of this endpoint")
+    parameters: List[Dict[str, str]] = Field(
+        description="Parameters accepted by this endpoint (name, type, description)",
+        default_factory=list
+    )
+    response: Dict[str, Any] = Field(
+        description="Expected response structure and examples",
+        default_factory=dict
+    )
+    authentication_required: bool = Field(description="Whether authentication is required for this endpoint")
+    rate_limiting_applied: bool = Field(default=False, description="Whether rate limiting is applied to this endpoint")
+
+class ApiEndpointsOutput(BaseModel):
+    """Output schema for API endpoints design."""
+    style: str = Field(description="API style (REST, GraphQL, etc.)")
+    base_url: str = Field(description="Base URL for the API")
+    authentication: str = Field(description="Authentication method (e.g., OAuth2, JWT, API Key)")
+    endpoints: List[ApiEndpoint] = Field(
+        description="List of designed API endpoints",
+        default_factory=list
+    )
+    error_handling: str = Field(description="General error handling strategy for the API")
+    rate_limiting_strategy: Optional[str] = Field(None, description="Overall rate limiting strategy for the API")
+
+class SecurityMeasure(BaseModel):
+    """Model for a security measure."""
+    category: str = Field(description="Category of the security measure (e.g., 'Authentication', 'Authorization', 'Data Protection', 'Input Validation')")
+    implementation: str = Field(description="Details on how this security measure will be implemented")
+    mitigation: Optional[str] = Field(None, description="What specific threat this measure mitigates")
+    priority: str = Field(default="Medium", description="Priority of this security measure (High, Medium, Low)")
+
+class SecurityArchitectureOutput(BaseModel):
+    """Output schema for security architecture design."""
+    authentication_method: str = Field(description="The primary authentication method used (e.g., 'OAuth 2.0', 'JWT', 'API Keys', 'Session-based')")
+    authorization_strategy: str = Field(description="The authorization strategy (e.g., 'RBAC', 'ABAC', 'ACLs')")
+    data_encryption: Dict[str, str] = Field(
+        description="Details on data encryption at rest and in transit",
+        default_factory=dict
+    )
+    security_measures: List[SecurityMeasure] = Field(
+        description="List of key security measures and controls to be implemented",
+        default_factory=list
+    )
+    vulnerability_mitigation_strategies: List[str] = Field(default_factory=list, description="General strategies for mitigating common web vulnerabilities (e.g., XSS, SQL Injection)")
+    compliance_standards: List[str] = Field(default_factory=list, description="Relevant compliance standards (e.g., GDPR, HIPAA, PCI DSS)")
+
+class DevelopmentPhaseModel(BaseModel):
+    """Model for a development phase."""
+    name: str = Field(description="Name of the phase")
+    description: str = Field(description="Description of what happens in this phase")
+    priority: str = Field(description="Priority of this phase (High, Medium, Low)")
+    dependencies: List[str] = Field(
+        description="Phases that must be completed before this one",
+        default_factory=list
+    )
+    tasks: List[str] = Field(
+        description="Key tasks within this phase",
+        default_factory=list
+    )
+    estimated_duration: str = Field(description="Estimated duration for this phase (e.g., '2 weeks', '3 days')")
+
+class CodeQualityDimensionScore(BaseModel):
+    """Model for a design quality dimension score."""
+    score: float = Field(description="Score from 1-10")
+    justification: str = Field(description="Justification for this score")
+
+class DesignQualityOutput(BaseModel):
+    """Output schema for design quality evaluation."""
+    overall_score: float = Field(description="Overall design quality score from 1-10")
+    dimension_scores: Dict[str, CodeQualityDimensionScore] = Field(
+        description="Scores for individual dimensions",
+        default_factory=dict
+    )
+    strengths: List[str] = Field(
+        description="Strengths of the design",
+        default_factory=list
+    )
+    improvement_opportunities: List[Dict[str, str]] = Field(
+        description="Opportunities for improvement",
+        default_factory=list
+    )
+
+class ComprehensiveSystemDesignOutput(BaseModel):
+    """
+    A comprehensive, single-object output for the system design phase.
+    """
+    architecture: ArchitecturePatternOutput = Field(description="The selected architecture pattern and justification.")
+    components: List[SystemComponentOutput] = Field(description="A list of all identified system components and their details.")
+    data_model: DataModelOutput = Field(description="The complete database schema design.")
+    api_endpoints: ApiEndpointsOutput = Field(description="The full set of designed API endpoints.")
+    security: SecurityArchitectureOutput = Field(description="A summary of the security architecture.")
+    scalability_and_performance: Dict[str, Any] = Field(default_factory=dict, description="Strategies for scalability and performance.")
+    deployment_strategy: Dict[str, Any] = Field(default_factory=dict, description="The proposed deployment strategy and environment.")
+    monitoring_and_logging: Dict[str, Any] = Field(default_factory=dict, description="Monitoring and logging strategies.")
+    error_handling_strategy: str = Field(description="Overall error handling strategy for the system.")
+    development_phases_overview: List[DevelopmentPhaseModel] = Field(default_factory=list, description="An overview of the development phases derived from the design.")
+    key_risks: List[str] = Field(default_factory=list, description="Key risks identified in the system design.")
+    design_justification: str = Field(description="Overall justification for the chosen design decisions.")
+    data_flow: str = Field(default="", description="A description of the main data flow through the system.") # Added data_flow field
+
+class MultipleComponentStructuresOutput(BaseModel):
+    """Output schema for designing multiple component structures."""
+    designed_components: List[ComponentDesignOutput] = Field(
+        description="List of designed components",
+        default_factory=list
+    )
+
+# --- Planning Tool Input Models ---
 class ProjectAnalysisSummaryInput(BaseModel):
     """Input schema for getting a summary of project analysis."""
     project_analysis_json: str = Field(
@@ -405,7 +660,7 @@ class WrappedToolInput(BaseModel):
         description="Optional additional context for the analysis"
     )
 
-# Planning Tool Output Models
+# --- Planning Tool Output Models ---
 class ProjectAnalysisSummaryOutput(BaseModel):
     """Output schema for project analysis summary."""
     complexity_score: int = Field(
@@ -420,16 +675,6 @@ class ProjectAnalysisSummaryOutput(BaseModel):
     )
     summary: str = Field(
         description="Concise summary of the project analysis"
-    )
-
-class MajorSystemComponentOutput(BaseModel):
-    """Model for a single system component."""
-    name: str = Field(
-        description="Name of the system component"
-    )
-    category: Optional[str] = Field(
-        None,
-        description="Category of the component (frontend, backend, etc.)"
     )
 
 class MajorSystemComponentsOutput(BaseModel):
@@ -582,7 +827,7 @@ class ComprehensivePlanOutput(BaseModel):
         description="The complete implementation plan"
     )
 
-# System Design Tool Input Models
+# --- System Design Tool Input Models ---
 class ProjectRequirementsSummaryInput(BaseModel):
     """Input schema for summarizing project requirements."""
     brd_analysis_json: Union[str, dict, None] = Field(
@@ -836,320 +1081,8 @@ class DesignQualityEvaluationInput(BaseModel):
         description="JSON string containing the complete system design"
     )
 
-# System Design Tool Output Models (more detailed)
-class ProjectRequirementsSummaryOutput(BaseModel):
-    """Output schema for project requirements summary."""
-    project_name: str = Field(description="The name of the project")
-    summary: str = Field(description="A concise summary of the project's main goals and requirements")
-    technical_requirements: List[str] = Field(
-        description="List of key technical requirements extracted from the BRD",
-        default_factory=list
-    )
-    functional_requirements: List[str] = Field(
-        description="List of key functional requirements extracted from the BRD",
-        default_factory=list
-    )
-    constraints: List[str] = Field(
-        description="List of identified constraints for the project",
-        default_factory=list
-    )
-
-class ArchitecturePatternOutput(BaseModel):
-    """Output schema for architecture pattern selection."""
-    pattern: str = Field(description="The selected architecture pattern name")
-    justification: str = Field(description="Detailed justification for selecting this pattern")
-    key_benefits: List[str] = Field(
-        description="Key benefits of the selected pattern for this project",
-        default_factory=list
-    )
-    potential_drawbacks: List[str] = Field(
-        description="Potential drawbacks or challenges of the selected pattern",
-        default_factory=list
-    )
-
-class SystemComponentOutput(BaseModel):
-    """Model for a single system component."""
-    name: str = Field(description="Name of the system component")
-    description: Optional[str] = Field(None, description="Brief description of the component's purpose")
-    category: Optional[str] = Field(None, description="Category of the component (frontend, backend, etc.)")
-
-class SystemComponentsOutput(BaseModel):
-    """Output schema for system components identification."""
-    components: List[SystemComponentOutput] = Field(
-        description="List of identified system components",
-        default_factory=list
-    )
-
-class InternalSubComponent(BaseModel):
-    """Model for an internal sub-component of a system component."""
-    name: str = Field(description="Name of the internal sub-component")
-    responsibility: str = Field(description="Main responsibility of this sub-component")
-    
-    @classmethod
-    def model_validate(cls, obj, *args, **kwargs):
-        """Handle common validation issues with internal components"""
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        try:
-            # Handle cases where responsibility might be under different keys
-            if isinstance(obj, dict):
-                if "responsibility" not in obj and "responsibilities" in obj:
-                    resps = obj["responsibilities"]
-                    if isinstance(resps, list) and resps:
-                        obj["responsibility"] = resps[0]
-                    elif isinstance(resps, str):
-                        obj["responsibility"] = resps
-                        
-                # Ensure default value if missing
-                if "responsibility" not in obj or not obj["responsibility"]:
-                    obj["responsibility"] = f"Handles {obj['name']} functionality"
-                    
-            return super().model_validate(obj, *args, **kwargs)
-        except Exception as e:
-            logger.warning(f"Error validating InternalSubComponent: {e}")
-            return cls(
-                name=obj["name"] if isinstance(obj, dict) and "name" in obj else "UnnamedSubcomponent",
-                responsibility="Core functionality"
-            )
-
-class ComponentDesignOutput(BaseModel):
-    """Output schema for component structure design."""
-    name: str = Field(description="Name of the component")
-    responsibilities: List[str] = Field(
-        description="List of main responsibilities of the component",
-        default_factory=list
-    )
-    internal_components: List[InternalSubComponent] = Field(
-        description="List of internal sub-components",
-        default_factory=list
-    )
-    dependencies: List[str] = Field(
-        description="List of other components this component depends on",
-        default_factory=list
-    )
-    design_patterns: List[str] = Field(
-        description="List of design patterns applicable to this component",
-        default_factory=list
-    )
-    
-    @classmethod
-    def model_validate(cls, obj, *args, **kwargs):
-        """
-        Extended validation to handle various input formats and ensure all fields meet requirements.
-        """
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        # Handle dict input format
-        if isinstance(obj, dict):
-            # Ensure name is present
-            if "name" not in obj or not obj["name"]:
-                if kwargs.get("context", {}).get("component_name"):
-                    obj["name"] = kwargs["context"]["component_name"]
-                else:
-                    obj["name"] = "UnnamedComponent"
-                logger.warning(f"Added missing component name: {obj['name']}")
-                
-            # Fix dependencies field
-            if "dependencies" in obj:
-                fixed_deps = []
-                for dep in obj["dependencies"]:
-                    if isinstance(dep, dict) and "name" in dep:
-                        fixed_deps.append(dep["name"])
-                    elif isinstance(dep, str):
-                        fixed_deps.append(dep)
-                obj["dependencies"] = fixed_deps
-                
-            # Ensure internal_components meet the required format
-            if "internal_components" in obj and obj["internal_components"]:
-                valid_components = []
-                for comp in obj["internal_components"]:
-                    if isinstance(comp, dict):
-                        if "name" in comp and ("responsibility" in comp or "responsibilities" in comp):
-                            # Handle either responsibility or responsibilities field
-                            valid_comp = {"name": comp["name"]}
-                            if "responsibility" in comp:
-                                valid_comp["responsibility"] = comp["responsibility"]
-                            else:
-                                # Take the first responsibility if it's a list
-                                resps = comp["responsibilities"]
-                                valid_comp["responsibility"] = resps[0] if isinstance(resps, list) and resps else "Main responsibility"
-                            valid_components.append(valid_comp)
-                obj["internal_components"] = valid_components
-        
-        # Call parent validation
-        try:
-            return super().model_validate(obj, *args, **kwargs)
-        except Exception as e:
-            logger.error(f"Validation error in ComponentDesignOutput: {e}")
-            # Return minimal valid object
-            return cls(
-                name=obj["name"] if isinstance(obj, dict) and "name" in obj else "UnnamedComponent",
-                responsibilities=["Main component functionality"],
-                internal_components=[{"name": "Core", "responsibility": "Core functionality"}],
-                dependencies=[],
-                design_patterns=["Repository"]
-            )
-
-class TableField(BaseModel):
-    """Model for a field in a database table."""
-    name: str = Field(description="Name of the field")
-    type: str = Field(description="Data type of the field")
-    constraints: List[str] = Field(
-        description="Constraints applied to this field",
-        default_factory=list
-    )
-
-class DatabaseTable(BaseModel):
-    """Model for a database table."""
-    name: str = Field(description="Name of the table")
-    purpose: str = Field(description="Purpose of this table in the system")
-    fields: List[TableField] = Field(
-        description="Fields in this table",
-        default_factory=list
-    )
-    relationships: List[Dict[str, str]] = Field(
-        description="Relationships with other tables",
-        default_factory=list
-    )
-
-class DataModelOutput(BaseModel):
-    """Output schema for data model design."""
-    schema_type: str = Field(description="Type of database schema (relational, document, etc.)")
-    tables: List[DatabaseTable] = Field(
-        description="Tables or collections in the data model",
-        default_factory=list
-    )
-    relationships: List[Dict[str, str]] = Field(
-        description="Relationships between tables or collections",
-        default_factory=list
-    )
-
-class ApiEndpoint(BaseModel):
-    """Model for a single API endpoint."""
-    method: str = Field(description="HTTP method (GET, POST, etc.)")
-    path: str = Field(description="URL path for the endpoint")
-    purpose: str = Field(description="Purpose of this endpoint")
-    parameters: List[Dict[str, str]] = Field(
-        description="Parameters accepted by this endpoint",
-        default_factory=list
-    )
-    response: Dict[str, Any] = Field(
-        description="Response structure",
-        default_factory=dict
-    )
-    authentication_required: bool = Field(description="Whether authentication is required")
-
-class ApiEndpointsOutput(BaseModel):
-    """Output schema for API endpoints design."""
-    style: str = Field(description="API style (REST, GraphQL, etc.)")
-    base_url: str = Field(description="Base URL for the API")
-    authentication: str = Field(description="Authentication method")
-    endpoints: List[ApiEndpoint] = Field(
-        description="List of API endpoints",
-        default_factory=list
-    )
-
-class SecurityMeasure(BaseModel):
-    """Model for a security measure."""
-    category: str = Field(description="Category of the security measure")
-    implementation: str = Field(description="Implementation details")
-    mitigation: Optional[str] = Field(None, description="What threat this measure mitigates")
-
-class SecurityArchitectureOutput(BaseModel):
-    """Output schema for security architecture design."""
-    authentication_method: str = Field(description="Authentication method used")
-    authorization_strategy: str = Field(description="Authorization strategy")
-    data_encryption: Dict[str, str] = Field(
-        description="Data encryption methods",
-        default_factory=dict
-    )
-    security_measures: List[SecurityMeasure] = Field(
-        description="List of security measures",
-        default_factory=list
-    )
-
-class DevelopmentPhaseModel(BaseModel):
-    """Model for a development phase."""
-    name: str = Field(description="Name of the phase")
-    description: str = Field(description="Description of what happens in this phase")
-    priority: str = Field(description="Priority of this phase (High, Medium, Low)")
-    dependencies: List[str] = Field(
-        description="Phases that must be completed before this one",
-        default_factory=list
-    )
-    tasks: List[str] = Field(
-        description="Tasks to be completed in this phase",
-        default_factory=list
-    )
-
-class SystemDesignOutput(BaseModel):
-    """Output schema for comprehensive system design."""
-    architecture_overview: Dict[str, str] = Field(
-        description="Overview of the architecture pattern and approach",
-        default_factory=dict
-    )
-    modules: List[Dict[str, Any]] = Field(
-        description="List of system modules/components with details",
-        default_factory=list
-    )
-    data_model: Dict[str, Any] = Field(
-        description="Data model details",
-        default_factory=dict
-    )
-    api_design: Dict[str, Any] = Field(
-        description="API design details",
-        default_factory=dict
-    )
-    security_architecture: Dict[str, Any] = Field(
-        description="Security architecture details",
-        default_factory=dict
-    )
-    integration_points: List[str] = Field(
-        description="Integration points in the system",
-        default_factory=list
-    )
-    deployment_architecture: Dict[str, Any] = Field(
-        description="Deployment architecture details",
-        default_factory=dict
-    )
-    development_phases: List[DevelopmentPhaseModel] = Field(
-        description="Planned development phases",
-        default_factory=list
-    )
-    metadata: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Metadata about the design generation"
-    )
-
-class DesignQualityDimensionScore(BaseModel):
-    """Model for a design quality dimension score."""
-    score: float = Field(description="Score from 1-10")
-    justification: str = Field(description="Justification for this score")
-
-class DesignQualityOutput(BaseModel):
-    """Output schema for design quality evaluation."""
-    overall_score: float = Field(description="Overall design quality score from 1-10")
-    dimension_scores: Dict[str, DesignQualityDimensionScore] = Field(
-        description="Scores for individual dimensions",
-        default_factory=dict
-    )
-    strengths: List[str] = Field(
-        description="Strengths of the design",
-        default_factory=list
-    )
-    improvement_opportunities: List[Dict[str, str]] = Field(
-        description="Opportunities for improvement",
-        default_factory=list
-    )
-
-class MultipleComponentStructuresOutput(BaseModel):
-    """Output schema for designing multiple component structures."""
-    designed_components: List[ComponentDesignOutput] = Field(
-        description="List of designed components",
-        default_factory=list
-    )
+# --- System Design Tool Output Models (more detailed) ---
+# The ComprehensiveSystemDesignOutput and its dependencies were moved earlier in the file.
 
 # Tech stack tool input models
 class TechnicalRequirementsSummaryInput(BaseModel):
@@ -1273,7 +1206,7 @@ class TechStackSynthesisInput(BaseModel):
             if any(key.endswith('_recommendation') for key in data.keys()):
                 logger.info("Found *_recommendation fields directly in input")
                 validated = self.validate_input(data)
-                super().__init__(**validated) 
+                super().__init__(**validated)
                 return
                     
             # Default init for all other cases
@@ -1842,3 +1775,59 @@ class TimelineEstimationOutput(BaseModel):
     milestones: List[Dict[str, Any]] = Field(description="Project milestones", default_factory=list)
     timeline_risks: List[Dict[str, Any]] = Field(description="Timeline risks", default_factory=list)
     metadata: Dict[str, Any] = Field(description="Timeline metadata", default_factory=dict)
+
+class ComprehensiveImplementationPlanOutput(BaseModel):
+    """
+    A comprehensive, single-object output for the implementation planning phase.
+    """
+    plan: ImplementationPlan = Field(description="The detailed implementation plan.")
+    summary: str = Field(description="A high-level summary of the plan.")
+    metadata: PlanMetadata = Field(description="Metadata about the plan generation.")
+
+class DevelopmentPhase(BaseModel):
+    name: str = Field(description="The name of the development phase (e.g., Backend API, Frontend UI).")
+    description: str = Field(description="A detailed description of what will be built in this phase.")
+    deliverables: List[str] = Field(description="A list of specific outcomes or files to be produced.")
+    estimated_duration_hours: float = Field(default=0.0, description="Estimated time in hours to complete the phase.")
+
+class WorkItem(BaseModel):
+    """A single, actionable work item for a specialist agent."""
+    id: str = Field(description="A unique identifier for the work item (e.g., 'BE-001', 'FE-001').")
+    description: str = Field(description="A clear and concise description of the task for a developer agent.")
+    dependencies: List[str] = Field(default_factory=list, description="A list of other work item IDs that must be completed first.")
+    estimated_time: str = Field(..., description="Estimated time to complete the work item (e.g., '2 hours', '1 day').") # Added estimated_time
+    agent_role: str = Field(description="The role of the specialist agent required (e.g., 'backend_developer', 'frontend_developer', 'database_specialist').")
+    acceptance_criteria: List[str] = Field(description="A checklist of criteria that must be met for the task to be considered complete. Used to guide unit test generation.")
+    status: str = Field(default="pending", description="The current status of the work item (e.g., pending, in_progress, completed, failed).")
+    code_files: List[str] = Field(default_factory=list, description="A list of file paths that are expected to be created or modified by this work item.")
+
+class WorkItemBacklog(BaseModel):
+    """A comprehensive backlog of work items representing the entire project plan."""
+    work_items: List[WorkItem] = Field(description="The full list of work items required to complete the project.")
+    summary: str = Field(description="A high-level summary of the project's development plan and strategy.")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata about the plan, such as estimated total time, risk assessment, etc.")
+
+# New model to store the selected tech stack by the user
+class SelectedTechStack(BaseModel):
+    frontend: Optional[TechStackComponent] = Field(None, description="The user's selected frontend technology.")
+    backend: Optional[TechStackComponent] = Field(None, description="The user's selected backend technology.")
+    database: Optional[TechStackComponent] = Field(None, description="The user's selected database technology.")
+    cloud: Optional[TechStackComponent] = Field(None, description="The user's selected cloud platform.")
+    architecture: Optional[ArchitecturePatternOption] = Field(None, description="The user's selected architecture pattern.")
+    tools: Optional[List[TechStackComponent]] = Field(default_factory=list, description="The user's selected additional tools.")
+    risks: Optional[List[TechRisk]] = Field(default_factory=list, description="Risks associated with the selected stack.")
+
+class ComprehensiveTechStackOutput(BaseModel):
+    """
+    Defines the complete, structured output for the comprehensive tech stack recommendation.
+    This ensures a predictable and reliable response from the LLM.
+    """
+    frontend_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for frontend frameworks and languages.")
+    backend_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for backend frameworks and languages.")
+    database_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for database technologies.")
+    cloud_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for cloud platforms.")
+    architecture_options: List[ArchitecturePatternOption] = Field(default_factory=list, description="Ranked options for architecture patterns.")
+    tool_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for additional tools.")
+    risks: List[TechRisk] = Field(default_factory=list, description="Potential risks associated with the recommended stack.")
+    synthesis: Optional[TechStackSynthesisOutput] = Field(None, description="The initial synthesized tech stack recommendation (can be null if options are provided). ")
+    selected_stack: Optional[SelectedTechStack] = Field(None, description="The user's final selection of the tech stack components.")

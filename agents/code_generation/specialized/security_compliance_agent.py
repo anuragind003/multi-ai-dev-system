@@ -17,6 +17,7 @@ from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
 from tools.code_generation_utils import parse_llm_output_into_files
+from models.data_contracts import WorkItem, CodeGenerationOutput, GeneratedFile
 
 import logging
 logger = logging.getLogger(__name__)
@@ -395,4 +396,65 @@ Provide the files in the specified format."""
         
         return self.generate_security_infrastructure(
             domain, language, framework, security_level, compliance_requirements, features, scale
-        ) 
+        )
+
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Applies security and compliance requirements to the codebase for a single work item.
+        """
+        logger.info(f"SecurityComplianceAgent starting work item: {work_item.id}")
+
+        all_files = []
+        for completed_item in state.get("completed_work_items", []):
+            code_gen_result = completed_item.get("code_generation_result", {})
+            all_files.extend(code_gen_result.get("generated_files", []))
+        
+        project_context_files = {f['path']: f['content'] for f in all_files}
+
+        prompt = self._create_work_item_prompt(work_item, project_context_files, state)
+
+        response = self.llm.invoke(prompt)
+        content = response.content if hasattr(response, 'content') else str(response)
+        
+        modified_files = parse_llm_output_into_files(content)
+
+        return CodeGenerationOutput(
+            generated_files=[FileOutput(**f) for f in modified_files],
+            summary=f"Applied security review for work item {work_item.id}, modifying {len(modified_files)} files."
+        )
+
+    def _create_work_item_prompt(self, work_item: WorkItem, project_files: Dict[str, str], state: Dict[str, Any]) -> str:
+        
+        files_to_review_str = ""
+        # The work item's acceptance criteria should list the files to review/modify.
+        files_to_review_paths = work_item.acceptance_criteria
+        
+        for path in files_to_review_paths:
+            if path in project_files:
+                files_to_review_str += f"### FILE: {path}\n```\n{project_files[path]}\n```\n\n"
+
+        if not files_to_review_str:
+            return "No files found to review for this security work item."
+
+        return f"""
+        You are an expert cybersecurity architect. Your task is to review and modify the provided code to meet the security requirements outlined in the work item.
+
+        **Work Item: {work_item.id}**
+        - **Description:** {work_item.description}
+
+        **Files to Review and Modify:**
+        {files_to_review_str}
+
+        **Instructions:**
+        - Review the files for security vulnerabilities related to the work item's description.
+        - Modify the files to patch vulnerabilities and add the required security features.
+        - Return the COMPLETE, updated content of every file you modify.
+        - If you do not need to modify a file, do not include it in your output.
+        - Use the multi-file output format.
+
+        CRITICAL OUTPUT FORMAT - FOLLOW EXACTLY:
+        ### FILE: path/to/modified/file.ext
+        ```filetype
+        // The *full*, updated content of the file goes here.
+        ```
+        """ 

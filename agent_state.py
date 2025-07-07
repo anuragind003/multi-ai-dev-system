@@ -21,6 +21,7 @@ class AgentState(TypedDict, total=False):
     tech_stack_recommendation: Dict[str, Any]
     system_design: Dict[str, Any]
     implementation_plan: Dict[str, Any]
+    code_generation_output: Dict[str, Any]
 
     # === Consolidated Results for the Main "Generate -> Review" Loop ===
     # Holds the CodeGenerationOutput from the most recent generator agent
@@ -31,7 +32,17 @@ class AgentState(TypedDict, total=False):
     code_review_feedback: Optional[Dict[str, Any]]
 
     # Holds the final TestValidationOutput
-    test_validation_result: Dict[str, Any]    # === Phase Iteration Control ===
+    test_validation_result: Dict[str, Any]
+
+    # --- Human-in-the-loop and Resumption Flags ---
+    human_decision: Optional[str]               # The decision from the user (e.g., "proceed")
+    revision_feedback: Optional[Dict[str, Any]] # Detailed feedback if the user requests revision
+    resume_from_approval: bool                  # Flag to indicate the workflow is resuming after a pause
+    current_approval_stage: Optional[str]       # Name of the stage being approved (e.g., "brd_analysis")
+    completed_stages: List[str]                 # List of stages that have been successfully approved
+    human_approval_request: Optional[Dict[str, Any]]  # Standardized human approval request payload
+
+    # === Phase Iteration Control ===
     current_phase_name: Optional[str]
     current_phase_type: Optional[str]
     current_phase_index: int
@@ -42,7 +53,9 @@ class AgentState(TypedDict, total=False):
     database_revision_count: int
     backend_revision_count: int
     frontend_revision_count: int
-    integration_revision_count: int# === Final Output & Metadata ===
+    integration_revision_count: int
+
+    # === Final Output & Metadata ===
     errors: List[Dict[str, Any]]
     workflow_summary: Dict[str, Any]
     workflow_id: str
@@ -78,6 +91,13 @@ def create_initial_agent_state(
         code_review_feedback=None,
         test_validation_result={},
         
+        # Human-in-the-loop state
+        human_decision=None,
+        revision_feedback={},
+        resume_from_approval=False,
+        current_approval_stage=None,
+        completed_stages=[],
+
         # Phase control
         current_phase_index=0,
         current_phase_name=None,
@@ -183,6 +203,7 @@ class StateFields(str, Enum):
     TECH_STACK_RECOMMENDATION = "tech_stack_recommendation"
     SYSTEM_DESIGN = "system_design"
     IMPLEMENTATION_PLAN = "implementation_plan"
+    CODE_GENERATION_OUTPUT = "code_generation_output"
 
     # Consolidated Loop Results
     CODE_GENERATION_RESULT = "code_generation_result"

@@ -26,6 +26,7 @@ from agents.code_generation.specialized.monitoring_observability_agent import Mo
 from agents.code_generation.specialized.testing_qa_agent import TestingQAAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+from models.data_contracts import WorkItem, CodeGenerationOutput, GeneratedFile
 
 import logging
 logger = logging.getLogger(__name__)
@@ -177,6 +178,49 @@ class BackendOrchestratorAgent(BaseCodeGeneratorAgent):
             rag_retriever=self.rag_retriever,
             message_bus=self.message_bus
         )
+    
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Executes a single work item by delegating to core and testing agents.
+
+        This method adapts the orchestrator to the new WorkItem-based workflow.
+        """
+        logger.info(f"Backend Orchestrator starting work item: {work_item.id} - {work_item.description}")
+
+        # Consolidate context for the specialist agents
+        context = {
+            "work_item": work_item.model_dump(),
+            "tech_stack": state.get("tech_stack_recommendation", {}),
+            "system_design": state.get("system_design", {}),
+            "requirements_analysis": state.get("requirements_analysis", {})
+        }
+
+        # 1. Generate the core implementation code
+        logger.info(f"[{work_item.id}] Delegating implementation to CoreBackendAgent...")
+        core_output = self.core_agent.run(context)
+        
+        # 2. Generate the unit tests for the implementation
+        logger.info(f"[{work_item.id}] Delegating testing to TestingQAAgent...")
+        # Provide the generated code to the testing agent for context
+        testing_context = context.copy()
+        testing_context["generated_code"] = core_output.generated_files
+
+        testing_output = self.testing_agent.run(testing_context)
+
+        # 3. Combine the results
+        combined_files = core_output.generated_files + testing_output.generated_files
+        
+        logger.info(f"[{work_item.id}] Completed. Generated {len(core_output.generated_files)} implementation files and {len(testing_output.generated_files)} test files.")
+
+        return CodeGenerationOutput(
+            generated_files=combined_files,
+            summary=f"Completed work item {work_item.id}. Generated {len(combined_files)} total files (implementation and tests)."
+        )
+
+    # All of the old complex orchestrator logic below can now be removed or deprecated,
+    # as the new workflow graph handles the high-level planning. The methods _create_dynamic_specification,
+    # _determine_scale_intelligently, etc., are no longer needed. I am leaving them here
+    # for now but they are not called from the new `run` method.
     
     def generate_backend(self, 
                         tech_stack: Dict[str, Any], 

@@ -23,10 +23,11 @@ from langchain.agents import AgentExecutor, create_json_chat_agent
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from .base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 from utils.hybrid_validator import HybridValidator, HybridValidationResult
 from utils.enhanced_tool_validator import enhanced_tool_validator
 from tools.json_handler import JsonHandler
+from agent_temperatures import get_agent_temperature
 import monitoring
 from utils.safe_console_callback_handler import SafeConsoleCallbackHandler, create_detailed_callback
 
@@ -109,12 +110,16 @@ class EnhancedReActAgentBase(BaseAgent):
                  llm: BaseLanguageModel,
                  memory,
                  agent_name: str,
-                 temperature: float,
+                 temperature: Optional[float] = None,
                  rag_retriever: Optional[BaseRetriever] = None,
                  message_bus=None,
                  enable_caching: bool = True,
                  max_iterations: int = 15,
                  enable_performance_tracking: bool = True):
+        
+        # Get agent-specific temperature if not provided
+        if temperature is None:
+            temperature = get_agent_temperature(agent_name=agent_name)
         
         super().__init__(
             llm=llm,
@@ -127,13 +132,6 @@ class EnhancedReActAgentBase(BaseAgent):
         
         # Initialize enhanced memory (inherits from BaseAgent which has enhanced memory mixin)
         self._init_enhanced_memory()
-        
-        # Initialize RAG context
-        self.rag_manager = get_rag_manager()
-        if self.rag_manager:
-            self.logger.info("RAG manager available for enhanced React processing")
-        else:
-            self.logger.warning("RAG manager not available - proceeding with basic React processing")
         
         # Enhanced validation and optimization components
         self.hybrid_validator = HybridValidator(self.logger)
@@ -227,7 +225,16 @@ Aim for STRICT validation by providing well-structured tool inputs.
         enhanced_tools = []
         
         for tool_func in tool_functions:
-            tool_name = getattr(tool_func, 'name', tool_func.__name__)
+            # Handle both regular functions and StructuredTool objects
+            if hasattr(tool_func, 'name'):
+                # StructuredTool object
+                tool_name = tool_func.name
+            elif hasattr(tool_func, '__name__'):
+                # Regular function
+                tool_name = tool_func.__name__
+            else:
+                # Fallback for unknown tool types
+                tool_name = str(tool_func)
             
             # Wrap tool with enhanced validation
             enhanced_tool = enhanced_tool_validator.create_validated_tool(
@@ -244,34 +251,23 @@ Aim for STRICT validation by providing well-structured tool inputs.
     
     def create_agent_executor(self, tools: List[callable]) -> AgentExecutor:
         """
-        Create an optimized AgentExecutor with enhanced settings.
-        
-        Args:
-            tools: List of tool functions
-            
-        Returns:
-            Configured AgentExecutor
+        Creates an AgentExecutor instance for the ReAct agent.
         """
-        # Create the agent with temperature binding
-        agent = create_json_chat_agent(
-            llm=self.llm.bind(temperature=self.default_temperature),
-            tools=tools,
-            prompt=self.react_prompt,
-            verbose=False,  # Disable verbose to prevent I/O errors
-            callbacks=[create_detailed_callback(max_output_length=3000)],  # Show full tool outputs
-        )
-        
-        # Create enhanced executor
+        # Get the ReAct prompt from hub
+        react_prompt = hub.pull("hwchase17/react-chat-json")
+
+        # Create the agent
+        # Ensure verbose is NOT passed to create_json_chat_agent as it's not supported
+        agent = create_json_chat_agent(self.llm, tools, react_prompt)
+
+        # Create the agent executor
         agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
-            verbose=False,  # Reduce verbosity for token efficiency
             handle_parsing_errors=True,
             max_iterations=self.max_iterations,
-            return_intermediate_steps=True,
-            early_stopping_method="force"
+            # No verbose parameter is passed to AgentExecutor here.
         )
-        
         return agent_executor
     
     def execute_enhanced_workflow(self, 
@@ -394,22 +390,47 @@ Aim for STRICT validation by providing well-structured tool inputs.
     
     def _extract_final_output(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract the final output from agent execution result."""
+        self.log_info(f"_extract_final_output called with result keys: {list(result.keys())}")
+        
         if "intermediate_steps" in result:
+            self.log_info(f"Found {len(result['intermediate_steps'])} intermediate steps")
             # Look for the final tool call output
-            for action, observation in reversed(result["intermediate_steps"]):
-                if hasattr(action, 'tool') and 'compile' in action.tool.lower():
-                    try:
-                        return self.json_handler.extract_json_from_text(observation)
-                    except Exception as e:
-                        self.log_warning(f"Failed to parse final output: {str(e)}")
+            for i, (action, observation) in enumerate(reversed(result["intermediate_steps"])):
+                if hasattr(action, 'tool'):
+                    tool_name = action.tool.lower()
+                    self.log_info(f"Step {i}: Found tool call: {tool_name}")
+                    # Check for various analysis/compilation tools
+                    if any(keyword in tool_name for keyword in ['compile', 'analysis', 'comprehensive', 'generate']):
+                        self.log_info(f"Processing output from tool: {action.tool}")
+                        self.log_info(f"Observation type: {type(observation)}")
+                        if isinstance(observation, dict):
+                            self.log_info(f"Observation is dict with keys: {list(observation.keys())}")
+                        else:
+                            self.log_info(f"Observation (first 200 chars): {str(observation)[:200]}")
+                        try:
+                            # If observation is already a dict, return it directly
+                            if isinstance(observation, dict):
+                                self.log_info(f"Returning dict observation with keys: {list(observation.keys())}")
+                                return observation
+                            # Otherwise try to extract JSON
+                            self.log_info("Observation is not dict, attempting JSON extraction")
+                            extracted = self.json_handler.extract_json_from_text(observation)
+                            self.log_info(f"JSON handler extracted type: {type(extracted)}")
+                            if isinstance(extracted, dict):
+                                self.log_info(f"JSON handler extracted keys: {list(extracted.keys())}")
+                            return extracted
+                        except Exception as e:
+                            self.log_warning(f"Failed to parse final output from tool {action.tool}: {str(e)}")
         
         # Try to extract from final output
         if "output" in result:
+            self.log_info("No valid tool output found, trying to extract from final output")
             try:
                 return self.json_handler.extract_json_from_text(result["output"])
             except Exception:
                 pass
         
+        self.log_info("No valid output found in result")
         return None
     
     def _analyze_tool_performance(self, intermediate_steps: List[tuple]) -> Dict[str, Any]:

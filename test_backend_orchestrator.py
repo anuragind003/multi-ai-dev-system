@@ -19,7 +19,7 @@ if PROJECT_ROOT not in sys.path:
 from config import get_llm
 from shared_memory import SharedProjectMemory
 from tools.code_execution_tool import CodeExecutionTool
-from agents.code_generation.backend_orchestrator_simple import BackendOrchestratorAgent
+from agents.code_generation.backend_orchestrator import BackendOrchestratorAgent
 
 def test_backend_orchestrator():
     """Test the Backend Orchestrator Agent with industrial features."""

@@ -7,51 +7,88 @@ import json
 import asyncio
 import logging
 from datetime import datetime
+from langchain_core.load.dump import dumpd
 
 logger = logging.getLogger(__name__)
 
+def clean_data(data: Any) -> Any:
+    """
+    Recursively cleans data to ensure it's JSON serializable.
+    Converts complex LangChain objects to strings or dicts.
+    """
+    if isinstance(data, (str, int, float, bool, type(None))):
+        return data
+    if isinstance(data, list):
+        return [clean_data(item) for item in data]
+    if isinstance(data, dict):
+        return {key: clean_data(value) for key, value in data.items()}
+    
+    # For LangChain objects or other complex types, attempt to dump them
+    # using LangChain's own serializer, otherwise fall back to a string representation.
+    try:
+        # dumpd is specifically for langchain serializable objects
+        return dumpd(data)
+    except Exception:
+        # Fallback for any other type
+        return str(data)
+
 class WebSocketManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: Dict[str, WebSocket] = {}
         self.agent_sessions: Dict[str, Dict] = {}
         # New: Store resumable graph runs
         self.resumable_runs: Dict[str, Any] = {}
+        # Add lock for thread-safe operations
+        self._lock = asyncio.Lock()
+        self._lock = asyncio.Lock()
     
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        async with self._lock:
+            self.active_connections[session_id] = websocket
         logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
         
         # Send welcome message with current sessions
-        await self.send_to_websocket(websocket, {
+        await self.send_to_session(session_id, {
             "type": "connection_established",
             "message": "Connected to Multi-AI Development System",
             "active_sessions": list(self.agent_sessions.keys()),
             "timestamp": datetime.now().isoformat()
         })
     
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+    async def disconnect(self, session_id: str):
+        async with self._lock:
+            if session_id in self.active_connections:
+                del self.active_connections[session_id]
             logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
     
-    async def send_to_websocket(self, websocket: WebSocket, data: dict):
-        try:
-            await websocket.send_text(json.dumps(data))
-        except Exception as e:
-            logger.error(f"Error sending to WebSocket: {e}")
-            if websocket in self.active_connections:
-                self.active_connections.remove(websocket)
+    async def send_to_session(self, session_id: str, message: dict):
+        if session_id in self.active_connections:
+            websocket = self.active_connections[session_id]
+            try:
+                # Clean the message before sending
+                cleaned_message = clean_data(message)
+                await websocket.send_text(json.dumps(cleaned_message))
+            except Exception as e:
+                logger.error(f"Error sending to WebSocket: {e}")
+                if session_id in self.active_connections:
+                    del self.active_connections[session_id]
     
+    def has_active_connections(self) -> bool:
+        """Check if there are any active WebSocket connections."""
+        return len(self.active_connections) > 0
+
     async def broadcast(self, data: dict):
         """Broadcast message to all connected clients"""
         if not self.active_connections:
             return
             
         disconnected = []
-        for connection in self.active_connections:
+        # Clean the data before broadcasting
+        cleaned_data = clean_data(data)
+        for connection in self.active_connections.values():
             try:
-                await connection.send_text(json.dumps(data))
+                await connection.send_text(json.dumps(cleaned_data))
             except WebSocketDisconnect:
                 disconnected.append(connection)
             except Exception as e:
@@ -61,7 +98,7 @@ class WebSocketManager:
         # Remove disconnected clients
         for conn in disconnected:
             if conn in self.active_connections:
-                self.active_connections.remove(conn)
+                del self.active_connections[conn]
     
     async def handle_human_response(self, session_id: str, data: dict):
         """Handle human response to resume a workflow."""
@@ -95,13 +132,18 @@ class WebSocketManager:
         if len(self.agent_sessions[session_id]["events"]) > 100:
             self.agent_sessions[session_id]["events"] = self.agent_sessions[session_id]["events"][-100:]
     
-    async def send_workflow_status(self, session_id: str, status: str, message: str, data: dict = None):
-        """Send workflow status updates"""
-        await self.send_agent_event(session_id, "workflow_status", {
-            "status": status,
-            "message": message,
-            "data": data or {}
-        })
+    async def send_workflow_status(self, session_id: str, status: str, message: str, data: dict = None, current_node: str = None):
+        """Send workflow status update to all connected clients."""
+        await self.send_agent_event(
+            session_id,
+            "workflow_status",
+            {
+                "status": status,
+                "message": message,
+                "data": data,
+                "current_node": current_node  # Include current node
+            }
+        )
     
     async def send_agent_thinking(self, session_id: str, agent_name: str, message: str):
         """Send agent thinking/reasoning updates"""
@@ -161,4 +203,4 @@ class WebSocketManager:
             logger.info(f"Cleaned up old session: {session_id}")
 
 # Global instance
-websocket_manager = WebSocketManager() 
+websocket_manager = WebSocketManager()

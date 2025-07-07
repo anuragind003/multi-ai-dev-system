@@ -1,26 +1,31 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import tsconfigPaths from 'vite-tsconfig-paths';
-import { visualizer } from 'rollup-plugin-visualizer';
+import { resolve } from 'path';
 
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    tsconfigPaths(),
-    visualizer({
-      open: false,
-      filename: 'dist/stats.html',
-    }),
-  ],
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src')
+    }
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: `@import "@/styles/variables.scss";`
+      }
+    }
+  },
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
+        manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            return 'vendor';
+            return id.toString().split('node_modules/')[1].split('/')[0];
           }
-        },
-      },
-    },
-  },
+        }
+      }
+    }
+  }
 });

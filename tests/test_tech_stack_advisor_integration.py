@@ -73,8 +73,7 @@ class TestTechStackAdvisorIntegration(unittest.TestCase):
         
         # Verify tool names
         tool_names = [tool.name for tool in agent.tools]
-        self.assertIn("evaluate_all_technologies", tool_names)
-        self.assertIn("synthesize_tech_stack", tool_names)
+        self.assertIn("generate_comprehensive_tech_stack", tool_names)
         
     @patch('agents.tech_stack_advisor_react.create_json_chat_agent')
     @patch('agents.tech_stack_advisor_react.AgentExecutor')
@@ -102,10 +101,11 @@ class TestTechStackAdvisorIntegration(unittest.TestCase):
         
         # Verify result structure
         self.assertIsInstance(result, dict)
-        self.assertIn("backend", result)
-        self.assertIn("frontend", result)
-        self.assertIn("database", result)
-        self.assertIn("recommendation_metadata", result)
+        self.assertIn("tech_stack_recommendation", result)
+        recommendation = result["tech_stack_recommendation"]
+        self.assertIn("frontend", recommendation)
+        self.assertIn("backend", recommendation)
+        self.assertIn("database", recommendation)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,56 @@
+{
+    "system_design": {
+        "architecture_pattern": "Microservices",
+        "data_models": [
+            {
+                "name": "User",
+                "description": "Represents a user of the system.",
+                "fields": [
+                    {
+                        "name": "id",
+                        "type": "int",
+                        "is_primary_key": true
+                    },
+                    {
+                        "name": "username",
+                        "type": "string",
+                        "is_required": true
+                    },
+                    {
+                        "name": "email",
+                        "type": "string",
+                        "is_required": true,
+                        "is_unique": true
+                    }
+                ]
+            },
+            {
+                "name": "Product",
+                "description": "Represents a product in the catalog.",
+                "fields": [
+                    {
+                        "name": "id",
+                        "type": "int",
+                        "is_primary_key": true
+                    },
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "is_required": true
+                    },
+                    {
+                        "name": "price",
+                        "type": "float",
+                        "is_required": true
+                    }
+                ]
+            }
+        ]
+    },
+    "tech_stack": {
+        "database": {
+            "primary": "PostgreSQL",
+            "orm": "SQLAlchemy"
+        }
+    }
+}

@@ -11,6 +11,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+from models.data_contracts import WorkItem, CodeGenerationOutput, GeneratedFile
+from tools.code_generation_utils import parse_llm_output_into_files
 
 import logging
 logger = logging.getLogger(__name__)
@@ -23,8 +25,52 @@ class DocumentationAgent(BaseCodeGeneratorAgent):
         logger.info("Documentation Agent initialized")
         self._initialize_prompt_templates()
     
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Generates documentation for a single work item.
+        """
+        logger.info(f"DocumentationAgent starting work item: {work_item.id}")
+
+        # The description will tell us what kind of doc to generate.
+        # This is a simple routing mechanism. A more advanced one could use an LLM call.
+        description = work_item.description.lower()
+        
+        # Consolidate context from state
+        tech_stack = state.get("tech_stack_recommendation", {})
+        language = tech_stack.get("language", "python")
+        framework = tech_stack.get("backend_framework", "fastapi")
+        domain = tech_stack.get("project_domain", "general")
+        features = set(tech_stack.get("features", []))
+        scale = state.get("system_design", {}).get("scale", "enterprise")
+
+        doc_files = []
+
+        if "readme" in description:
+            content = self._get_readme_content(domain, language, framework, features)
+            doc_files.append(FileOutput(path="README.md", content=content, file_type="documentation"))
+        elif "api" in description:
+            content = self._get_api_docs(domain)
+            doc_files.append(FileOutput(path="docs/API.md", content=content, file_type="documentation"))
+        elif "deployment" in description:
+            content = self._get_deployment_docs(language, framework)
+            doc_files.append(FileOutput(path="docs/DEPLOYMENT.md", content=content, file_type="documentation"))
+        elif "architecture" in description:
+            content = self._get_architecture_docs(domain, scale)
+            doc_files.append(FileOutput(path="docs/ARCHITECTURE.md", content=content, file_type="documentation"))
+        else:
+            # Fallback for generic documentation tasks
+            logger.warning(f"Could not determine specific doc type for '{work_item.description}'. Generating generic project overview.")
+            content = self._get_readme_content(domain, language, framework, features)
+            doc_files.append(FileOutput(path="docs/PROJECT_OVERVIEW.md", content=content, file_type="documentation"))
+
+        return CodeGenerationOutput(
+            generated_files=doc_files,
+            summary=f"Generated {len(doc_files)} documentation file(s) for work item {work_item.id}."
+        )
+
     def generate_documentation(self, domain: str, language: str, framework: str, scale: str, features: Set[str]) -> Dict[str, Any]:
-        """Generate comprehensive project documentation."""
+        """DEPRECATED: This method is part of the old, phase-based workflow."""
+        logger.warning("generate_documentation is deprecated. Use the `run` method with a work item instead.")
         start_time = time.time()
         
         try:

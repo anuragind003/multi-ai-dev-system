@@ -10,6 +10,8 @@ import os
 import traceback
 from typing import Dict, Any, List, Optional, Union, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.runnables import Runnable
 
 # Initialize module-level logger
 logger = logging.getLogger(__name__)
@@ -66,31 +68,31 @@ class JsonHandler:
         ]
     
     @staticmethod
-    def create_strict_json_llm(llm, max_tokens=4096, model_override=None):
-        """
-        Create an LLM configured for strict JSON output with enhanced model-specific optimizations.
-        
-        Args:
-            llm: Base language model to configure
-            max_tokens: Maximum tokens to generate
-            model_override: Optional override to use a different model
-            
-        Returns:
-            Configured LLM optimized for JSON generation
-        """
+    def create_strict_json_llm(
+        llm: BaseLanguageModel,
+        json_schema: Dict[str, Any],
+        system_prompt: str,
+        max_tokens: int = 8192
+    ) -> Runnable:
+        """Create a chain that returns a JSON object matching the given schema."""
         try:
+            # DEPRECATED: TrackedChatModel is no longer used.
+            # The base LLM is now expected to have tracking/rate-limiting wrappers applied.
+            # from config import TrackedChatModel
+            
+            # Check if the LLM is a tracked model
+            # if not isinstance(llm, TrackedChatModel):
+            #     logger.warning("LLM is not a TrackedChatModel, creating a new one.")
+            
             # Use the provided model or the default
-            base_model = model_override if model_override else llm
+            base_model = llm
             
             # Import necessary classes
             from langchain_google_genai import ChatGoogleGenerativeAI
-            from config import TrackedChatModel
-            from langchain_core.runnables import RunnableBinding
             
             # Detect if it's a Gemini model
             is_gemini = (isinstance(base_model, ChatGoogleGenerativeAI) or 
-                         (isinstance(base_model, TrackedChatModel) and 
-                          'gemini' in getattr(base_model, 'model_name', '').lower()))
+                         'gemini' in getattr(base_model, 'model_name', '').lower())
             
             # Log detailed model information for debugging
             model_info = f"Model: {getattr(base_model, 'model_name', type(base_model).__name__)}"

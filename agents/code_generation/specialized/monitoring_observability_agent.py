@@ -15,6 +15,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from agents.code_generation.base_code_generator import BaseCodeGeneratorAgent
 from tools.code_execution_tool import CodeExecutionTool
 from message_bus import MessageBus
+from models.data_contracts import WorkItem, CodeGenerationOutput, GeneratedFile
+from tools.code_generation_utils import parse_llm_output_into_files
 
 import logging
 logger = logging.getLogger(__name__)
@@ -207,6 +209,47 @@ Provide the complete YAML content for the Docker Compose file."""
         ])
         
         logger.info("Monitoring Observability Agent initialized with LLM-powered generation")
+    
+    def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
+        """
+        Generates monitoring artifacts for a single work item.
+        """
+        logger.info(f"MonitoringObservabilityAgent starting work item: {work_item.id}")
+
+        description = work_item.description.lower()
+        
+        tech_stack = state.get("tech_stack_recommendation", {})
+        language = tech_stack.get("language", "python")
+        framework = tech_stack.get("backend_framework", "fastapi")
+        domain = tech_stack.get("project_domain", "general")
+        scale = state.get("system_design", {}).get("scale", "enterprise")
+
+        doc_files = []
+        content = ""
+
+        if "prometheus" in description:
+            content = self._get_prometheus_config(domain, language, framework, scale)
+            doc_files.append(FileOutput(path="monitoring/prometheus.yml", content=content, file_type="monitoring"))
+        elif "grafana" in description:
+            content = self._get_grafana_dashboard(domain, language, framework, scale)
+            doc_files.append(FileOutput(path="monitoring/dashboards/main_dashboard.json", content=content, file_type="monitoring"))
+        elif "alert" in description:
+            content = self._get_alert_rules(domain, language, framework, scale)
+            doc_files.append(FileOutput(path="monitoring/alert-rules.yml", content=content, file_type="monitoring"))
+        elif "metrics" in description:
+            ext = self._get_file_extension(language)
+            content = self._get_metrics_code(domain, language, framework, scale)
+            doc_files.append(FileOutput(path=f"src/monitoring/metrics.{ext}", content=content, file_type="monitoring"))
+        elif "compose" in description or "docker" in description:
+            content = self._get_monitoring_compose(domain, language, framework, scale)
+            doc_files.append(FileOutput(path="monitoring/docker-compose.yml", content=content, file_type="monitoring"))
+        else:
+            logger.warning(f"Could not determine specific monitoring artifact for '{work_item.description}'. No files generated.")
+
+        return CodeGenerationOutput(
+            generated_files=doc_files,
+            summary=f"Generated {len(doc_files)} monitoring file(s) for work item {work_item.id}."
+        )
     
     def generate_monitoring_infrastructure(self, 
                                          domain: str,

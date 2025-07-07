@@ -438,7 +438,7 @@ def main():
             try:
                 logger.info("No existing RAG index found. Creating new index from project code...")
                 # This will use the optimized implementation
-                indexed_count = rag_manager.index_project_code()
+                indexed_count = asyncio.run(rag_manager.index_project_code())
                 logger.info(f"Indexed {indexed_count} documents with optimized indexing")
                 
                 # Check if indexing was successful
@@ -456,7 +456,7 @@ def main():
                 # Try alternative method names if they exist
                 if hasattr(rag_manager, 'initialize_index_from_project'):
                     logger.info("Found initialize_index_from_project method, using as fallback...")
-                    rag_manager.initialize_index_from_project()
+                    asyncio.run(rag_manager.initialize_index_from_project())
                 else:
                     logger.warning("No suitable indexing method found")
             except Exception as e:

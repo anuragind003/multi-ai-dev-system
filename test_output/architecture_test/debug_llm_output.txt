@@ -1,137 +1,163 @@
 ### FILE: .gitignore
 ```filetype
-# Byte-compiled / optimized / DLL files
+.env
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Distribution / packaging
-.Python
-build/
-dist/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.manifest
-*.spec
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before being handed to pyinstaller.
-__pyinstaller__/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE specific
-.idea/
-*.swp
-*.swo
-.vscode/
-
-# Node Modules
 node_modules/
-
-# Docker
-Dockerfile
-docker-compose.yml
-
-# Terraform
-.terraform/
-terraform.tfstate
-terraform.tfstate.backup
+dist/
+*.log
 ```
 
 ### FILE: requirements.txt
 ```filetype
-fastapi
-uvicorn[standard]
-psycopg2-binary
-python-dotenv
-requests
-pytest
-pytest-cov
-flake8
-black
+fastapi==0.96.0
+uvicorn==0.22.0
+psycopg2-binary==2.9.7
+python-multipart==0.0.6
+SQLAlchemy==2.0.22
+alembic==1.11.1
+python-dotenv==1.0.0
+pytest==7.4.0
+pytest-cov==4.1.0
+flake8==6.0.0
 ```
 
-### FILE: pyproject.toml
+### FILE: package.json
 ```filetype
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "my-web-app"
-version = "0.1.0"
-description = "A simple web application"
-authors = [{ name = "Your Name", email = "your.email@example.com" }]
-dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
-    "psycopg2-binary",
-    "python-dotenv",
-    "requests",
-]
-
-[tool.flake8]
-max-line-length = 120
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "description": "My React App",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "tailwindcss": "^3.3.3",
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.27"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "typescript": "^5.0.2"
+  }
+}
 ```
 
-### FILE: src/app/main.py
+### FILE: README.md
 ```filetype
+# My App
+
+This is a sample web application built with React, FastAPI, and PostgreSQL.
+
+## Getting Started
+
+1. Clone the repository: `git clone <repository_url>`
+2. Install dependencies: `pip install -r requirements.txt` and `npm install`
+3. Run the application: `npm start` (frontend) and `uvicorn main:app --reload` (backend)
+
+## Architecture
+
+* **Frontend:** React with TypeScript and Tailwind CSS
+* **Backend:** FastAPI with Python and SQLAlchemy
+* **Database:** PostgreSQL
+
+## Deployment
+
+This application is designed for deployment using Docker and Kubernetes on AWS.  See the `deploy` directory for deployment scripts and infrastructure as code.
+
+## Contributing
+
+See the `CONTRIBUTING.md` file for guidelines on contributing to this project.
+```
+
+### FILE: CONTRIBUTING.md
+```filetype
+# Contributing to My App
+
+This project welcomes contributions!  Here's how you can get involved:
+
+1. **Fork the repository:** Create your own fork of the project on GitHub.
+2. **Create a branch:** Create a new branch for your changes.
+3. **Make your changes:** Implement your changes and ensure they adhere to the coding standards.
+4. **Test your changes:** Run the tests to ensure your changes don't break existing functionality.
+5. **Commit your changes:** Commit your changes with clear and concise messages.
+6. **Create a pull request:** Create a pull request to merge your changes into the main branch.
+
+## Coding Standards
+
+* Follow the PEP 8 style guide for Python.
+* Use TypeScript consistently in the React frontend.
+* Adhere to the project's coding style guide (if one exists).
+
+## Testing
+
+This project uses a multi-level testing strategy:
+
+* **Unit tests:** Test individual components and functions.
+* **Integration tests:** Test the interaction between different components.
+* **End-to-end tests:** Test the entire application flow.
+
+Ensure all tests pass before submitting a pull request.
+```
+
+### FILE: src/backend/main.py
+```filetype
+import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from .database import Base, engine
+from .routers import users
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-@app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+app.include_router(users.router)
+
+origins = ["*"]  # Update with your allowed origins in production
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-### FILE: src/app/config.py
-```filetype
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@host:port/database")
-```
-
-### FILE: src/app/models.py
-```filetype
-from typing import Optional
-from pydantic import BaseModel
-
-class Item(BaseModel):
-    name: str
-    description: Optional[str] = None
-    price: float
-    tax: Optional[float] = None
-```
-
-### FILE: src/app/database.py
+### FILE: src/backend/database.py
 ```filetype
 from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from .config import DATABASE_URL
+DATABASE_URL = "postgresql://user:password@db:5432/mydatabase" # Update with your DB connection string
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+```
+
+### FILE: src/backend/routers/users.py
+```filetype
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from ..database import SessionLocal
+
+router = APIRouter(prefix="/users", tags=["users"])
 
 def get_db():
     db = SessionLocal()
@@ -139,250 +165,243 @@ def get_db():
         yield db
     finally:
         db.close()
+
+@router.get("/")
+async def read_users(db: Session = Depends(get_db)):
+    # Add your user retrieval logic here
+    return {"message": "Users endpoint"}
 ```
 
-### FILE: Dockerfile
+### FILE: src/frontend/src/App.tsx
+```filetype
+import React from 'react';
+
+function App() {
+  return (
+    <div>
+      <h1>My React App</h1>
+    </div>
+  );
+}
+
+export default App;
+```
+
+### FILE: src/frontend/tailwind.config.js
+```filetype
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+```
+
+### FILE: Dockerfile (backend)
 ```filetype
 FROM python:3.9-slim-buster
 
 WORKDIR /app
 
-COPY pyproject.toml .
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src /app/src
+COPY . .
 
-EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+### FILE: Dockerfile (frontend)
+```filetype
+FROM node:16
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+FROM nginx:alpine
+
+COPY --from=0 /app/build /usr/share/nginx/html
+
+EXPOSE 80
 ```
 
 ### FILE: docker-compose.yml
 ```filetype
 version: "3.9"
 services:
-  web:
-    build: .
+  backend:
+    build: ./src/backend
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://user:password@db:5432/database
     depends_on:
       - db
+  frontend:
+    build: ./src/frontend
+    ports:
+      - "3000:80"
   db:
     image: postgres:13
+    ports:
+      - "5432:5432"
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: database
-    volumes:
-      - db_data:/var/lib/postgresql/data
-
-volumes:
-  db_data:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mydatabase
 ```
 
-### FILE: kubernetes/deployment.yaml
+### FILE: deploy/kubernetes/backend-deployment.yaml
 ```filetype
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web-app-deployment
+  name: backend-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: web-app
+      app: backend
   template:
     metadata:
       labels:
-        app: web-app
+        app: backend
     spec:
       containers:
-      - name: web-app
-        image: your-dockerhub-username/my-web-app:latest
+      - name: backend
+        image: backend-image:latest # Replace with your image name
         ports:
         - containerPort: 8000
-        env:
-        - name: DATABASE_URL
-          value: postgresql://user:password@db-service:5432/database
 ```
 
-### FILE: kubernetes/service.yaml
+### FILE: deploy/kubernetes/frontend-deployment.yaml
+```filetype
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: frontend-image:latest # Replace with your image name
+        ports:
+        - containerPort: 80
+```
+
+### FILE: deploy/kubernetes/service.yaml (backend)
 ```filetype
 apiVersion: v1
 kind: Service
 metadata:
-  name: web-app-service
+  name: backend-service
 spec:
   selector:
-    app: web-app
+    app: backend
   ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
   type: LoadBalancer
 ```
 
-### FILE: kubernetes/db-service.yaml
+### FILE: deploy/kubernetes/service.yaml (frontend)
 ```filetype
 apiVersion: v1
 kind: Service
 metadata:
-  name: db-service
+  name: frontend-service
 spec:
   selector:
-    app: db
+    app: frontend
   ports:
-    - protocol: TCP
-      port: 5432
-      targetPort: 5432
-  type: ClusterIP
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: LoadBalancer
 ```
 
-### FILE: tests/test_main.py
+### FILE: deploy/terraform/main.tf
 ```filetype
-from fastapi.testclient import TestClient
-from src.app.main import app
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0"
+    }
+  }
+}
 
-client = TestClient(app)
+provider "aws" {
+  region = "us-west-2" # Replace with your region
+}
 
-def test_read_root():
-    response = client.get("/")
-    assert response.status_code == 200
-    assert response.json() == {"Hello": "World"}
+resource "aws_instance" "backend" {
+  ami           = "ami-0c55b31ad2299a701" # Replace with your AMI ID
+  instance_type = "t2.micro"
+  # ... other configurations ...
+}
+
+# ... other Terraform resources ...
 ```
 
-### FILE: README.md
+### FILE: src/backend/alembic/versions/initial_migration.py
 ```filetype
-# My Web Application
+"""initial migration
 
-This is a simple web application built with FastAPI and React.
+Revision ID: ffdc0a98111c
+Revises:
+Create Date: 2023-11-20 15:16:02.205042
 
-## Getting Started
+"""
+from alembic import op
+import sqlalchemy as sa
 
-1. Clone the repository.
-2. Install dependencies: `pip install -r requirements.txt`
-3. Run the application: `uvicorn src.app.main:app --host 0.0.0.0 --port 8000`
+
+# revision identifiers, used by Alembic.
+revision = 'ffdc0a98111c'
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    op.create_table('users',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+
+
+def downgrade():
+    op.drop_table('users')
 ```
 
-### FILE: .env
+### FILE: src/backend/alembic.ini
 ```filetype
-DATABASE_URL=postgresql://user:password@localhost:5432/database
+[alembic]
+script_location = ./alembic
+sqlalchemy.url = postgresql://user:password@db:5432/mydatabase # Update with your DB connection string
+
+[post_write_hooks]
+# Add any post-write hooks here
 ```
 
-### FILE: src/app/api.py
-```filetype
-from fastapi import APIRouter, HTTPException
-from src.app.models import Item
-from src.app.database import SessionLocal, get_db
-
-router = APIRouter()
-
-@router.post("/items/")
-async def create_item(item: Item):
-    db = get_db()
-    # Add item to database logic here
-    return item
-```
-
-### FILE: src/app/security.py
-```filetype
-# Placeholder for security related functions
-def get_password_hash(password):
-    # Implement password hashing logic
-    return password
-
-def verify_password(plain_password, hashed_password):
-    # Implement password verification logic
-    return plain_password == hashed_password
-```
-
-### FILE: monitoring/prometheus.yml
-```filetype
-global:
-  scrape_interval:     15s # Set the scrape interval to every 15 seconds.
-  evaluation_interval: 15s # Evaluate rules every 15 seconds.
-
-scrape_configs:
-  - job_name: 'fastapi-app'
-    static_configs:
-      - targets: ['localhost:8000'] # Replace with your application's address
-```
-
-### FILE: monitoring/grafana_dashboard.json
-```filetype
-# Placeholder for Grafana dashboard configuration
-{}
-```
-
-### FILE: docs/api.yaml
-```filetype
-openapi: 3.0.0
-info:
-  title: My Web Application API
-  version: 0.1.0
-paths:
-  /:
-    get:
-      summary: Get a greeting message
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  Hello:
-                    type: string
-```
-
-### FILE: scripts/db_migrate.py
-```filetype
-# Placeholder for database migration script
-print("Database migration script placeholder")
-```
-
-### FILE: scripts/seed_data.py
-```filetype
-# Placeholder for seeding data script
-print("Seeding data script placeholder")
-```
-
-### FILE: tests/conftest.py
-```filetype
-# Placeholder for test configuration
-```
-
-### FILE: architecture_decision_records/adr-001-database-choice.md
-```filetype
-# Architecture Decision Record 1: Database Choice
-
-**Date:** 2023-10-27
-
-**Decision:** Use PostgreSQL as the primary database.
-
-**Status:** Approved
-
-**Context:** We need to choose a database for our web application.  We considered several options, including MySQL, MongoDB, and PostgreSQL.
-
-**Considerations:**
-
-*   **PostgreSQL:**  Robust, reliable, supports complex queries, ACID compliant.
-*   **MySQL:**  Popular, widely supported, good performance.
-*   **MongoDB:**  NoSQL, flexible schema, good for unstructured data.
-
-**Decision Drivers:**
-
-*   ACID compliance is important for data integrity.
-*   We anticipate needing complex queries.
-*   PostgreSQL has a strong reputation for reliability.
-
-**Consequences:**
-
-*   Increased complexity compared to a NoSQL database.
-*   Requires more careful schema design.
-```
+This provides a foundational structure.  Remember to replace placeholder values (database credentials, AMI IDs, region, etc.) with your actual values.  Further refinement and addition of specific security configurations (e.g., detailed IAM roles, network ACLs, WAF rules in Terraform, specific authentication/authorization libraries in the backend, etc.) are necessary for a truly production-ready system.  This example omits detailed configurations for brevity, focusing on the overall architecture.  Consider adding comprehensive logging, error handling, and robust testing throughout the application.

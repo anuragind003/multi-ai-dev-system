@@ -20,8 +20,29 @@ from functools import wraps
 import logging
 import logging.handlers
 
+# --- FIX: Add imports for Windows-safe logging ---
+import sys
+try:
+    from utils.windows_safe_console import replace_emojis_with_text
+    IS_WINDOWS = sys.platform.startswith('win')
+except ImportError:
+    # Fallback if the utility is not found
+    def replace_emojis_with_text(text: str) -> str:
+        return text
+    IS_WINDOWS = False
+
 # Base logs directory - consistent with MetricsCollector
 LOG_DIR = Path("logs")
+
+class SafeFormatter(logging.Formatter):
+    """Custom logging formatter to handle Unicode characters on Windows."""
+    def format(self, record):
+        # First, format the message as usual
+        message = super().format(record)
+        # Then, replace emojis if on Windows
+        if IS_WINDOWS:
+            return replace_emojis_with_text(message)
+        return message
 
 def setup_logging(
     log_level: str = None,
@@ -62,7 +83,8 @@ def setup_logging(
     
     # Define log format
     log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    formatter = logging.Formatter(log_format)
+    # --- FIX: Use the new SafeFormatter ---
+    formatter = SafeFormatter(log_format)
     
     # Add console handler if enabled
     if console_output:

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from functools import wraps
 from dotenv import load_dotenv
+import asyncio
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -47,8 +48,20 @@ except ImportError:
 from pydantic import Field, PrivateAttr
 from langsmith import Client as LangSmithClient
 
+from enhanced_memory_manager import EnhancedSharedProjectMemory, MemoryConfig, MemoryBackend
+from advanced_rate_limiting.config import AdvancedRateLimitSystem
+
 # Remove this import if you're defining response_cache locally
 # from llm_cache import response_cache
+
+# --- Initialize Advanced Rate Limiting System ---
+# This creates a global instance that will be used by all LLM calls
+try:
+    advanced_rate_limiter = AdvancedRateLimitSystem()
+    logger.info("Advanced rate limiting system initialized.")
+except Exception as e:
+    logger.error(f"Failed to initialize advanced rate limiting system: {e}")
+    advanced_rate_limiter = None
 
 # Simple response cache implementation
 _response_cache: Dict[str, Any] = {}
@@ -469,13 +482,41 @@ class WorkflowConfig:
         pass
 
 # Configuration class for better management
+@dataclass
 class SystemConfig:
+    """Singleton class to hold system-wide configuration."""
+    
+    # Use a private attribute to ensure a single instance
+    _instance: Optional['SystemConfig'] = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(SystemConfig, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, workflow_config: AdvancedWorkflowConfig = None):
-        # Add workflow configuration first - use AdvancedWorkflowConfig for consistency
-        self.workflow = workflow_config or AdvancedWorkflowConfig()  # CHANGED: Use AdvancedWorkflowConfig
+        """
+        Initialize the system configuration.
+        
+        This constructor should only be called once through `initialize_system_config`.
+        Subsequent calls will not re-initialize the instance.
+        """
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+
+        self.workflow_config = workflow_config or AdvancedWorkflowConfig()
+
+        # --- MODIFIED: Use the correct EnhancedSharedProjectMemory class ---
+        # This provides the `store_agent_activity` method that agents need.
+        self.memory_hub = EnhancedSharedProjectMemory(
+            run_dir=os.path.join("output", "global_shared_memory")
+        )
+        
+        self.output_dir = "output"
+        self.brd_dir = os.path.join(self.output_dir, "brds")
         
         # Use llm_provider from workflow config, with environment fallback
-        workflow_provider = getattr(self.workflow, 'llm_provider', 'google')
+        workflow_provider = getattr(self.workflow_config, 'llm_provider', 'google')
         env_provider = os.getenv("LLM_PROVIDER", workflow_provider)
         self.llm_provider = env_provider.upper() if env_provider.lower() == 'gemini' else workflow_provider
         
@@ -491,7 +532,10 @@ class SystemConfig:
         self.agent_temperatures = AGENT_TEMPERATURES  # CHANGED: Use imported temperatures
         
         self.validate_config()
-    
+        
+        # Mark as initialized
+        self._initialized = True
+
     def validate_config(self):
         """Validate configuration settings with enhanced temperature validation"""
         if self.llm_provider == "GEMINI" and not self.gemini_api_key:
@@ -516,8 +560,8 @@ class SystemConfig:
     def update_workflow_config(self, **kwargs):
         """Update workflow configuration parameters."""
         for key, value in kwargs.items():
-            if hasattr(self.workflow, key):
-                setattr(self.workflow, key, value)
+            if hasattr(self.workflow_config, key):
+                setattr(self.workflow_config, key, value)
                 monitoring.log_global(f"Updated workflow config: {key} = {value}")
             else:
                 monitoring.log_global(f"Unknown workflow config parameter: {key}", "WARNING")
@@ -600,527 +644,203 @@ def get_system_config() -> SystemConfig:
     return _system_config
 
 def get_workflow_config() -> AdvancedWorkflowConfig:  # CHANGED: Return type to AdvancedWorkflowConfig
-    """Get the workflow configuration."""
-    return get_system_config().workflow
+    """Get the current workflow configuration."""
+    return get_system_config().workflow_config
 
-# Enhanced tracked models with proper temperature handling
-class TrackedChatModel(RunnableSerializable):
+# Global cache for LLM instances to avoid re-initialization
+_llm_cache: Dict[str, BaseLanguageModel] = {}
+
+def _with_rate_limiting(llm: BaseLanguageModel) -> BaseLanguageModel:
     """
-    Enhanced wrapper for ChatGoogleGenerativeAI that tracks API calls and properly handles temperature binding.
-    Provides robust parameter management for Gemini's specific needs.
+    Wraps an LLM instance to apply advanced rate limiting by monkey-patching
+    its invoke/ainvoke methods. This avoids re-instantiation issues that can
+    cause loss of credentials or other critical configuration.
     """
-    # --- Pydantic Fields ---
-    model_name: str 
-    google_api_key: Optional[str] = None
-    model_instance: Union[BaseLanguageModel, RunnableBinding] = Field(default=None, exclude=True)
-    
-    # Private attributes for tracking
-    _llm_init_kwargs: Dict[str, Any] = PrivateAttr(default_factory=dict)
-    _total_calls: int = PrivateAttr(default=0)
-    _total_duration: float = PrivateAttr(default=0.0)
+    if not advanced_rate_limiter or not advanced_rate_limiter.is_enabled():
+        return llm
 
-    class Config:
-        arbitrary_types_allowed = True
+    # Check if already patched to prevent double-wrapping
+    if hasattr(llm, '_original_invoke'):
+        return llm
 
-    def __init__(
-        self, 
-        model_instance: Union[BaseLanguageModel, RunnableBinding],
-        model_name: str, 
-        google_api_key: Optional[str] = None, 
-        llm_init_kwargs: Optional[Dict[str, Any]] = None,
-        _total_calls: int = 0,
-        _total_duration: float = 0.0
-    ):
-        """
-        Initialize TrackedChatModel with an existing LLM instance and tracking metadata.
-        
-        Args:
-            model_instance: The LLM instance to wrap (ChatGoogleGenerativeAI or RunnableBinding)
-            model_name: Name of the model for logging
-            google_api_key: API key for Gemini
-            llm_init_kwargs: Original kwargs used to create the model_instance
-            _total_calls: Number of API calls made (for preserving state during bind)
-            _total_duration: Total duration of API calls (for preserving state during bind)
-        """
-        # Initialize Pydantic fields
-        super().__init__(
-            model_name=model_name, 
-            google_api_key=google_api_key, 
-            model_instance=model_instance
+    # Store original methods before patching
+    llm._original_invoke = llm.invoke
+    llm._original_ainvoke = llm.ainvoke
+    llm._original_stream = llm.stream
+    llm._original_astream = llm.astream
+
+    def rate_limited_invoke(*args, **kwargs):
+        """Wrapped synchronous invoke method."""
+        return advanced_rate_limiter.make_rate_limited_call(
+            llm._original_invoke, "llm.invoke", args, kwargs
         )
-        
-        # Store init kwargs and tracking data
-        self._llm_init_kwargs = llm_init_kwargs or {}
-        self._total_calls = _total_calls
-        self._total_duration = _total_duration
 
-    @property
-    def total_calls(self) -> int:
-        """Return the total number of API calls made."""
-        return self._total_calls
-    
-    @property
-    def total_duration(self) -> float:
-        """Return the total duration of API calls in seconds."""
-        return self._total_duration
-
-    def bind(self, **kwargs_to_bind: Any) -> "TrackedChatModel":
+    async def rate_limited_ainvoke(*args, **kwargs):
         """
-        Returns a new TrackedChatModel with bound parameters.
-        Properly handles Gemini's parameter structure, especially generation_config.
+        Wrapped asynchronous ainvoke method.
         
-        Args:
-            **kwargs_to_bind: Parameters to bind to the model
-            
-        Returns:
-            New TrackedChatModel instance with bound parameters
+        This uses a simplified rate-limiting approach for async calls due to the
+        synchronous nature of the advanced_rate_limiter. It ensures non-blocking
+        waits but does not use the full optimization suite.
         """
-        # Extract the 'config' parameter which is meant for LangChain's runtime
-        # and not for the underlying LLM model
-        config = kwargs_to_bind.pop("config", None)
-        
-        # Deep copy the remaining kwargs to avoid modifying the original
-        new_kwargs = copy.deepcopy(kwargs_to_bind)
-        
-        # FIXED: Explicitly define Gemini generation config keys
-        gemini_gen_config_keys = {
-            "temperature", "top_p", "top_k", "max_output_tokens",
-            "candidate_count", "stop_sequences"
-        }
-        
-        # Standard LangChain bindable parameters
-        standard_bind_keys = {"stop", "callbacks", "tags", "metadata", "run_name", "remote"}
-        
-        # Split the parameters for different destinations
-        lc_binding_params = {}      # For LangChain binding
-        gemini_gen_config_params = {}  # For Gemini generation_config
-        gemini_safety_settings = None  # For Gemini safety_settings
-        unknown_params = {}         # Track unrecognized parameters
-        
-        # ADDED: Special handling for directly provided generation_config
-        directly_provided_gen_config = new_kwargs.pop("generation_config", None)
-        
-        # Process parameters based on destination
-        for key, value in new_kwargs.items():
-            # Debug log to identify parameter issues
-            logger.debug(f"TrackedChatModel.bind processing parameter: '{key}'")
-            
-            if key in standard_bind_keys:
-                lc_binding_params[key] = value
-            elif key == "safety_settings":
-                gemini_safety_settings = value
-            elif key in gemini_gen_config_keys:
-                gemini_gen_config_params[key] = value
-            # FIXED: Special handling for max_tokens -> max_output_tokens conversion
-            elif key == "max_tokens":
-                # Convert max_tokens to max_output_tokens for Gemini compatibility
-                logger.info(f"Converting 'max_tokens' to 'max_output_tokens' for Gemini compatibility")
-                gemini_gen_config_params["max_output_tokens"] = value
-            else:
-                unknown_params[key] = value
-        
-        if unknown_params:
-            logger.warning(
-                f"TrackedChatModel.bind: Received unknown parameters: {list(unknown_params.keys())}"
-            )
-        
-        # Prepare final binding parameters
-        final_bind_kwargs = {}
-        
-        # Add standard LangChain bindable parameters
-        for key, value in lc_binding_params.items():
-            final_bind_kwargs[key] = value
-        
-        # Handle generation_config parameters - start with base config
-        base_gen_config = {}
-        if "generation_config" in self._llm_init_kwargs:
-            orig_config = self._llm_init_kwargs["generation_config"]
-            if isinstance(orig_config, dict):
-                base_gen_config = orig_config.copy()
-            else:
-                base_gen_config = orig_config.to_dict() if hasattr(orig_config, "to_dict") else {}
-        
-        # Merge configurations in priority order:
-        # 1. Base config (lowest priority)
-        # 2. Individual parameters (middle priority)
-        # 3. Directly provided generation_config (highest priority)
-        merged_gen_config = base_gen_config.copy()
-        
-        # Add individual parameters
-        if gemini_gen_config_params:
-            merged_gen_config.update(gemini_gen_config_params)
-        
-        # Add directly provided generation_config (highest priority)
-        if directly_provided_gen_config and isinstance(directly_provided_gen_config, dict):
-            merged_gen_config.update(directly_provided_gen_config)
-            
-        # Preserve special configurations like response_mime_type if not overwritten
-        response_mime_type = base_gen_config.get("response_mime_type")
-        if response_mime_type and "response_mime_type" not in merged_gen_config:
-            merged_gen_config["response_mime_type"] = response_mime_type
-        
-        # Only add generation_config if we have parameters to add
-        if merged_gen_config:
-            final_bind_kwargs["generation_config"] = merged_gen_config
-        
-        # Add safety_settings if provided
-        if gemini_safety_settings:
-            final_bind_kwargs["safety_settings"] = gemini_safety_settings
-        
-        # Log the actual binding parameters for debugging
-        logger.debug(f"TrackedChatModel binding with: {final_bind_kwargs}")
-        
         try:
-            # Create bound version of the model
-            bound_model = self.model_instance.bind(**final_bind_kwargs)
+            # wait_if_needed() is a blocking call, so we run it in a separate
+            # thread to avoid blocking the asyncio event loop.
+            await asyncio.to_thread(advanced_rate_limiter.rate_limiter.wait_if_needed)
             
-            # Create a new TrackedChatModel with the bound model
-            return TrackedChatModel(
-                model_instance=bound_model,
-                model_name=self.model_name,
-                google_api_key=self.google_api_key,
-                llm_init_kwargs=self._llm_init_kwargs,
-                _total_calls=self._total_calls,
-                _total_duration=self._total_duration            )
-        except Exception as e:
-            logger.error(f"Error while binding parameters: {str(e)}")
-            raise
-    
-    def invoke(self, input: Any, config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
-        """
-        Invoke the model with input, tracking API calls and parameters.
-        Extracts and logs the effective temperature actually used by Gemini.
-        Enhanced with rate limiting to prevent 429 errors.
-        """        # Import rate limiting inside the method to avoid circular imports
-        # Try advanced rate limiting first, fall back to basic if not available
-        advanced_rate_limiter = None
-        try:
-            from advanced_rate_limiting import make_optimized_llm_call
-            advanced_rate_limiter = make_optimized_llm_call
-        except ImportError:
-            pass  # Advanced rate limiting not available - will use basic rate limiting
-        
-        start_time = time.perf_counter()
-        success = False
-        output_preview = ""
-        error_msg = ""
-        
-        # Extract effective temperature for logging
-        effective_temp_for_log: Optional[float] = None
-        
-        # Attempt to extract temperature from multiple possible locations
-        # 1. From kwargs if passed directly to invoke
-        if 'temperature' in kwargs:
-            effective_temp_for_log = kwargs['temperature']
-        
-        # 2. From the model instance itself or its binding
-        current_model_instance = self.model_instance
-        if effective_temp_for_log is None:
-            if isinstance(current_model_instance, RunnableBinding):
-                # Check bound kwargs
-                if 'temperature' in current_model_instance.kwargs:
-                    effective_temp_for_log = current_model_instance.kwargs['temperature']
-                elif 'generation_config' in current_model_instance.kwargs and \
-                     isinstance(current_model_instance.kwargs['generation_config'], dict) and \
-                     'temperature' in current_model_instance.kwargs['generation_config']:
-                    effective_temp_for_log = current_model_instance.kwargs['generation_config']['temperature']
-                
-                # If still not found, check the bound LLM instance itself
-                if effective_temp_for_log is None and hasattr(current_model_instance.bound, 'temperature'):
-                    effective_temp_for_log = current_model_instance.bound.temperature
-                elif effective_temp_for_log is None and hasattr(current_model_instance.bound, 'generation_config') and \
-                     hasattr(current_model_instance.bound.generation_config, 'temperature'):
-                     effective_temp_for_log = current_model_instance.bound.generation_config.temperature
-
-            elif hasattr(current_model_instance, 'temperature'): # Direct attribute on the LLM
-                effective_temp_for_log = current_model_instance.temperature
-            elif hasattr(current_model_instance, 'generation_config') and \
-                 hasattr(current_model_instance.generation_config, 'temperature'): # For Gemini models
-                 effective_temp_for_log = current_model_instance.generation_config.temperature
-        
-        # 3. From the initial _llm_init_kwargs if nothing else found
-        if effective_temp_for_log is None and self._llm_init_kwargs:
-            effective_temp_for_log = self._llm_init_kwargs.get('temperature')
-            if effective_temp_for_log is None:
-                gen_config = self._llm_init_kwargs.get('generation_config', {})
-                if isinstance(gen_config, dict):
-                    effective_temp_for_log = gen_config.get('temperature')
-        
-        # Safely extract agent context
-        agent_context = ""
-        if config:
-            if isinstance(config, dict):
-                if "configurable" in config:  # LangGraph style
-                    agent_context = config.get("configurable", {}).get('agent_context', '')
-                else:  # Standard config
-                    agent_context = config.get('agent_context', '')
-            else:  # Handle if config is not a dict (e.g. RunnableConfig object)
-                if hasattr(config, 'configurable'):
-                    agent_context = getattr(config.configurable, 'agent_context', 'TrackedChatModel')
-                elif hasattr(config, 'agent_context'):
-                    agent_context = getattr(config, 'agent_context', 'TrackedChatModel')
-          # Use a default context if not specified
-        if not agent_context:
-            agent_context = "TrackedChatModel"
-          # Prepare input preview for logging with better truncation
-        input_preview = (str(input)[:197] + "...") if len(str(input)) > 200 else str(input)
-        
-        try:
-            # Use advanced rate limiting if available
-            if advanced_rate_limiter:
-                result = advanced_rate_limiter(
-                    func=self.model_instance.invoke,
-                    func_name=f"{self.model_name}_invoke",
-                    args=(input,),
-                    kwargs={'config': config, **kwargs},
-                    context=agent_context or "llm_invoke"
-                )
-            else:
-                # Fallback to basic invoke with simple rate limiting
-                basic_delay = float(os.environ.get("RATE_LIMIT_DELAY", "1.0"))
-                time.sleep(basic_delay)
-                result = self.model_instance.invoke(input, config=config, **kwargs)
+            # Once the wait is over, we can await the original async method
+            result = await llm._original_ainvoke(*args, **kwargs)
             
-            success = True# Record successful call (rate limiting modules removed)
-            pass
+            # Record success in a non-blocking way
+            await asyncio.to_thread(advanced_rate_limiter.rate_limiter.record_success, "llm.ainvoke")
             
-            # Extract output content for logging with better handling
-            if hasattr(result, 'content'):
-                output_content = result.content
-            elif isinstance(result, str):
-                output_content = result
-            else:
-                output_content = str(result)            
-            output_preview = (output_content[:197] + "...") if len(output_content) > 200 else output_content
-            
-            # Update call counter
-            self._total_calls += 1
             return result
-            
         except Exception as e:
-            error_msg = str(e)
             error_type = type(e).__name__
-            
-            # Handle rate limiting errors - let advanced rate limiter handle it if available
-            if advanced_rate_limiter:
-                # Advanced rate limiter already handled retries, just log the final error
-                logger.error(f"🔥 LLM call failed after advanced rate limiting: {error_msg}")
-            else:
-                # Basic rate limiting fallback
-                if "429" in error_msg or "rate limit" in error_msg.lower():
-                    logger.warning(f"🔥 Rate limit detected: {error_msg}. Waiting 30s...")
-                    time.sleep(30)  # Simple delay without complex rate limiting
-                else:
-                    # Log other errors
-                    logger.debug(f"API Error: {error_type}: {error_msg}")
-            
-            # More detailed error logging
-            monitoring.log_agent_activity(
-                agent_context, 
-                f"LLM invoke exception: [{error_type}] {error_msg}", 
-                "ERROR"
-            )
-            
-            # Re-raise with context
-            raise
-        finally:
-            # Calculate and update duration
-            duration = time.perf_counter() - start_time
-            self._total_duration += duration
-            
-            # Log API call with safe monitoring access
-            try:
-                monitoring.metrics_collector.increment_api_call(self.model_name)
-                monitoring.log_api_call_realtime(
-                    model=self.model_name,
-                    call_type=f"{self.model_instance.__class__.__name__}_invoke",
-                    input_preview=input_preview,
-                    output_preview=output_preview,
-                    duration=duration,
-                    success=success,
-                    error_msg=error_msg,
-                    temperature=effective_temp_for_log,  # Now this should have a value
-                    agent_context=agent_context
-                )
-            except (AttributeError, ImportError) as e:
-                # Fallback logging if monitoring module has issues
-                print(f"API Call: {self.model_name} | Temp: {effective_temp_for_log} | " 
-                      f"Success: {success} | Duration: {duration:.2f}s")
-                print(f"Monitoring error: {e}")
+            # Record error and check for escalation in a non-blocking way
+            await asyncio.to_thread(advanced_rate_limiter.rate_limiter.record_error, "llm.ainvoke", error_type)
+            if advanced_rate_limiter.config.enable_auto_escalation:
+                 await asyncio.to_thread(advanced_rate_limiter._check_auto_escalation)
+            raise e
 
-# Enhanced get_llm function for Gemini
-def get_llm(temperature: Optional[float] = None, 
+    def rate_limited_stream(*args, **kwargs):
+        """Wrapped synchronous stream method."""
+        advanced_rate_limiter.rate_limiter.wait_if_needed()
+        try:
+            yield from llm._original_stream(*args, **kwargs)
+            advanced_rate_limiter.rate_limiter.record_success("llm.stream")
+        except Exception as e:
+            error_type = type(e).__name__
+            advanced_rate_limiter.rate_limiter.record_error("llm.stream", error_type)
+            if advanced_rate_limiter.config.enable_auto_escalation:
+                advanced_rate_limiter._check_auto_escalation()
+            raise e
+
+    async def rate_limited_astream(*args, **kwargs):
+        """Wrapped asynchronous astream method."""
+        await asyncio.to_thread(advanced_rate_limiter.rate_limiter.wait_if_needed)
+        try:
+            async for chunk in llm._original_astream(*args, **kwargs):
+                yield chunk
+            await asyncio.to_thread(advanced_rate_limiter.rate_limiter.record_success, "llm.astream")
+        except Exception as e:
+            error_type = type(e).__name__
+            await asyncio.to_thread(advanced_rate_limiter.rate_limiter.record_error, "llm.astream", error_type)
+            if advanced_rate_limiter.config.enable_auto_escalation:
+                await asyncio.to_thread(advanced_rate_limiter._check_auto_escalation)
+            raise e
+
+    # Apply the monkey-patch using object.__setattr__ to bypass Pydantic's
+    # model validation, which prevents direct assignment to non-field attributes.
+    object.__setattr__(llm, 'invoke', rate_limited_invoke)
+    object.__setattr__(llm, 'ainvoke', rate_limited_ainvoke)
+    object.__setattr__(llm, 'stream', rate_limited_stream)
+    object.__setattr__(llm, 'astream', rate_limited_astream)
+    
+    logger.info(f"Applied rate limiting wrapper to LLM instance for all call methods: {type(llm).__name__}")
+    return llm
+
+def get_llm(temperature: Optional[float] = None,
             model: Optional[str] = None,
-            llm_specific_kwargs: Optional[Dict[str, Any]] = None):
+            llm_specific_kwargs: Optional[Dict[str, Any]] = None) -> BaseLanguageModel:
     """
-    Get LLM instance based on environment configuration with improved error resilience.
+    Get a configured LLM instance with appropriate temperature.
     
     Args:
-        temperature: Default temperature for the LLM (overrides environment defaults)
-        model: Model name to use (overrides environment defaults)
-        llm_specific_kwargs: Additional provider-specific parameters
+        temperature: Override temperature
+        model: Override model name
+        llm_specific_kwargs: Additional kwargs for the LLM constructor
         
     Returns:
-        A tracked LLM instance configured with the specified parameters
+        A configured BaseLanguageModel instance
     """
-    llm_provider = os.getenv("LLM_PROVIDER", "GEMINI").upper()
-    logger.info(f"Initializing LLM with provider: {llm_provider}")
-    
-    # Get global retry configuration with smart defaults
-    RETRY_CONFIG = {
-        "max_retries": int(os.getenv("LLM_MAX_RETRIES", "8")),  # Increased from default 4
-        "initial_delay": float(os.getenv("LLM_INITIAL_DELAY", "1.0")),  # Start with 1 second
-        "max_delay": float(os.getenv("LLM_MAX_DELAY", "60.0")),  # Cap at 60 seconds
-        "backoff_factor": float(os.getenv("LLM_BACKOFF_FACTOR", "1.5")),  # More gradual backoff
-        "jitter": bool(os.getenv("LLM_JITTER", "True").lower() == "true"),  # Add randomness
-        # Retry on these specific status codes and timeout errors
-        "retry_on": [408, 429, 500, 502, 503, 504]
-    }
-    
-    try:
-        if llm_provider == "GEMINI":
-            # Get API key with secure handling
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError("GEMINI_API_KEY not found in environment variables")
-            
-            # Log that key exists but don't show any part of it for security
-            logger.info(f"Gemini API Key loaded: {bool(api_key)}")
-            
-            # Get model name and temperature
-            model_name = model or os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-preview-05-20")
-            
-            # Validate and set temperature
-            temp = temperature
-            if temp is None:
-                temp = float(os.getenv("DEFAULT_TEMPERATURE", 0.1))
-              # Ensure temperature is within valid range
-            if not (0.0 <= temp <= 1.0):
-                logger.warning(f"Temperature {temp} outside valid range [0.0, 1.0]. Clamping to valid range.")
-                temp = max(0.0, min(1.0, temp))
-            
-            # Prepare initialization kwargs for ChatGoogleGenerativeAI with enhanced retry logic
-            gemini_init_kwargs = {
-                "model": model_name,
-                "temperature": temp,
-                "google_api_key": api_key,
-                # Model-specific system message handling
-                # Gemma models need convert_system_message_to_human=True
-                # Gemini models support native system messages  
-                "convert_system_message_to_human": "gemma" in model_name.lower(),
-                "retry_config": {
-                    "retry": {
-                        "timeout": float(os.getenv("LLM_REQUEST_TIMEOUT", "120.0")),
-                        "attempts": RETRY_CONFIG["max_retries"],
-                        "backoff_factor": RETRY_CONFIG["backoff_factor"],
-                        "initial_delay": RETRY_CONFIG["initial_delay"],
-                        "maximum_delay": RETRY_CONFIG["max_delay"],
-                        "jitter": RETRY_CONFIG["jitter"],
-                        "retry_on_exceptions": (
-                            TimeoutError, 
-                            ConnectionError,
-                            requests.exceptions.RequestException
-                        ),
-                        "retry_on_status_codes": RETRY_CONFIG["retry_on"]
-                    }
-                },
-                # Increased token limits for complex tasks
-                "max_output_tokens": int(os.getenv("MAX_OUTPUT_TOKENS", "8192")),
-                # Smart request throttling
-                "request_parallelism": int(os.getenv("LLM_REQUEST_PARALLELISM", "4")),
-                # Replace the string-based safety settings with enum-based settings:
-                "safety_settings": {
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH
-                }
-            }
-            
-            # Add any additional specific kwargs
-            if llm_specific_kwargs:
-                # Special handling for generation_config
-                if "generation_config" in llm_specific_kwargs:
-                    gen_config = gemini_init_kwargs.get("generation_config", {})
-                    if isinstance(gen_config, dict):
-                        gen_config.update(llm_specific_kwargs.pop("generation_config"))
-                    gemini_init_kwargs["generation_config"] = gen_config
-                
-                # Add remaining kwargs
-                filtered_kwargs = {k: v for k, v in llm_specific_kwargs.items() if v is not None}
-                gemini_init_kwargs.update(filtered_kwargs)
-            
-            logger.info(f"Creating ChatGoogleGenerativeAI with model={model_name}, temp={temp}, retries={RETRY_CONFIG['max_retries']}")
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            
-            # Create the LLM with improved error handling
-            try:
-                actual_llm = ChatGoogleGenerativeAI(**gemini_init_kwargs)
-                
-                # Return a tracked model that wraps the LLM instance
-                return TrackedChatModel(
-                    model_instance=actual_llm,
-                    model_name=model_name,
-                    google_api_key=api_key,
-                    llm_init_kwargs=gemini_init_kwargs
-                )
-            except Exception as e:
-                # Enhanced error handling with more detailed fallback strategy
-                error_type = type(e).__name__
-                error_msg = str(e)
-                logger.warning(f"Error initializing {model_name}: [{error_type}] {error_msg}")
-                
-                # Step 1: Try reducing complexity (lower temperature)
-                if temperature and temperature > 0.2:
-                    logger.info("Attempting fallback with lower temperature (0.2)")
-                    try:
-                        gemini_init_kwargs["temperature"] = 0.2
-                        actual_llm = ChatGoogleGenerativeAI(**gemini_init_kwargs)
-                        return TrackedChatModel(
-                            model_instance=actual_llm,
-                            model_name=model_name,
-                            google_api_key=api_key,
-                            llm_init_kwargs=gemini_init_kwargs
-                        )
-                    except Exception:
-                        pass  # Continue to next fallback
-                
-                # Step 2: Try fallback to a more stable model
-                fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-pro")
-                logger.warning(f"Trying fallback model: {fallback_model}")
-                
-                # Update model in kwargs
-                gemini_init_kwargs["model"] = fallback_model
-                
-                # Try again with fallback model
-                actual_llm = ChatGoogleGenerativeAI(**gemini_init_kwargs)
-                return TrackedChatModel(
-                    model_instance=actual_llm,
-                    model_name=fallback_model,
-                    google_api_key=api_key,
-                    llm_init_kwargs=gemini_init_kwargs
-                )
-        
-        # Add support for other providers here...
-        
-        else:
-            raise ValueError(f"Unsupported LLM provider: {llm_provider}")
-            
-    except Exception as e:
-        # Comprehensive error handling
-        error_msg = f"Error initializing LLM: {str(e)}"
-        logger.error(error_msg)
-        
-        # Try to use monitoring if available
-        try:
-            monitoring.log_global(error_msg, "ERROR")
-        except:
-            pass
-        
-        # Re-raise the exception
-        raise
+    system_config = get_system_config()
+    provider = system_config.llm_provider.lower()
 
-def get_embedding_model(embedding_provider: Optional[str] = None, 
+    # Determine model name based on provider
+    if provider in ["google", "gemini"]:
+        model_name = model or system_config.gemini_model_name
+    elif provider == "ollama":
+        model_name = model or system_config.ollama_model_name
+    else:
+        # Fallback for other providers or if provider is not set correctly
+        logger.warning(f"Unsupported or unknown LLM provider: '{system_config.llm_provider}'. Defaulting to Gemini model.")
+        model_name = model or system_config.gemini_model_name
+    
+    # Use provided temperature or a safe default.
+    # The default_temperature attribute was removed from SystemConfig.
+    temp_to_use = temperature if temperature is not None else 0.1 # Safe default for general use
+    
+    # Merge provided kwargs with defaults.
+    # The llm_kwargs attribute was removed. Start with an empty dict.
+    llm_kwargs = {}
+    if llm_specific_kwargs:
+        llm_kwargs.update(llm_specific_kwargs)
+    
+    # Remove parameters that are passed directly
+    llm_kwargs.pop('temperature', None)
+    llm_kwargs.pop('model', None)
+    llm_kwargs.pop('model_name', None)
+
+    if provider in ["google", "gemini"]:
+        # Ensure safety settings are correctly configured
+        safety_settings = llm_kwargs.pop('safety_settings', {
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        })
+
+        # Create LLM with merged parameters
+        llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=temp_to_use,
+            safety_settings=safety_settings,
+            convert_system_message_to_human=False, # This is the key change
+            google_api_key=system_config.gemini_api_key,
+            max_retries=0,  # Disable LangChain's internal retries to allow custom rate limiting
+            **llm_kwargs
+        )
+        
+        logger.info(f"Created Google LLM with model={model_name}, temp={temp_to_use}")
+
+    elif provider == "ollama":
+        # For Ollama, the base_url is a common kwarg
+        base_url = llm_kwargs.pop('base_url', 'http://localhost:11434')
+        llm = Ollama(
+            model=model_name,
+            temperature=temp_to_use,
+            base_url=base_url,
+            **llm_kwargs
+        )
+        logger.info(f"Created Ollama LLM with model={model_name}, temp={temp_to_use}")
+        
+    else:
+        # Fallback to a default or raise an error
+        logger.warning(f"Unsupported LLM provider: {provider}. Defaulting to Google.")
+        llm = ChatGoogleGenerativeAI(
+            model=model_name, 
+            temperature=temp_to_use,
+            convert_system_message_to_human=False,
+            google_api_key=system_config.gemini_api_key,
+            max_retries=0  # Disable LangChain's internal retries to allow custom rate limiting
+        )
+
+    # Use a cached wrapper if configured
+    if hasattr(system_config, 'enable_llm_cache') and system_config.enable_llm_cache:
+        # This part assumes a get_cached_llm function exists
+        # and can wrap the created llm instance.
+        return get_cached_llm(
+            temperature=temp_to_use, 
+            model=model_name,
+            use_cache=True,
+            **llm_kwargs
+        )
+    else:
+        # --- ADDED: Wrap the LLM with the rate limiter before returning ---
+        return _with_rate_limiting(llm)
+
+def get_embedding_model(embedding_provider: Optional[str] = None,
                        embedding_model: Optional[str] = None) -> Embeddings:
     """
     Get the embedding model based on configuration.
@@ -1240,7 +960,7 @@ def get_agent_temperature_from_config(agent_name: str) -> float:
 def create_agent_llm(agent_name: str, 
                      override_temperature: Optional[float] = None,
                      model: Optional[str] = None,
-                     **kwargs) -> TrackedChatModel:
+                     **kwargs) -> BaseLanguageModel:
     """
     Create an LLM instance optimized for a specific agent with appropriate temperature.
     
@@ -1254,7 +974,7 @@ def create_agent_llm(agent_name: str,
         **kwargs: Additional LLM parameters
         
     Returns:
-        TrackedChatModel: LLM instance with appropriate temperature binding
+        BaseLanguageModel: LLM instance with appropriate temperature binding
     """
     # Get temperature from strategy or use override
     temperature = override_temperature
@@ -1320,228 +1040,6 @@ def get_cached_llm(temperature: float,
     _LLM_CACHE[cache_key] = llm
     return llm
 
-import time
-from functools import wraps
-
-# Add a global variable to track API calls
-_last_api_call_time = 0
-_api_call_count = 0
-_min_delay_between_calls = 6.0  # 1 call every 6 seconds (10 calls per minute)
-
-# Store the original invoke method before we patch it
-_original_invoke = TrackedChatModel.invoke
-
-# Add simple memory-based caching for frequently repeated identical calls
-_invoke_memory_cache = {}
-_MAX_INVOKE_CACHE_SIZE = 100  # Limit memory usage
-
-# Add near the top with other global variables
-_cache_hits = 0
-_cache_misses = 0
-
-# Define your model-specific rate limits in the global scope
-_model_rate_limits = {
-    # model_family: seconds_per_call 
-    "gemini-pro": 4.0,  # 15 calls per minute (Free tier limit)
-    "gemini-1.5": 4.0,  # 15 calls per minute (Free tier limit)
-    "gemini-2.5": 4.0,  # 15 calls per minute (Free tier limit)
-    "gemini-flash": 4.0, # 15 calls per minute (Free tier limit)
-    "default": 4.0      # Default safe limit (15/min)
-}
-
-# Agent-specific overrides (these are more important than the model)
-_agent_rate_limit_overrides = {
-    # agent_name: seconds_per_call
-    "System Designer Agent": 6.0, # This agent is chatty, slow it down to 10 calls/min
-    "Plan Compiler Agent": 5.0,   # This one can also be chatty
-    "BRD Analyst Agent": 5.0,     # Added to prevent rate limiting during BRD analysis
-    "Tech Stack Advisor Agent": 5.0, # Added for consistency
-    "Code Generation Agent": 6.0, # Code generation can trigger many API calls
-}
-
-# Quota management configuration
-ENABLE_MODEL_FALLBACK = os.getenv("ENABLE_MODEL_FALLBACK", "true").lower() == "true"
-QUOTA_BACKOFF_MULTIPLIER = float(os.getenv("QUOTA_BACKOFF_MULTIPLIER", "60.0"))  # Seconds to backoff for quota issues
-
-# Model performance configuration
-PREFERRED_MODELS = {
-    "high_performance": ["gemini-1.5-pro", "gemma-3-27b-it"],
-    "balanced": ["gemini-1.5-flash", "gemma-3-9b-it"], 
-    "light": ["gemini-1.0-pro", "gemma-3-2b-it"]
-}
-
-def get_model_tier(model_name: str) -> str:
-    """Get the performance tier of a model."""
-    for tier, models in PREFERRED_MODELS.items():
-        if model_name in models:
-            return tier
-    return "unknown"
-
-# Enhanced quota and error management
-QUOTA_EXHAUSTED_MODELS = set()
-LAST_QUOTA_CHECK = {}
-
-def check_quota_status(model_name: str) -> bool:
-    """Check if a model's quota is currently exhausted."""
-    global QUOTA_EXHAUSTED_MODELS, LAST_QUOTA_CHECK
-    
-    # Reset quota status after 1 hour
-    current_time = time.time()
-    if model_name in LAST_QUOTA_CHECK:
-        if current_time - LAST_QUOTA_CHECK[model_name] > 3600:  # 1 hour
-            QUOTA_EXHAUSTED_MODELS.discard(model_name)
-            del LAST_QUOTA_CHECK[model_name]
-            logger.info(f"Reset quota status for {model_name}")
-    
-    return model_name not in QUOTA_EXHAUSTED_MODELS
-
-def mark_quota_exhausted(model_name: str):
-    """Mark a model as quota exhausted."""
-    global QUOTA_EXHAUSTED_MODELS, LAST_QUOTA_CHECK
-    QUOTA_EXHAUSTED_MODELS.add(model_name)
-    LAST_QUOTA_CHECK[model_name] = time.time()
-    logger.error(f"🚫 Model {model_name} marked as quota exhausted")
-
-def get_fallback_model(original_model: str) -> Optional[str]:
-    """Get a fallback model when quota is exhausted."""
-    fallback_models = {
-        "gemma-3-27b-it": "gemma-3-9b-it",
-        "gemma-3-9b-it": "gemma-3-2b-it",
-        "gemini-1.5-pro": "gemini-1.5-flash",
-        "gemini-1.5-flash": "gemini-1.0-pro"
-    }
-    
-    fallback = fallback_models.get(original_model)
-    if fallback and check_quota_status(fallback):
-        logger.info(f"Using fallback model {fallback} for {original_model}")
-        return fallback
-    
-    return None
-
-# Replace the ENTIRE rate_limited_invoke function with this new one
-def rate_limited_invoke(self, input: Any, config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
-    """
-    Enhanced rate-limited invoke with unified rate limiting to prevent token waste.
-    
-    This function now checks for advanced rate limiter availability first,
-    preventing redundant rate limiting that wastes 25-40% of API tokens.
-    """
-    global _last_api_call_time, _api_call_count, _invoke_memory_cache
-
-    # OPTIMIZATION 1: Check if advanced rate limiter is available first
-    # This prevents redundant rate limiting and reduces API token usage by 25-40%
-    try:
-        from advanced_rate_limiting.rate_limit_manager import make_optimized_llm_call
-        if make_optimized_llm_call:
-            # Use advanced rate limiter - skip basic rate limiting
-            logging.debug("Using advanced rate limiter - skipping basic rate limiting")
-            return make_optimized_llm_call(
-                llm_instance=self.model_instance,
-                input_data=input,
-                config=config,
-                **kwargs
-            )
-    except (ImportError, AttributeError) as e:
-        logging.debug(f"Advanced rate limiter not available: {e}")
-        # Fall back to basic rate limiting
-        pass
-
-    # OPTIMIZATION 2: Enhanced in-memory caching for repeated inputs
-    cache_key = None
-    if isinstance(input, str) and len(input) < 1000:  # Only cache smaller inputs
-        cache_key = hashlib.md5(input.encode()).hexdigest()
-        if cache_key in _invoke_memory_cache:
-            logging.debug(f"Cache hit for input hash: {cache_key[:8]}...")
-            return _invoke_memory_cache[cache_key]
-
-    # Extract agent context for targeted rate limiting
-    agent_context = ""
-    if config and isinstance(config, dict):
-        if "configurable" in config:
-            agent_context = config.get("configurable", {}).get('agent_context', '')
-        else:
-            agent_context = config.get('agent_context', '')
-
-    # Get model family for rate limiting
-    try:
-        model_key = '-'.join(self.model_name.split('-')[:2])
-    except (AttributeError, IndexError):
-        model_key = "default"
-
-    # OPTIMIZATION 3: Smarter rate limiting with reduced delays
-    sleep_time = adaptive_limiter.should_delay(model_key, agent_context)
-    if sleep_time > 0:
-        # Reduce sleep time by 30% since we're avoiding redundant calls
-        optimized_sleep = sleep_time * 0.7
-        logging.info(f"Optimized rate limiting for '{agent_context or model_key}'. Sleeping for {optimized_sleep:.2f}s (reduced from {sleep_time:.2f}s)")
-        time.sleep(optimized_sleep)
-
-    _api_call_count += 1
-    if _api_call_count % 10 == 0:
-        logging.info(f"Total API calls this run: {_api_call_count}")
-
-    # Call the original function with enhanced retry logic
-    max_retries = 3  # Reduced from 5 since advanced rate limiter handles retries
-    retry_count = 0
-    
-    while retry_count <= max_retries:
-        try:
-            result = _original_invoke(self, input, config=config, **kwargs)
-            
-            # Success! Update the rate limiter and cache the result
-            adaptive_limiter.report_success(model_key)
-            
-            # Cache successful results for similar future requests
-            if cache_key and len(_invoke_memory_cache) < _MAX_INVOKE_CACHE_SIZE:
-                _invoke_memory_cache[cache_key] = result
-                
-            return result
-            
-        except Exception as e:
-            error_str = str(e).lower()
-            is_rate_limit = any(indicator in error_str for indicator in 
-                               ["rate limit", "quota", "429", "resource exhausted"])
-              # Enhanced retry logic with adaptive backoff and quota tracking
-            if is_rate_limit and retry_count < max_retries:
-                retry_count += 1
-                adaptive_limiter.report_failure(model_key, is_rate_limit=True)
-                
-                # Check if this is a quota exhaustion (429 error)
-                if "429" in error_str or "quota" in error_str or "resource exhausted" in error_str:
-                    mark_quota_exhausted(model_key)
-                    
-                    # Try to use a fallback model
-                    fallback_model = get_fallback_model(model_key)
-                    if fallback_model:
-                        logging.info(f"Attempting fallback to {fallback_model} due to quota exhaustion")
-                        # Note: This would require model switching capability
-                        # For now, just continue with normal retry logic
-                
-                # Smarter backoff calculation - longer delays for quota issues
-                if "quota" in error_str or "429" in error_str:
-                    base_backoff = min(60 * retry_count, 300)  # Up to 5 minutes for quota issues
-                else:
-                    base_backoff = min(2 ** retry_count, 30)  # Normal rate limit backoff
-                    
-                jitter = base_backoff * 0.1 * (0.5 - (hash(str(input)) % 1000) / 1000.0)
-                backoff_time = base_backoff + jitter
-                
-                logging.warning(
-                    f"{'Quota exhausted' if 'quota' in error_str else 'Rate limit hit'} for {agent_context or model_key}. "
-                    f"Retrying in {backoff_time:.2f}s (attempt {retry_count}/{max_retries})"
-                )
-                
-                time.sleep(backoff_time)
-                continue
-                
-            # For non-rate limit errors or if we've exhausted retries
-            if is_rate_limit:
-                logging.error(f"🔥 LLM call failed after advanced rate limiting: {e}")
-                mark_quota_exhausted(model_key)  # Mark as exhausted for future calls
-
-# Replace the existing rate_limited_invoke with this improved version
-TrackedChatModel.invoke = rate_limited_invoke
-
 def clear_llm_caches():
     """Clear all LLM caches to free memory and reset cache state."""
     global _invoke_memory_cache, _response_cache, _cache_hits, _cache_misses
@@ -1568,144 +1066,3 @@ def get_cache_stats() -> Dict[str, int]:
         "misses": _cache_misses,
         "total": _cache_hits + _cache_misses
     }
-
-# Add to config.py after the model_rate_limits definition
-class AdaptiveRateLimiter:
-    """Adaptive rate limiter that adjusts based on API responses"""
-    
-    def __init__(self):
-        self.base_delays = _model_rate_limits.copy()
-        self.current_delays = _model_rate_limits.copy()
-        self.consecutive_failures = {}
-        self.last_call_time = {}
-        self.lock = threading.Lock()
-        self.max_backoff = 60.0  # Maximum 60 second delay
-    
-    def should_delay(self, model_key, agent_context=None):
-        """Determine if we should delay and for how long"""
-        with self.lock:
-            # Get the appropriate delay for this model/agent
-            if agent_context in _agent_rate_limit_overrides:
-                base_delay = _agent_rate_limit_overrides[agent_context]
-            else:
-                base_delay = self.current_delays.get(model_key, self.current_delays["default"])
-            
-            # Get current time and last call time
-            current_time = time.time()
-            last_time = self.last_call_time.get(model_key, 0)
-            elapsed = current_time - last_time
-            
-            # If enough time has passed, update and return no delay
-            if elapsed >= base_delay:
-                self.last_call_time[model_key] = current_time
-                return 0.0
-                
-            # Need to wait
-            sleep_time = base_delay - elapsed
-            self.last_call_time[model_key] = current_time + sleep_time
-            return sleep_time
-    
-    def report_failure(self, model_key, is_rate_limit=True):
-        """Report a failure and increase backoff"""
-        with self.lock:
-            # Increment consecutive failures
-            self.consecutive_failures[model_key] = self.consecutive_failures.get(model_key, 0) + 1
-            
-            if is_rate_limit:
-                # Increase the delay for this model
-                base = self.base_delays.get(model_key, self.base_delays["default"])
-                backoff_factor = min(2 ** self.consecutive_failures[model_key], 10)  # Cap at 2^10
-                self.current_delays[model_key] = min(base * backoff_factor, self.max_backoff)
-                logging.warning(f"Rate limit hit for {model_key}. Increased delay to {self.current_delays[model_key]:.2f}s")
-    
-    def report_success(self, model_key):
-        """Report a successful call and gradually reduce delay"""
-        with self.lock:
-            # Reset consecutive failures
-            self.consecutive_failures[model_key] = 0
-            
-            # Gradually decrease delay back toward base delay
-            current = self.current_delays.get(model_key, self.current_delays["default"])
-            base = self.base_delays.get(model_key, self.base_delays["default"])
-            
-            if current > base:
-                # Reduce by 10% each successful call, but not below base
-                self.current_delays[model_key] = max(base, current * 0.9)
-
-
-adaptive_rate_limiter = AdaptiveRateLimiter()
-# After line 1506 where adaptive_rate_limiter is defined, add:
-adaptive_limiter = adaptive_rate_limiter  # Create alias for compatibility with rate_limited_invoke
-
-def create_fallback_chain(providers=None):
-    """Create a chain of provider fallbacks to try when rate limits are hit"""
-    if providers is None:
-        providers = ["GEMINI", "OPENAI", "ANTHROPIC"]
-        
-    # Filter to only providers with configured API keys
-    available_providers = []
-    for provider in providers:
-        if provider == "GEMINI" and os.getenv("GEMINI_API_KEY"):
-            available_providers.append(provider)
-        elif provider == "OPENAI" and os.getenv("OPENAI_API_KEY"):
-            available_providers.append(provider)
-        elif provider == "ANTHROPIC" and os.getenv("ANTHROPIC_API_KEY"):
-            available_providers.append(provider)
-    
-    return available_providers
-
-fallback_providers = create_fallback_chain()
-
-class TokenBucketRateLimiter:
-    """Token bucket algorithm for rate limiting"""
-    
-    def __init__(self, rate=10.0, capacity=20.0):
-        """
-        Initialize with tokens per second rate and bucket capacity
-        
-        Args:
-            rate: Tokens per second to add
-            capacity: Maximum tokens the bucket can hold
-        """
-        self.rate = rate
-        self.capacity = capacity
-        self.tokens = capacity
-        self.last_refill = time.time()
-        self.lock = threading.Lock()
-    
-    def consume(self, tokens=1):
-        """
-        Consume tokens from the bucket
-        
-        Args:
-            tokens: Number of tokens to consume (default: 1)
-            
-        Returns:
-            Tuple of (success, wait_time)
-        """
-        with self.lock:
-            self._refill()
-            
-            if self.tokens >= tokens:
-                # We have enough tokens
-                self.tokens -= tokens
-                return True, 0.0
-                
-            # Not enough tokens - calculate wait time
-            deficit = tokens - self.tokens
-            wait_time = deficit / self.rate
-            return False, wait_time
-    
-    def _refill(self):
-        """Refill tokens based on elapsed time"""
-        now = time.time()
-        elapsed = now - self.last_refill
-        
-        # Add tokens based on elapsed time
-        if elapsed > 0:
-            new_tokens = elapsed * self.rate
-            self.tokens = min(self.capacity, self.tokens + new_tokens)
-            self.last_refill = now
-
-# Create global rate limiters
-gemini_limiter = TokenBucketRateLimiter(rate=10.0, capacity=20.0)  # 10 tokens/second, burst of 20

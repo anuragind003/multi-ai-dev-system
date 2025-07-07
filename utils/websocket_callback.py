@@ -8,6 +8,9 @@ import asyncio
 import logging
 from datetime import datetime
 import uuid
+import json
+
+from app.websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +26,28 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         self.agent_name = agent_name
         self.step_count = 0
         
+    def _serialize_for_log(self, data: Any) -> str:
+        """Safely serialize data for logging, handling various types."""
+        if isinstance(data, str):
+            return data
+        if isinstance(data, dict) or isinstance(data, list):
+            try:
+                return json.dumps(data, indent=2)
+            except TypeError:
+                return str(data) # Fallback for non-serializable objects
+        return str(data)
+    
     def _safe_async_run(self, coro):
-        """Safely run async code from sync callback"""
+        """Safely run async code from sync callback, managing event loops."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, schedule the coroutine
-                asyncio.create_task(coro)
-            else:
-                loop.run_until_complete(coro)
+            # Check if there's a running event loop in the current thread
+            loop = asyncio.get_running_loop()
+            # If so, schedule the coroutine to run on it
+            loop.create_task(coro)
+        except RuntimeError:
+            # If there's no running loop, create a new one just for this coroutine.
+            # This is common when callbacks are invoked from a synchronous context in a separate thread.
+            asyncio.run(coro)
         except Exception as e:
             logger.error(f"Error in WebSocket callback: {e}")
     
@@ -43,7 +59,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         message = f"[STEP {self.step_count}] {self.agent_name} is thinking..."
         print(f"🤔 {message}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_agent_thinking(
                 self.session_id, self.agent_name, message
@@ -60,7 +75,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             if hasattr(response.generations[0][0], 'text'):
                 reasoning = response.generations[0][0].text
                 
-                from multi_ai_dev_system.app.websocket_manager import websocket_manager
                 self._safe_async_run(
                     websocket_manager.send_agent_thinking(
                         self.session_id, self.agent_name, f"Reasoning: {reasoning}"
@@ -74,7 +88,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         error_msg = f"LLM Error in {self.agent_name}: {str(error)}"
         print(f"❌ {error_msg}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_error(self.session_id, error_msg, self.agent_name)
         )
@@ -84,30 +97,30 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
     ) -> Any:
         """Called when a tool starts executing"""
         tool_name = serialized.get("name", "Unknown Tool")
+        input_log = self._serialize_for_log(input_str)
         message = f"[STEP {self.step_count}] Using tool: {tool_name}"
         print(f"🔧 {message}")
-        print(f"   Input: {input_str}")
+        print(f"   Input: {input_log}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_agent_action(
-                self.session_id, self.agent_name, tool_name, input_str
+                self.session_id, self.agent_name, tool_name, f"INPUT: {input_log}"
             )
         )
     
     def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Called when a tool finishes executing"""
+        output_log = self._serialize_for_log(output)
         message = f"[STEP {self.step_count}] Tool completed"
         print(f"✅ {message}")
-        print(f"   Output: {output[:200]}{'...' if len(output) > 200 else ''}")
+        print(f"   Output: {output_log[:200]}{'...' if len(output_log) > 200 else ''}")
         
         # Get tool name from kwargs if available
         tool_name = kwargs.get("name", "Unknown Tool")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_tool_result(
-                self.session_id, self.agent_name, tool_name, output
+                self.session_id, self.agent_name, tool_name, f"OUTPUT: {output_log}"
             )
         )
     
@@ -118,7 +131,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         error_msg = f"Tool Error in {self.agent_name}: {str(error)}"
         print(f"❌ {error_msg}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_error(self.session_id, error_msg, self.agent_name)
         )
@@ -131,7 +143,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             
         print(f"💭 {self.agent_name}: {text}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_agent_thinking(
                 self.session_id, self.agent_name, text
@@ -140,16 +151,15 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
     
     def on_agent_action(self, action: Any, **kwargs: Any) -> Any:
         """Called when agent decides on an action"""
-        tool_name = action.tool if hasattr(action, 'tool') else str(action)
-        tool_input = action.tool_input if hasattr(action, 'tool_input') else ""
+        tool_name = action.tool if hasattr(action, 'tool') else "Unknown Tool"
+        tool_input = self._serialize_for_log(getattr(action, 'tool_input', ''))
         
         message = f"[STEP {self.step_count}] {self.agent_name} decided to use: {tool_name}"
         print(f"🎯 {message}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_agent_action(
-                self.session_id, self.agent_name, tool_name, str(tool_input)
+                self.session_id, self.agent_name, tool_name, tool_input
             )
         )
     
@@ -158,16 +168,11 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         message = f"{self.agent_name} completed successfully"
         print(f"🎉 {message}")
         
-        result = {}
-        if hasattr(finish, 'return_values'):
-            result = finish.return_values
-        elif hasattr(finish, 'output'):
-            result = {"output": finish.output}
+        result_log = self._serialize_for_log(getattr(finish, 'return_values', {}))
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_agent_completed(
-                self.session_id, self.agent_name, result
+                self.session_id, self.agent_name, result_log
             )
         )
     
@@ -175,12 +180,15 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
     ) -> Any:
         """Called when a chain starts"""
+        if not serialized:
+            # Silently return without warning - this is normal for some LangChain operations
+            return
+            
         chain_name = serialized.get("name", "Unknown Chain")
         if chain_name != "AgentExecutor":  # Avoid spam from executor
             message = f"Starting {chain_name}"
             print(f"🔄 {message}")
             
-            from multi_ai_dev_system.app.websocket_manager import websocket_manager
             self._safe_async_run(
                 websocket_manager.send_workflow_status(
                     self.session_id, "chain_start", message, {"chain": chain_name}
@@ -199,7 +207,6 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         error_msg = f"Chain Error in {self.agent_name}: {str(error)}"
         print(f"❌ {error_msg}")
         
-        from multi_ai_dev_system.app.websocket_manager import websocket_manager
         self._safe_async_run(
             websocket_manager.send_error(self.session_id, error_msg, self.agent_name)
         )

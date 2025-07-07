@@ -1,4 +1,2 @@
-resource "postgresql_database" "example" {
-  name = "your_database_name"
-  owner = "your_username"
-}
+# Terraform configuration for PostgreSQL deployment (example)
+# ... (Terraform code for creating PostgreSQL instance, security groups, etc.)

@@ -102,6 +102,12 @@ class EnhancedToolValidator:
             Enhanced tool function with validation and tracking
         """
         
+        # Check if the tool_function is already a LangChain StructuredTool
+        # If so, return it as-is since it already has validation built-in
+        if hasattr(tool_function, 'name') and hasattr(tool_function, 'description') and hasattr(tool_function, 'args_schema'):
+            logger.debug(f"Tool '{tool_name}' is already a StructuredTool, skipping enhanced validation wrapper")
+            return tool_function
+        
         # Initialize metrics for this tool
         if tool_name not in self.tool_metrics:
             self.tool_metrics[tool_name] = ToolPerformanceMetrics()

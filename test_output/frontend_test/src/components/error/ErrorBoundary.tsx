@@ -1,25 +1,36 @@
-import React, { ReactNode } from 'react';
-import { reportError } from '../../utils/errorReporting';
+import React from 'react';
 
 interface ErrorBoundaryProps {
-  fallback: ReactNode;
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
-export const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({ fallback, children }) => {
-  const [hasError, setHasError] = React.useState(false);
-
-  React.useEffect(() => {
-    return () => {
-      if (hasError) {
-        reportError(new Error("ErrorBoundary triggered"));
-      }
-    };
-  }, [hasError]);
-
-  if (hasError) {
-    return fallback;
+class ErrorBoundary extends React.Component<ErrorBoundaryProps> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
   }
 
-  return children;
-};
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // You can also log the error to a service like Sentry here
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div>
+          <h1>Something went wrong.</h1>
+          <p>Please try again later.</p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export { ErrorBoundary };
