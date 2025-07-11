@@ -1,0 +1,13 @@
+# Basic Elasticsearch configuration for Docker Compose
+cluster.name: "docker-cluster"
+network.host: 0.0.0.0
+
+# Disable security for development/demo purposes.
+# IMPORTANT: Enable and configure X-Pack security for production environments!
+xpack.security.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: false
+
+# Allow CORS for Kibana (if needed, though Kibana connects directly)
+http.cors.enabled: true
+http.cors.allow-origin: "*"

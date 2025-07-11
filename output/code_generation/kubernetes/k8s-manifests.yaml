@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  labels:
+    app: fastapi-backend
+spec:
+  replicas: 2 # Scale up for high availability
+  selector:
+    matchLabels:
+      app: fastapi-backend
+  template:
+    metadata:
+      labels:
+        app: fastapi-backend
+    spec:
+      containers:
+      - name: fastapi-backend
+        image: your_docker_username/fastapi-backend:latest # Replace with your image
+        ports:
+        - containerPort: 8000
+        env:
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SECRET_KEY
+        - name: APP_ENV
+          value: production
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+spec:
+  selector:
+    app: fastapi-backend
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP # Internal service, exposed via Ingress
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: nextjs-frontend
+spec:
+  replicas: 2 # Scale up for high availability
+  selector:
+    matchLabels:
+      app: nextjs-frontend
+  template:
+    metadata:
+      labels:
+        app: nextjs-frontend
+    spec:
+      containers:
+      - name: nextjs-frontend
+        image: your_docker_username/nextjs-frontend:latest # Replace with your image
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_BASE_URL
+          value: http://backend-service:8000 # Use Kubernetes service name
+        - name: NODE_ENV
+          value: production
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "200m"
+          limits:
+            memory: "256Mi"
+            cpu: "400m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  selector:
+    app: nextjs-frontend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP # Internal service, exposed via Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2 # For /api/(.*)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false" # Set to "true" for HTTPS
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod" # Uncomment for cert-manager
+spec:
+  ingressClassName: nginx # Ensure you have an Nginx Ingress Controller
+  rules:
+  - host: your-domain.com # Replace with your actual domain
+    http:
+      paths:
+      - path: /api(/|$)(.*) # Path for backend API
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: /docs(/|$)(.*) # Path for FastAPI docs
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: /redoc(/|$)(.*) # Path for FastAPI redoc
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: /metrics(/|$)(.*) # Path for Prometheus metrics
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: / # Default path for frontend
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 3000
+  # tls: # Uncomment for HTTPS with cert-manager
+  # - hosts:
+  #   - your-domain.com
+  #   secretName: your-domain-tls # Cert-manager will create this secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+stringData:
+  SECRET_KEY: "your_production_secret_key_here" # REPLACE WITH A SECURE, GENERATED KEY

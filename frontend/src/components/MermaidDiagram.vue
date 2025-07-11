@@ -7,7 +7,7 @@
       Error rendering diagram: {{ error }}
     </div>
     <div 
-      v-else 
+      v-show="!loading && !error"
       ref="mermaidRef" 
       class="mermaid-diagram bg-white p-4 rounded-lg overflow-auto"
       :style="{ minHeight: height }"
@@ -42,7 +42,7 @@ const initializeMermaid = () => {
   const defaultConfig = {
     startOnLoad: false,
     theme: props.theme,
-    securityLevel: 'loose',
+    securityLevel: 'loose' as const,
     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
     ...props.config
   }
@@ -52,11 +52,22 @@ const initializeMermaid = () => {
 
 // Render the diagram
 const renderDiagram = async () => {
-  if (!props.diagram || !mermaidRef.value) return
+  if (!props.diagram || !mermaidRef.value) {
+    console.log('MermaidDiagram: Cannot render - missing diagram or ref', { 
+      diagram: !!props.diagram, 
+      ref: !!mermaidRef.value 
+    })
+    return
+  }
   
   try {
     loading.value = true
     error.value = null
+    
+    console.log('MermaidDiagram: Starting render process', { 
+      diagramLength: props.diagram.length,
+      diagramPreview: props.diagram.substring(0, 100) + '...'
+    })
     
     // Clear previous content
     mermaidRef.value.innerHTML = ''
@@ -69,8 +80,12 @@ const renderDiagram = async () => {
     // Generate unique ID for this render
     const currentId = `${diagramId.value}-${Date.now()}`
     
+    console.log('MermaidDiagram: Calling mermaid.render with ID:', currentId)
+    
     // Render the diagram
     const { svg } = await mermaid.render(currentId, props.diagram)
+    
+    console.log('MermaidDiagram: Render successful, inserting SVG')
     
     // Insert the SVG
     mermaidRef.value.innerHTML = svg
@@ -82,8 +97,11 @@ const renderDiagram = async () => {
       svgElement.style.height = 'auto'
     }
     
+    console.log('MermaidDiagram: Diagram rendered successfully')
+    
   } catch (err) {
     console.error('Mermaid rendering error:', err)
+    console.error('Diagram content that failed:', props.diagram)
     error.value = err instanceof Error ? err.message : 'Unknown rendering error'
   } finally {
     loading.value = false
@@ -92,11 +110,15 @@ const renderDiagram = async () => {
 
 // Watch for changes in diagram content
 watch(() => props.diagram, async () => {
+  console.log('MermaidDiagram: Diagram prop changed', { 
+    newDiagram: !!props.diagram,
+    diagramLength: props.diagram?.length || 0
+  })
   if (props.diagram) {
     await nextTick()
     await renderDiagram()
   }
-}, { immediate: false })
+}, { immediate: true })
 
 // Watch for theme changes
 watch(() => props.theme, () => {
@@ -131,20 +153,22 @@ defineExpose({
 
 <style scoped>
 .mermaid-container {
-  @apply w-full;
+  width: 100%;
 }
 
 .mermaid-diagram {
-  @apply border border-gray-300;
+  border: 1px solid #d1d5db;
 }
 
 .mermaid-diagram :deep(svg) {
-  @apply w-full h-auto;
+  width: 100%;
+  height: auto;
 }
 
 /* Dark theme support */
 .dark .mermaid-diagram {
-  @apply bg-gray-800 border-gray-600;
+  background-color: #1f2937;
+  border-color: #4b5563;
 }
 
 /* Override Mermaid's default styles for better integration */
@@ -152,14 +176,17 @@ defineExpose({
 .mermaid-diagram :deep(.node circle),
 .mermaid-diagram :deep(.node ellipse),
 .mermaid-diagram :deep(.node polygon) {
-  @apply stroke-2;
+  stroke-width: 2px;
 }
 
 .mermaid-diagram :deep(.edgePath .path) {
-  @apply stroke-2;
+  stroke-width: 2px;
 }
 
 .mermaid-diagram :deep(.edgeLabel) {
-  @apply bg-white px-2 py-1 rounded text-sm;
+  background-color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
 }
 </style> 

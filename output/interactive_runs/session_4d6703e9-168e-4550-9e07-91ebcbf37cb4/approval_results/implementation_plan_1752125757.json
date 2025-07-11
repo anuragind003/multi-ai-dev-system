@@ -1,0 +1,1167 @@
+{
+  "session_id": "session_4d6703e9-168e-4550-9e07-91ebcbf37cb4",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752125757,
+  "approval_data": {
+    "work_items": [
+      {
+        "id": "INF-001",
+        "description": "Initialize Git repository, set up basic project structure for monorepo (frontend, backend folders), and configure initial `.gitignore` files.",
+        "dependencies": [],
+        "estimated_time": "4 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Git repository is initialized.",
+          "Root project directory contains 'frontend' and 'backend' subdirectories.",
+          "Basic `.gitignore` files are present in root and subdirectories.",
+          "Initial commit pushed to remote repository."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".gitignore",
+          "README.md",
+          "frontend/",
+          "backend/"
+        ]
+      },
+      {
+        "id": "INF-002",
+        "description": "Configure Dockerfile and docker-compose.yml for the NestJS backend application, including dependencies and build steps.",
+        "dependencies": [
+          "INF-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Dockerfile for backend is created and builds successfully.",
+          "docker-compose.yml includes a service for the backend.",
+          "Backend service can be started via `docker-compose up`.",
+          "Basic health check endpoint is accessible within the container."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/Dockerfile",
+          "docker-compose.yml"
+        ]
+      },
+      {
+        "id": "INF-003",
+        "description": "Configure Dockerfile and docker-compose.yml for the React frontend application, including dependencies and build steps.",
+        "dependencies": [
+          "INF-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Dockerfile for frontend is created and builds successfully.",
+          "docker-compose.yml includes a service for the frontend.",
+          "Frontend service can be started via `docker-compose up`.",
+          "Frontend application is accessible in the browser via Docker."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/Dockerfile",
+          "docker-compose.yml"
+        ]
+      },
+      {
+        "id": "DB-001",
+        "description": "Design and implement PostgreSQL database schema for 'users', 'recordings', and 'audit_logs' tables, including primary keys, foreign keys, and constraints as per data model.",
+        "dependencies": [
+          "INF-002"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "SQL migration scripts are created for all three tables.",
+          "Tables are created in a local PostgreSQL instance.",
+          "All specified fields, types, and constraints (PRIMARY KEY, UNIQUE, NOT NULL, FOREIGN KEY, CHECK) are correctly applied.",
+          "Relationships between tables are correctly established."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/database/migrations/V1__create_initial_schema.sql"
+        ]
+      },
+      {
+        "id": "INF-004",
+        "description": "Set up core AWS infrastructure: VPC, subnets, security groups, EC2 instance for monolithic application, RDS PostgreSQL instance, and S3 bucket for recordings.",
+        "dependencies": [
+          "INF-002",
+          "INF-003",
+          "DB-001"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "AWS VPC, public/private subnets, and NAT Gateway are configured.",
+          "Security groups are defined for EC2, RDS, and S3 access.",
+          "EC2 instance is launched and accessible.",
+          "RDS PostgreSQL instance is provisioned and accessible from EC2.",
+          "S3 bucket for VKYC recordings is created with appropriate permissions.",
+          "Network connectivity between EC2, RDS, and S3 is verified."
+        ],
+        "status": "pending",
+        "code_files": []
+      },
+      {
+        "id": "INF-005",
+        "description": "Configure GitLab CI/CD pipeline for automated build, test, and deployment of the monolithic application to AWS EC2.",
+        "dependencies": [
+          "INF-002",
+          "INF-003",
+          "INF-004"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          ".gitlab-ci.yml file is created and configured.",
+          "Pipeline successfully builds Docker images for frontend and backend.",
+          "Pipeline runs unit tests for both applications.",
+          "Pipeline successfully deploys the application to the EC2 instance.",
+          "Deployment process is automated and repeatable."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".gitlab-ci.yml"
+        ]
+      },
+      {
+        "id": "INF-006",
+        "description": "Set up Redis instance (e.g., ElastiCache on AWS or Docker container for local dev) for caching and session management.",
+        "dependencies": [
+          "INF-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Redis instance is provisioned and accessible.",
+          "Backend application can connect to Redis.",
+          "Basic caching functionality can be demonstrated (e.g., set/get a key)."
+        ],
+        "status": "pending",
+        "code_files": []
+      },
+      {
+        "id": "INF-007",
+        "description": "Set up Prometheus and Grafana for application and infrastructure monitoring, including basic dashboards.",
+        "dependencies": [
+          "INF-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Prometheus server is deployed and configured to scrape metrics.",
+          "Grafana is deployed and connected to Prometheus.",
+          "Basic dashboards are created in Grafana to visualize system metrics (CPU, Memory, Network).",
+          "Application metrics (e.g., API request counts) can be exposed and scraped by Prometheus."
+        ],
+        "status": "pending",
+        "code_files": [
+          "monitoring/prometheus.yml",
+          "monitoring/grafana-dashboards/"
+        ]
+      },
+      {
+        "id": "INF-008",
+        "description": "Set up ELK Stack (Elasticsearch, Logstash, Kibana) for centralized logging and configure backend application to send logs.",
+        "dependencies": [
+          "INF-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Elasticsearch, Logstash, and Kibana are deployed and running.",
+          "Logstash is configured to ingest logs from the backend application.",
+          "Backend application logs are successfully sent to Logstash/Elasticsearch.",
+          "Logs are visible and searchable in Kibana dashboards."
+        ],
+        "status": "pending",
+        "code_files": [
+          "logging/logstash.conf",
+          "backend/src/config/logger.ts"
+        ]
+      },
+      {
+        "id": "INF-009",
+        "description": "Configure secure access from the backend application to the S3-compatible object storage for VKYC recordings.",
+        "dependencies": [
+          "INF-004",
+          "BE-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "IAM role/user with S3 read permissions is created and assigned to EC2 instance/application.",
+          "Backend application can successfully list objects in the S3 bucket.",
+          "Backend application can successfully retrieve a test object from S3."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/config/s3.config.ts"
+        ]
+      },
+      {
+        "id": "INF-010",
+        "description": "Develop and implement a script or service for initial data ingestion: migrating VKYC recording files from LTF NFS to S3 and populating recording metadata into PostgreSQL.",
+        "dependencies": [
+          "INF-004",
+          "DB-001",
+          "INF-009"
+        ],
+        "estimated_time": "5 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Script successfully connects to LTF NFS and S3.",
+          "Script successfully reads recording files from NFS and uploads them to S3.",
+          "Script extracts relevant metadata (LAN ID, date, etc.) from recordings or a manifest.",
+          "Script inserts recording metadata into the PostgreSQL 'recordings' table.",
+          "Data integrity is maintained during migration (e.g., file hashes match).",
+          "Process is idempotent and handles partial failures gracefully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "scripts/data-ingestion.py",
+          "backend/src/modules/recordings/recordings.service.ts"
+        ]
+      },
+      {
+        "id": "BE-001",
+        "description": "Implement user authentication API endpoint (`POST /auth/login`) using JWT, including user validation against the database and password hashing.",
+        "dependencies": [
+          "DB-001"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/auth/login` is created.",
+          "Endpoint accepts username and password.",
+          "Successfully authenticates valid users and returns a JWT token.",
+          "Returns 401 Unauthorized for invalid credentials.",
+          "Passwords are securely hashed (e.g., bcrypt) and compared."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/auth/auth.controller.ts",
+          "backend/src/auth/auth.service.ts",
+          "backend/src/auth/jwt.strategy.ts",
+          "backend/src/users/users.service.ts"
+        ]
+      },
+      {
+        "id": "BE-002",
+        "description": "Implement Role-Based Access Control (RBAC) middleware to protect API endpoints based on user roles (Team Lead, Process Manager).",
+        "dependencies": [
+          "BE-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "RBAC guard/middleware is implemented.",
+          "Endpoints can be decorated with required roles (e.g., `@Roles('Team Lead')`).",
+          "Users with insufficient roles receive 403 Forbidden response.",
+          "Users with correct roles can access protected endpoints."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/auth/roles.guard.ts",
+          "backend/src/auth/roles.decorator.ts"
+        ]
+      },
+      {
+        "id": "BE-003",
+        "description": "Implement API endpoint (`GET /recordings`) to retrieve a paginated list of VKYC recording metadata from the database.",
+        "dependencies": [
+          "DB-001",
+          "BE-002"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/recordings` is created.",
+          "Endpoint returns a paginated list of recording metadata.",
+          "Response includes total count, current page, and page size.",
+          "Endpoint is protected by authentication and authorization (e.g., 'Team Lead' role)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/recordings/recordings.controller.ts",
+          "backend/src/recordings/recordings.service.ts",
+          "backend/src/recordings/dto/get-recordings.dto.ts"
+        ]
+      },
+      {
+        "id": "BE-004",
+        "description": "Implement API endpoint (`GET /recordings/{id}/download`) to stream a single VKYC recording file from S3-compatible storage.",
+        "dependencies": [
+          "DB-001",
+          "BE-002",
+          "INF-009"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/recordings/{id}/download` is created.",
+          "Endpoint retrieves the file path from the database using the provided ID.",
+          "Endpoint streams the corresponding file from S3.",
+          "File download is initiated in the client browser with correct headers (Content-Disposition).",
+          "Endpoint is protected by authentication and authorization."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/recordings/recordings.controller.ts",
+          "backend/src/recordings/recordings.service.ts",
+          "backend/src/s3/s3.service.ts"
+        ]
+      },
+      {
+        "id": "FE-001",
+        "description": "Create the Login Page UI with username and password input fields and a submit button.",
+        "dependencies": [
+          "INF-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Login page component is created.",
+          "Page contains input fields for username and password.",
+          "Page contains a 'Login' button.",
+          "Basic styling is applied."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/components/AuthForm.tsx"
+        ]
+      },
+      {
+        "id": "FE-002",
+        "description": "Implement user authentication logic in the frontend, including API calls to backend login endpoint, JWT storage, and protected route redirection.",
+        "dependencies": [
+          "FE-001",
+          "BE-001"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Login form submits data to `/api/auth/login`.",
+          "JWT token is received and stored securely (e.g., HttpOnly cookie or localStorage).",
+          "User is redirected to the dashboard upon successful login.",
+          "Unauthorized access attempts display an error message.",
+          "Protected routes are inaccessible without a valid token."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/context/AuthContext.tsx",
+          "frontend/src/hooks/useAuth.ts",
+          "frontend/src/App.tsx",
+          "frontend/src/utils/api.ts"
+        ]
+      },
+      {
+        "id": "FE-003",
+        "description": "Create the main Dashboard layout, including header, navigation (e.g., for recordings, audit logs), and a content area.",
+        "dependencies": [
+          "FE-002"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Dashboard component is created.",
+          "Header with application title and logout button is present.",
+          "Navigation links (e.g., 'Recordings', 'Audit Logs') are present.",
+          "Content area is defined for displaying dynamic content.",
+          "User can successfully log out and be redirected to the login page."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx",
+          "frontend/src/components/Layout.tsx",
+          "frontend/src/components/Header.tsx"
+        ]
+      },
+      {
+        "id": "FE-004",
+        "description": "Display the list of VKYC recordings in a tabular format on the dashboard, fetching data from the backend API.",
+        "dependencies": [
+          "FE-003",
+          "BE-003"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Recordings table component is created.",
+          "Table fetches data from `/api/recordings` endpoint.",
+          "Table displays relevant recording metadata (e.g., VKYC ID, Customer Name, Date, Duration).",
+          "Table handles loading states and displays an empty state if no data."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/RecordingsTable.tsx",
+          "frontend/src/pages/RecordingsPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-005",
+        "description": "Implement a download button for each recording in the table that triggers the single recording download API.",
+        "dependencies": [
+          "FE-004",
+          "BE-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Each row in the recordings table has a 'Download' button or icon.",
+          "Clicking the button triggers a download request to `/api/recordings/{id}/download`.",
+          "File download initiates in the browser.",
+          "Error handling for download failures is implemented (e.g., toast notification)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/RecordingsTable.tsx"
+        ]
+      },
+      {
+        "id": "QA-001",
+        "description": "Write unit tests for backend authentication (login, JWT generation) and basic recording metadata APIs.",
+        "dependencies": [
+          "BE-001",
+          "BE-003"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Test files are created for auth and recordings modules.",
+          "Tests cover successful login, invalid credentials, token validation.",
+          "Tests cover successful retrieval of recording list.",
+          "All unit tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/auth/auth.service.spec.ts",
+          "backend/src/recordings/recordings.service.spec.ts"
+        ]
+      },
+      {
+        "id": "QA-002",
+        "description": "Write unit tests for frontend authentication components (login form, auth context) and recording display components.",
+        "dependencies": [
+          "FE-001",
+          "FE-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Test files are created for login page and recordings table components.",
+          "Tests cover form submission, state changes, and data rendering.",
+          "Tests mock API calls correctly.",
+          "All unit tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/LoginPage.test.tsx",
+          "frontend/src/components/RecordingsTable.test.tsx"
+        ]
+      },
+      {
+        "id": "BE-005",
+        "description": "Enhance the recording list API (`GET /recordings`) to support searching by LAN ID.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint accepts a `lanId` query parameter.",
+          "Results are filtered to include only recordings matching the provided LAN ID.",
+          "Search is case-insensitive (if applicable).",
+          "Performance is acceptable for typical search queries."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/recordings/recordings.controller.ts",
+          "backend/src/recordings/recordings.service.ts",
+          "backend/src/recordings/dto/get-recordings.dto.ts"
+        ]
+      },
+      {
+        "id": "BE-006",
+        "description": "Enhance the recording list API (`GET /recordings`) to support filtering by date and month.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint accepts `startDate`, `endDate`, and `month` query parameters.",
+          "Results are filtered based on the provided date range or month.",
+          "Date/month parsing and validation are robust.",
+          "Filtering works correctly for edge cases (e.g., month boundaries)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/recordings/recordings.controller.ts",
+          "backend/src/recordings/recordings.service.ts",
+          "backend/src/recordings/dto/get-recordings.dto.ts"
+        ]
+      },
+      {
+        "id": "BE-007",
+        "description": "Implement audit logging mechanism: record user actions (login, view recording, download recording) to the 'audit_logs' table.",
+        "dependencies": [
+          "DB-001",
+          "BE-001",
+          "BE-003",
+          "BE-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Middleware or interceptor captures user ID, action, timestamp, and IP address.",
+          "Logs are successfully written to the `audit_logs` table for relevant actions.",
+          "Details field (JSONB) captures additional context (e.g., recording ID, search parameters).",
+          "Logging does not significantly impact API performance."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/audit/audit.service.ts",
+          "backend/src/audit/audit.middleware.ts",
+          "backend/src/audit/audit.entity.ts"
+        ]
+      },
+      {
+        "id": "BE-008",
+        "description": "Implement API endpoint (`GET /audit-logs`) to retrieve a paginated list of audit logs, accessible by Process Managers/Admins.",
+        "dependencies": [
+          "DB-001",
+          "BE-002",
+          "BE-007"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/audit-logs` is created.",
+          "Endpoint returns a paginated list of audit log entries.",
+          "Endpoint is protected by authorization (e.g., 'Process Manager' or 'Admin' role).",
+          "Response includes relevant log details (user, action, timestamp, details)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/audit/audit.controller.ts",
+          "backend/src/audit/audit.service.ts"
+        ]
+      },
+      {
+        "id": "FE-006",
+        "description": "Implement a search input field for LAN ID on the recordings dashboard.",
+        "dependencies": [
+          "FE-004",
+          "BE-005"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Search input field is added to the recordings page.",
+          "Typing in the input updates the search query.",
+          "Submitting the search (e.g., on Enter or button click) triggers API call with `lanId` parameter.",
+          "Recording table updates to show filtered results."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/RecordingsPage.tsx",
+          "frontend/src/components/SearchInput.tsx"
+        ]
+      },
+      {
+        "id": "FE-007",
+        "description": "Implement date and month filter components on the recordings dashboard.",
+        "dependencies": [
+          "FE-004",
+          "BE-006"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Date range picker and/or month selector components are added.",
+          "Selecting dates/months triggers API call with corresponding filter parameters.",
+          "Recording table updates to show filtered results.",
+          "Filters can be cleared to show all recordings."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/RecordingsPage.tsx",
+          "frontend/src/components/DateFilter.tsx",
+          "frontend/src/components/MonthFilter.tsx"
+        ]
+      },
+      {
+        "id": "FE-008",
+        "description": "Integrate search and filter components with the recording list, ensuring combined filtering and proper state management.",
+        "dependencies": [
+          "FE-006",
+          "FE-007"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "All search and filter criteria can be applied simultaneously.",
+          "API calls correctly combine all active filters.",
+          "UI state reflects active filters.",
+          "Performance is acceptable when applying multiple filters."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/RecordingsPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-009",
+        "description": "Create a dedicated page to display audit logs in a paginated tabular format.",
+        "dependencies": [
+          "FE-003",
+          "BE-008"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Audit log page component is created.",
+          "Page fetches data from `/api/audit-logs` endpoint.",
+          "Table displays audit log details (user, action, timestamp, details).",
+          "Pagination is implemented for the audit log table.",
+          "Only authorized users (Process Managers/Admins) can access this page."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/AuditLogsPage.tsx",
+          "frontend/src/components/AuditLogsTable.tsx"
+        ]
+      },
+      {
+        "id": "QA-003",
+        "description": "Write integration tests for backend search, filter, and audit log APIs.",
+        "dependencies": [
+          "BE-005",
+          "BE-006",
+          "BE-008"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Tests cover search by LAN ID (exact, partial, no match).",
+          "Tests cover filtering by date range and month.",
+          "Tests verify audit log entries are created for various actions.",
+          "Tests verify audit log retrieval and pagination.",
+          "All integration tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/test/recordings.e2e-spec.ts",
+          "backend/test/audit.e2e-spec.ts"
+        ]
+      },
+      {
+        "id": "QA-004",
+        "description": "Write end-to-end tests for core functionality: user login, viewing recording list, and single recording download.",
+        "dependencies": [
+          "FE-002",
+          "FE-004",
+          "FE-005"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "E2E test suite is set up (e.g., Playwright/Cypress).",
+          "Tests simulate user login and verify successful redirection.",
+          "Tests verify recording list is displayed correctly.",
+          "Tests simulate clicking a download button and verify download initiation.",
+          "All E2E tests pass successfully in a controlled environment."
+        ],
+        "status": "pending",
+        "code_files": [
+          "e2e/specs/core.spec.ts"
+        ]
+      },
+      {
+        "id": "BE-009",
+        "description": "Implement bulk upload API endpoint (`POST /bulk-download/upload`) for CSV/TXT files, including file parsing and validation (min 2, max 50 LAN IDs).",
+        "dependencies": [
+          "BE-002"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/bulk-download/upload` is created.",
+          "Endpoint accepts file uploads (CSV/TXT).",
+          "File content is parsed to extract LAN IDs.",
+          "Validation ensures file contains between 2 and 50 LAN IDs.",
+          "Validation ensures correct file format (CSV/TXT).",
+          "Returns appropriate error messages for invalid files/content."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/bulk-download/bulk-download.controller.ts",
+          "backend/src/bulk-download/bulk-download.service.ts",
+          "backend/src/bulk-download/dto/upload-file.dto.ts"
+        ]
+      },
+      {
+        "id": "BE-010",
+        "description": "Implement bulk download processing logic: retrieve recording metadata for provided LAN IDs and prepare for download (limited to 10 records per request).",
+        "dependencies": [
+          "BE-009",
+          "BE-003"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Service method processes a list of LAN IDs.",
+          "Retrieves corresponding recording metadata from the database.",
+          "Enforces the 10-record limit for a single bulk download request.",
+          "Returns a list of recording metadata suitable for frontend display and individual download links.",
+          "Handles cases where LAN IDs are not found."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/bulk-download/bulk-download.service.ts"
+        ]
+      },
+      {
+        "id": "BE-011",
+        "description": "Implement API endpoint (`POST /bulk-download/results`) to return the results of a bulk download request in a tabular format.",
+        "dependencies": [
+          "BE-010"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "API endpoint `/bulk-download/results` is created.",
+          "Endpoint accepts a list of LAN IDs (or a request ID from previous upload).",
+          "Returns a paginated list of recording metadata for the requested LAN IDs.",
+          "Response includes download links for each individual recording.",
+          "Endpoint is protected by authentication and authorization."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/bulk-download/bulk-download.controller.ts",
+          "backend/src/bulk-download/dto/bulk-download-request.dto.ts"
+        ]
+      },
+      {
+        "id": "FE-010",
+        "description": "Create a file upload component for bulk video download requests, supporting CSV and TXT formats.",
+        "dependencies": [
+          "FE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "File upload component is created with a clear label.",
+          "Component accepts only CSV and TXT file types.",
+          "User can select a file.",
+          "File size and type validation is performed client-side."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkUploadForm.tsx",
+          "frontend/src/pages/BulkDownloadPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-011",
+        "description": "Implement logic to send the uploaded file to the backend bulk upload API and handle the response.",
+        "dependencies": [
+          "FE-010",
+          "BE-009"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Form submission sends the file to `/api/bulk-download/upload`.",
+          "Successful upload displays a confirmation message.",
+          "Error messages are displayed for invalid file formats or content.",
+          "Loading indicator is shown during file upload."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkUploadForm.tsx",
+          "frontend/src/pages/BulkDownloadPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-012",
+        "description": "Display the results of bulk download requests in a tabular format on the screen.",
+        "dependencies": [
+          "FE-011",
+          "BE-011"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A new table component is created for bulk download results.",
+          "Table displays recording metadata for the requested LAN IDs.",
+          "Table handles pagination (10 records per page).",
+          "Loading and error states are handled gracefully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkResultsTable.tsx",
+          "frontend/src/pages/BulkDownloadPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-013",
+        "description": "Implement a 'Download All' option for the currently displayed 10 records in the bulk download results table.",
+        "dependencies": [
+          "FE-012",
+          "BE-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A 'Download All' button is present above the bulk results table.",
+          "Clicking 'Download All' triggers individual downloads for all 10 records on the current page.",
+          "User experience for multiple downloads is smooth (e.g., browser prompts for each file or a single zip if backend supports).",
+          "Error handling for individual downloads within the bulk action is present."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkResultsTable.tsx"
+        ]
+      },
+      {
+        "id": "FE-014",
+        "description": "Make LAN IDs in the bulk download results table clickable to initiate the download of the corresponding recording.",
+        "dependencies": [
+          "FE-012",
+          "FE-005"
+        ],
+        "estimated_time": "0.5 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "LAN ID column in the bulk results table is rendered as clickable links/buttons.",
+          "Clicking a LAN ID initiates the single recording download using the existing functionality.",
+          "Correct recording is downloaded."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkResultsTable.tsx"
+        ]
+      },
+      {
+        "id": "FE-015",
+        "description": "Implement pagination components for both the main recording list and bulk download results, displaying 10 records at a time.",
+        "dependencies": [
+          "FE-004",
+          "FE-012"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Pagination component is created and reusable.",
+          "Both recording list and bulk results tables display 10 records per page.",
+          "Navigation between pages works correctly.",
+          "Total number of pages is calculated and displayed.",
+          "API calls include correct pagination parameters (page, limit)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/Pagination.tsx",
+          "frontend/src/pages/RecordingsPage.tsx",
+          "frontend/src/pages/BulkDownloadPage.tsx"
+        ]
+      },
+      {
+        "id": "QA-005",
+        "description": "Write integration tests for backend bulk upload and bulk download processing APIs.",
+        "dependencies": [
+          "BE-009",
+          "BE-010",
+          "BE-011"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Tests cover successful file upload (CSV/TXT) with valid LAN IDs.",
+          "Tests cover file validation (min/max LAN IDs, invalid format).",
+          "Tests verify bulk download processing returns correct metadata.",
+          "Tests verify the 10-record limit for bulk download requests.",
+          "All integration tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/test/bulk-download.e2e-spec.ts"
+        ]
+      },
+      {
+        "id": "QA-006",
+        "description": "Write end-to-end tests for the bulk download workflow: file upload, results display, and 'Download All' functionality.",
+        "dependencies": [
+          "FE-011",
+          "FE-012",
+          "FE-013"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Tests simulate uploading a valid CSV/TXT file.",
+          "Tests verify bulk results table is displayed correctly with pagination.",
+          "Tests simulate clicking 'Download All' and verify multiple downloads initiate.",
+          "Tests simulate clicking individual LAN IDs in results table and verify download.",
+          "All E2E tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "e2e/specs/bulk-download.spec.ts"
+        ]
+      },
+      {
+        "id": "BE-012",
+        "description": "Implement centralized error handling middleware in the backend to catch and log exceptions, returning standardized JSON error responses.",
+        "dependencies": [],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Global exception filter/middleware is implemented.",
+          "All unhandled exceptions are caught and logged.",
+          "API responses for errors are standardized (e.g., JSON with error code, message).",
+          "Sensitive error details are not exposed in production responses."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/common/filters/http-exception.filter.ts",
+          "backend/src/main.ts"
+        ]
+      },
+      {
+        "id": "BE-013",
+        "description": "Implement caching for frequently accessed recording metadata using Redis to improve API performance.",
+        "dependencies": [
+          "INF-006",
+          "BE-003"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Redis client is integrated into the backend application.",
+          "Recording metadata retrieval (e.g., for list API) utilizes caching.",
+          "Cache invalidation strategy is implemented (e.g., on data updates, TTL).",
+          "Performance metrics show reduced database load for cached requests."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/cache/cache.service.ts",
+          "backend/src/recordings/recordings.service.ts"
+        ]
+      },
+      {
+        "id": "INF-011",
+        "description": "Configure TLS 1.3 for all API endpoints to ensure data encryption in transit.",
+        "dependencies": [
+          "INF-004",
+          "INF-005"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "SSL/TLS certificate is provisioned and installed on the load balancer/EC2 instance.",
+          "All API traffic is forced over HTTPS.",
+          "TLS 1.3 is enforced as the minimum protocol version.",
+          "Browser security indicators confirm secure connection."
+        ],
+        "status": "pending",
+        "code_files": []
+      },
+      {
+        "id": "INF-012",
+        "description": "Implement database encryption at rest for PostgreSQL (e.g., AWS RDS encryption).",
+        "dependencies": [
+          "INF-004",
+          "DB-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "RDS instance is configured with encryption at rest (KMS).",
+          "Data stored in the database is confirmed to be encrypted.",
+          "No performance degradation observed due to encryption."
+        ],
+        "status": "pending",
+        "code_files": []
+      },
+      {
+        "id": "INF-013",
+        "description": "Integrate application monitoring by exposing metrics from the backend application for Prometheus and creating Grafana dashboards.",
+        "dependencies": [
+          "INF-007",
+          "BE-001",
+          "BE-003",
+          "BE-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Backend application exposes relevant metrics (e.g., request count, response times, error rates).",
+          "Prometheus successfully scrapes these metrics.",
+          "Custom Grafana dashboards are created to visualize application performance.",
+          "Alerts are configured for critical thresholds (e.g., high error rate)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/monitoring/metrics.module.ts",
+          "monitoring/prometheus.yml",
+          "monitoring/grafana-dashboards/application.json"
+        ]
+      },
+      {
+        "id": "INF-014",
+        "description": "Integrate centralized logging by configuring backend application to send detailed logs to the ELK Stack.",
+        "dependencies": [
+          "INF-008",
+          "BE-012"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Backend application uses a structured logger (e.g., Winston) configured for ELK.",
+          "All application logs (info, warn, error) are sent to Logstash.",
+          "Logs are correctly parsed and indexed in Elasticsearch.",
+          "Logs are easily searchable and filterable in Kibana for debugging and auditing."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/config/logger.ts",
+          "backend/src/main.ts"
+        ]
+      },
+      {
+        "id": "QA-007",
+        "description": "Conduct a comprehensive web application security vulnerability scan using OWASP ZAP or Burp Suite.",
+        "dependencies": [
+          "INF-011",
+          "BE-001",
+          "BE-002",
+          "BE-009"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Security scanning tool is configured and run against the deployed application.",
+          "Scan covers authentication, authorization, file upload, and data retrieval endpoints.",
+          "A report of identified vulnerabilities (e.g., XSS, SQLi, broken access control) is generated.",
+          "Critical and high-severity findings are documented for remediation."
+        ],
+        "status": "pending",
+        "code_files": [
+          "security_scan_report.pdf"
+        ]
+      },
+      {
+        "id": "QA-008",
+        "description": "Conduct performance testing for key API endpoints (recording list, single download, bulk upload) under expected load conditions.",
+        "dependencies": [
+          "BE-003",
+          "BE-004",
+          "BE-009",
+          "BE-013"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "qa_engineer",
+        "acceptance_criteria": [
+          "Load testing tool (e.g., JMeter, K6) is configured.",
+          "Test scenarios cover concurrent users for list, single download, and bulk upload.",
+          "Performance metrics (response time, throughput, error rate) are collected.",
+          "Results are analyzed against performance requirements (e.g., response time < 2s for 50 concurrent users).",
+          "Bottlenecks are identified and reported."
+        ],
+        "status": "pending",
+        "code_files": [
+          "performance_test_scripts/",
+          "performance_test_report.pdf"
+        ]
+      },
+      {
+        "id": "DOC-001",
+        "description": "Create comprehensive API documentation (e.g., using Swagger/OpenAPI) for all backend endpoints.",
+        "dependencies": [
+          "BE-001",
+          "BE-003",
+          "BE-004",
+          "BE-005",
+          "BE-006",
+          "BE-008",
+          "BE-009",
+          "BE-011"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "technical_writer",
+        "acceptance_criteria": [
+          "Swagger/OpenAPI documentation is generated and accessible.",
+          "All API endpoints, request/response schemas, and authentication methods are documented.",
+          "Examples for requests and responses are provided.",
+          "Documentation is up-to-date with the latest API changes."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/main.ts",
+          "backend/swagger.json"
+        ]
+      },
+      {
+        "id": "DOC-002",
+        "description": "Create a user manual for VKYC Team Leads and Process Managers, covering portal features, search, filtering, and download processes.",
+        "dependencies": [
+          "FE-001",
+          "FE-004",
+          "FE-006",
+          "FE-007",
+          "FE-009",
+          "FE-010",
+          "FE-012"
+        ],
+        "estimated_time": "3 days",
+        "agent_role": "technical_writer",
+        "acceptance_criteria": [
+          "User manual document is created (e.g., in Confluence/PDF).",
+          "Covers login, dashboard overview, searching, filtering, single download, bulk upload, and bulk results.",
+          "Includes screenshots and step-by-step instructions.",
+          "Language is clear, concise, and target-audience appropriate.",
+          "Reviewed and approved by business stakeholders."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docs/User_Manual.pdf"
+        ]
+      },
+      {
+        "id": "DOC-003",
+        "description": "Create a deployment guide for the application, detailing steps for setting up the environment and deploying the monolithic application.",
+        "dependencies": [
+          "INF-002",
+          "INF-003",
+          "INF-004",
+          "INF-005"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Deployment guide document is created.",
+          "Covers prerequisites, environment setup (AWS, Docker), and CI/CD pipeline usage.",
+          "Includes instructions for database migrations and initial data setup.",
+          "Provides troubleshooting tips for common deployment issues.",
+          "Reviewed and validated by another DevOps engineer."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docs/Deployment_Guide.md"
+        ]
+      }
+    ],
+    "summary": "This project aims to develop a self-service portal for VKYC Team Leads and Process Managers to access and download V-KYC recordings, replacing the current manual process. The implementation plan is broken down into granular work items covering infrastructure setup, backend API development (Node.js/NestJS), frontend UI development (React), database schema (PostgreSQL), and integration with S3-compatible storage for recordings. Key features include user authentication and authorization (RBAC), searching and filtering recordings by date, month, and LAN ID, single recording download, and a bulk download functionality via file upload (CSV/TXT) with a 10-record limit per download batch. The plan also incorporates robust security measures (JWT, TLS, encryption), comprehensive monitoring (Prometheus/Grafana), and centralized logging (ELK Stack) to ensure reliability and auditability. A critical dependency is the data ingestion strategy to move existing VKYC recordings from the LTF NFS server to the S3-compatible object storage and populate the metadata database.",
+    "metadata": {
+      "estimated_total_time": "Approx. 50-60 days (excluding parallel work and potential re-work from QA/Security findings)",
+      "risk_assessment": "Medium-High. Key risks include data security, performance of video streaming/download, and integration complexity with existing data sources (NFS to S3 migration). Mitigation strategies are embedded in the work items (e.g., security scans, performance testing, caching).",
+      "tech_stack_summary": "Frontend: React (TypeScript), Backend: Node.js with NestJS (TypeScript), Database: PostgreSQL, Storage: S3-compatible Object Storage, Deployment: Docker on AWS EC2 with GitLab CI/CD, Monitoring: Prometheus/Grafana, Logging: ELK Stack."
+    }
+  },
+  "workflow_state_snapshot": {}
+}

@@ -1,0 +1,28 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500'] # Max file size 500KB
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master] # Prevent direct commits to main/master
+
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3.9
+
+  - repo: https://github.com/astral-sh/ruff
+    rev: v0.4.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix] # Automatically fix issues and fail if fixes were applied
+      - id: ruff-format # Use ruff's formatter (alternative to black)

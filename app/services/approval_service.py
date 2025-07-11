@@ -213,17 +213,53 @@ async def extract_plan_data(state_values: dict) -> dict:
         # Fallback for older structures or if it's already a dict
         implementation_plan = plan_output.get("plan", {})
     
+    # Process phases to ensure proper format for frontend
+    phases = []
+    for phase_data in implementation_plan.get("phases", []):
+        if hasattr(phase_data, 'model_dump'):
+            phase_dict = phase_data.model_dump()
+        else:
+            phase_dict = phase_data
+        
+        # Ensure work_items are properly formatted
+        work_items = []
+        for item in phase_dict.get("work_items", []):
+            if hasattr(item, 'model_dump'):
+                work_items.append(item.model_dump())
+            else:
+                work_items.append(item)
+        
+        # Create properly formatted phase
+        formatted_phase = {
+            "name": phase_dict.get("name", ""),
+            "description": phase_dict.get("description", ""),
+            "duration": f"{phase_dict.get('estimated_duration_hours', 40)} hours",
+            "work_items": work_items,
+            "dependencies": phase_dict.get("dependencies", [])
+        }
+        phases.append(formatted_phase)
+    
+    # Properly serialize raw_plan to avoid string representation
+    raw_plan_serialized = {}
+    if hasattr(plan_output, 'model_dump'):
+        raw_plan_serialized = plan_output.model_dump()
+    elif isinstance(plan_output, dict):
+        raw_plan_serialized = plan_output
+    else:
+        raw_plan_serialized = {"error": "Could not serialize plan_output"}
+    
     return {
         "type": "implementation_plan",
         "timestamp": time.time(),
         "project_overview": implementation_plan.get("project_summary", {}).get("description", ""),
-        "development_phases": [phase.model_dump() if hasattr(phase, 'model_dump') else phase for phase in implementation_plan.get("phases", [])],
+        "phases": phases,  # Frontend expects 'phases', not 'development_phases'
+        "estimated_timeline": f"{sum(p.get('estimated_duration_hours', 40) for p in implementation_plan.get('phases', []))} hours total",
         "timeline_estimation": implementation_plan.get("timeline", {}).model_dump() if hasattr(implementation_plan.get("timeline", {}), 'model_dump') else implementation_plan.get("timeline", {}),
         "risk_assessment": implementation_plan.get("risks_and_mitigations", []),
         "resource_requirements": implementation_plan.get("resource_allocation", []),
         "deliverables": [item for phase in implementation_plan.get("phases", []) for item in phase.get("deliverables", [])],
         "dependencies": [], # Dependencies are usually at work item level, not direct plan level
-        "raw_plan": plan_output # Keep the entire output for raw inspection
+        "raw_plan": raw_plan_serialized # Properly serialized instead of string representation
     }
 
 # === Modular Human Approval Functions ===

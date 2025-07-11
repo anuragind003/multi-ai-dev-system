@@ -36,8 +36,16 @@
 
         <div class="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <!-- File Upload Button -->
+          <input
+            type="file"
+            ref="fileInput"
+            @change="handleFileSelect"
+            class="hidden"
+            accept=".pdf,.docx,.doc,.txt,.md"
+          />
           <button
             type="button"
+            @click="triggerFileInput"
             class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-lg text-gray-300 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-900 disabled:opacity-50 transition"
             :disabled="isProcessing"
           >
@@ -49,14 +57,14 @@
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
               ></path>
             </svg>
-            Upload File
+            {{ selectedFile ? `Selected: ${selectedFile.name}` : "Upload File" }}
           </button>
 
           <!-- Start Build Button -->
           <button
             type="submit"
             class="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-lg shadow-lg text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition hover:scale-105"
-            :disabled="isProcessing || requirements.length === 0 || !isConnected"
+            :disabled="isProcessing || (requirements.length === 0 && !selectedFile) || !isConnected"
           >
             <svg
               v-if="isProcessing"
@@ -99,6 +107,21 @@ const requirements = ref("");
 const isProcessing = ref(false);
 const httpHealthStatus = ref<boolean | null>(null);
 const router = useRouter();
+const selectedFile = ref<File | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+const handleFileSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    selectedFile.value = target.files[0];
+    // Optional: Clear the textarea when a file is selected
+    requirements.value = "";
+  }
+};
 
 // Import the global connection status from useWorkflowSocket
 // The useWorkflowSocket manages a singleton WebSocket connection to /ws/agent-monitor
@@ -183,11 +206,6 @@ onUnmounted(() => {
 
 // Handler for the form submission
 const startBuild = async () => {
-  if (!requirements.value) {
-    alert("Please enter some requirements before starting the build.");
-    return;
-  }
-
   // Enhanced connectivity check
   if (!isServerHealthy.value) {
     alert("Server is not responding. Please check your connection and try again.");
@@ -195,18 +213,36 @@ const startBuild = async () => {
   }
 
   isProcessing.value = true;
-  startWorkflow(requirements.value); // Clear logs and indicate start
+  startWorkflow(requirements.value || `File: ${selectedFile.value?.name}`); // Update log with file name
 
   try {
-    const response = await fetch("/api/workflow/run_interactive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inputs: {
-          brd_content: requirements.value,
-        },
-      }),
-    });
+    let response;
+    
+    if (selectedFile.value) {
+      // If a file is selected, use FormData to upload it
+      const formData = new FormData();
+      formData.append("brd_file", selectedFile.value);
+      
+      response = await fetch("/api/workflow/run_interactive", {
+        method: "POST",
+        body: formData,
+      });
+    } else if (requirements.value) {
+      // Otherwise, send the text content as JSON
+      response = await fetch("/api/workflow/run_interactive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inputs: {
+            brd_content: requirements.value,
+          },
+        }),
+      });
+    } else {
+      alert("Please either select a file or enter some requirements.");
+      isProcessing.value = false;
+      return;
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

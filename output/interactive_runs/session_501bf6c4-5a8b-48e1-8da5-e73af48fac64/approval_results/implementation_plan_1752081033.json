@@ -1,0 +1,483 @@
+{
+  "session_id": "session_501bf6c4-5a8b-48e1-8da5-e73af48fac64",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752081033,
+  "approval_data": {
+    "work_items": [
+      {
+        "id": "FE-001",
+        "description": "Set up React project and basic UI structure.",
+        "dependencies": [],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "React project initialized.",
+          "Basic UI layout created (e.g., header, task list container, input form).",
+          "Project builds without errors."
+        ],
+        "status": "pending",
+        "code_files": [
+          "package.json",
+          "src/App.js",
+          "src/index.js"
+        ]
+      },
+      {
+        "id": "FE-002",
+        "description": "Create input form for adding tasks.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Form with a text input field for task description.",
+          "Submit button present.",
+          "Form renders correctly."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.js",
+          "src/components/TaskForm.js"
+        ]
+      },
+      {
+        "id": "FE-003",
+        "description": "Implement state management for task list.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Tasks stored in React component state.",
+          "State updates when a new task is added (dummy data initially).",
+          "Task list re-renders when state changes."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.js"
+        ]
+      },
+      {
+        "id": "FE-004",
+        "description": "Display task list.",
+        "dependencies": [
+          "FE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Task list displayed below the input form.",
+          "Each task description rendered correctly.",
+          "Task list updates when state changes."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.js",
+          "src/components/TaskList.js",
+          "src/components/TaskItem.js"
+        ]
+      },
+      {
+        "id": "BE-001",
+        "description": "Set up Node.js/Express project.",
+        "dependencies": [],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Node.js project initialized.",
+          "Express.js installed.",
+          "Project runs without errors.",
+          "Basic server setup (e.g., listening on a port)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "package.json",
+          "index.js"
+        ]
+      },
+      {
+        "id": "BE-002",
+        "description": "Set up PostgreSQL database and connect with Mongoose.",
+        "dependencies": [
+          "BE-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "PostgreSQL database created (locally or on Heroku).",
+          "Mongoose installed and configured.",
+          "Connection to the database established successfully.",
+          "Database connection details stored securely (e.g., environment variables)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "index.js",
+          "models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-003",
+        "description": "Create Task model with Mongoose.",
+        "dependencies": [
+          "BE-002"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Task schema defined with 'description', 'created_at', and 'completed' fields.",
+          "Mongoose model created for the Task schema."
+        ],
+        "status": "pending",
+        "code_files": [
+          "models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-004",
+        "description": "Implement API endpoint to create a task (/api/v1/tasks - POST).",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Endpoint handles POST requests to /api/v1/tasks.",
+          "Endpoint receives task description from request body.",
+          "Task is saved to the database.",
+          "Returns 201 Created with the created task in the response body.",
+          "Returns 400 Bad Request for invalid input."
+        ],
+        "status": "pending",
+        "code_files": [
+          "index.js",
+          "routes/tasks.js"
+        ]
+      },
+      {
+        "id": "BE-005",
+        "description": "Implement API endpoint to get all tasks (/api/v1/tasks - GET).",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Endpoint handles GET requests to /api/v1/tasks.",
+          "Retrieves all tasks from the database.",
+          "Returns 200 OK with the task list in the response body."
+        ],
+        "status": "pending",
+        "code_files": [
+          "index.js",
+          "routes/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-005",
+        "description": "Connect frontend to backend to add tasks.",
+        "dependencies": [
+          "FE-002",
+          "BE-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Form submission sends a POST request to the /api/v1/tasks endpoint.",
+          "Task description is sent in the request body.",
+          "Task list updates after successful task creation (without page refresh).",
+          "Error handling for failed requests (e.g., display error message)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.js",
+          "src/components/TaskForm.js"
+        ]
+      },
+      {
+        "id": "FE-006",
+        "description": "Connect frontend to backend to display tasks.",
+        "dependencies": [
+          "FE-004",
+          "BE-005"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "On component mount, a GET request is sent to the /api/v1/tasks endpoint.",
+          "Task list is populated with data from the API response.",
+          "Task list updates correctly."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.js"
+        ]
+      },
+      {
+        "id": "FE-007",
+        "description": "Implement basic input validation on the frontend.",
+        "dependencies": [
+          "FE-002"
+        ],
+        "estimated_time": "0.5 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Input field cannot be empty.",
+          "Error message displayed if input is invalid.",
+          "Form submission disabled if input is invalid."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/components/TaskForm.js"
+        ]
+      },
+      {
+        "id": "BE-006",
+        "description": "Implement input validation on the backend.",
+        "dependencies": [
+          "BE-004"
+        ],
+        "estimated_time": "0.5 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Backend validates the task description (e.g., not empty, length).",
+          "Returns 400 Bad Request with an error message if validation fails."
+        ],
+        "status": "pending",
+        "code_files": [
+          "routes/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-008",
+        "description": "Implement UI for task completion (checkbox or button).",
+        "dependencies": [
+          "FE-004"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Checkbox or button added to each task item.",
+          "UI reflects the 'completed' status of each task."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/components/TaskItem.js"
+        ]
+      },
+      {
+        "id": "BE-007",
+        "description": "Implement API endpoint to update task completion status (/api/v1/tasks/:id - PUT).",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Endpoint handles PUT requests to /api/v1/tasks/:id.",
+          "Endpoint receives task ID from the URL parameter.",
+          "Endpoint receives 'completed' status from the request body.",
+          "Updates the task's 'completed' status in the database.",
+          "Returns 200 OK with the updated task in the response body.",
+          "Returns 404 Not Found if the task is not found.",
+          "Returns 400 Bad Request for invalid input."
+        ],
+        "status": "pending",
+        "code_files": [
+          "index.js",
+          "routes/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-009",
+        "description": "Connect frontend to backend to update task completion status.",
+        "dependencies": [
+          "FE-008",
+          "BE-007"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Clicking the checkbox/button sends a PUT request to the /api/v1/tasks/:id endpoint.",
+          "The request body includes the new 'completed' status.",
+          "Task list updates after successful update (without page refresh).",
+          "Error handling for failed requests."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/components/TaskItem.js"
+        ]
+      },
+      {
+        "id": "FE-010",
+        "description": "Implement basic styling and UI/UX improvements.",
+        "dependencies": [
+          "FE-001",
+          "FE-002",
+          "FE-004",
+          "FE-008"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "UI is visually appealing.",
+          "Improved user experience (e.g., clear labels, feedback on actions).",
+          "Responsive design (basic)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/App.css",
+          "src/components/*.css"
+        ]
+      },
+      {
+        "id": "BE-008",
+        "description": "Implement API endpoint to delete a task (/api/v1/tasks/:id - DELETE).",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Endpoint handles DELETE requests to /api/v1/tasks/:id.",
+          "Endpoint receives task ID from the URL parameter.",
+          "Deletes the task from the database.",
+          "Returns 204 No Content on successful deletion.",
+          "Returns 404 Not Found if the task is not found."
+        ],
+        "status": "pending",
+        "code_files": [
+          "index.js",
+          "routes/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-011",
+        "description": "Connect frontend to backend to delete tasks.",
+        "dependencies": [
+          "FE-004",
+          "BE-008"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Add a delete button to each task item.",
+          "Clicking the delete button sends a DELETE request to the /api/v1/tasks/:id endpoint.",
+          "Task is removed from the task list after successful deletion.",
+          "Error handling for failed requests."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/components/TaskItem.js"
+        ]
+      },
+      {
+        "id": "DE-001",
+        "description": "Deploy backend to Heroku.",
+        "dependencies": [
+          "BE-005",
+          "BE-007"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Heroku account set up.",
+          "Heroku CLI installed.",
+          "Backend code deployed to Heroku successfully.",
+          "Database provisioned on Heroku (Heroku Postgres add-on).",
+          "Application accessible via Heroku URL."
+        ],
+        "status": "pending",
+        "code_files": [
+          "Procfile",
+          "index.js"
+        ]
+      },
+      {
+        "id": "DE-002",
+        "description": "Deploy frontend to Heroku.",
+        "dependencies": [
+          "FE-006",
+          "DE-001"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Frontend code deployed to Heroku successfully.",
+          "Frontend application accessible via Heroku URL.",
+          "Frontend correctly calls the backend API deployed on Heroku."
+        ],
+        "status": "pending",
+        "code_files": [
+          "package.json",
+          "src/index.js"
+        ]
+      },
+      {
+        "id": "TE-001",
+        "description": "Write unit tests for frontend components.",
+        "dependencies": [
+          "FE-001",
+          "FE-002",
+          "FE-003",
+          "FE-004"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Unit tests written for TaskForm, TaskList, and TaskItem components.",
+          "Tests cover key functionality (e.g., form submission, state updates, rendering).",
+          "Tests pass."
+        ],
+        "status": "pending",
+        "code_files": [
+          "src/components/*.test.js"
+        ]
+      },
+      {
+        "id": "TE-002",
+        "description": "Write unit tests for backend API endpoints.",
+        "dependencies": [
+          "BE-004",
+          "BE-005",
+          "BE-007",
+          "BE-008"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Unit tests written for the create, get all, update, and delete task endpoints.",
+          "Tests cover request validation, database interactions, and response codes.",
+          "Tests pass."
+        ],
+        "status": "pending",
+        "code_files": [
+          "tests/*.test.js"
+        ]
+      },
+      {
+        "id": "TE-003",
+        "description": "Perform integration tests.",
+        "dependencies": [
+          "FE-006",
+          "BE-005"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Integration tests verify that frontend and backend work together correctly.",
+          "Tests cover adding, retrieving, updating, and deleting tasks.",
+          "Tests pass."
+        ],
+        "status": "pending",
+        "code_files": [
+          "tests/integration/*.test.js"
+        ]
+      }
+    ],
+    "summary": "Develop a simple web application for managing a list of tasks, allowing users to add, view, update, and delete tasks. The application will use React for the frontend, Node.js/Express for the backend, and PostgreSQL for the database. The application will be deployed on Heroku.",
+    "metadata": {}
+  },
+  "workflow_state_snapshot": {}
+}

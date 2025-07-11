@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape the FastAPI application
+  - job_name: 'fastapi-app'
+    # If running with docker-compose.prod.yml, 'app' is the service name
+    # If running directly, use localhost:8000
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['app:8000'] # Or 'localhost:8000' if app is directly exposed
+
+  # Scrape Redis Exporter
+  - job_name: 'redis-exporter'
+    # If running with docker-compose.prod.yml, 'redis_exporter' is the service name
+    # If running directly, use localhost:9121
+    static_configs:
+      - targets: ['redis_exporter:9121'] # Or 'localhost:9121' if exporter is directly exposed
+
+# Alerting configuration (example)
+# For production, use Alertmanager
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      # - alertmanager:9093 # If you have an Alertmanager instance
+
+rule_files:
+  # - "alert.rules" # Path to your alert rules file

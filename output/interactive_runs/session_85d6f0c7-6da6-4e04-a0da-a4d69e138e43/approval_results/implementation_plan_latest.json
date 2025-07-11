@@ -1,0 +1,1087 @@
+{
+  "session_id": "session_85d6f0c7-6da6-4e04-a0da-a4d69e138e43",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752122435,
+  "approval_data": {
+    "work_items": [
+      {
+        "id": "INFRA-001",
+        "description": "Initialize Git repository and set up basic project directory structure for frontend and backend.",
+        "dependencies": [],
+        "estimated_time": "4 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "A new Git repository is initialized.",
+          "Root directory contains 'frontend' and 'backend' subdirectories.",
+          "Initial commit pushed to remote repository (e.g., GitHub)."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".git/",
+          "frontend/",
+          "backend/",
+          ".gitignore"
+        ]
+      },
+      {
+        "id": "INFRA-002",
+        "description": "Set up Docker Compose for local PostgreSQL database development environment.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "docker-compose.yml file is created in the project root.",
+          "PostgreSQL service is defined in docker-compose.yml.",
+          "Database can be started and stopped using Docker Compose commands.",
+          "Database is accessible from the host machine (e.g., via `psql`)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docker-compose.yml"
+        ]
+      },
+      {
+        "id": "INFRA-003",
+        "description": "Create Dockerfile for the Node.js backend application.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Dockerfile is created in the 'backend' directory.",
+          "Dockerfile correctly builds a Node.js application image.",
+          "Image can be built successfully using `docker build`.",
+          "Container can be run and exposes the application port."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/Dockerfile"
+        ]
+      },
+      {
+        "id": "INFRA-004",
+        "description": "Create Dockerfile for the React frontend application.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Dockerfile is created in the 'frontend' directory.",
+          "Dockerfile correctly builds a React application image (e.g., using Nginx for serving static files).",
+          "Image can be built successfully using `docker build`.",
+          "Container can be run and serves the React application on its port."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/Dockerfile"
+        ]
+      },
+      {
+        "id": "INFRA-005",
+        "description": "Configure ESLint and Prettier for consistent code quality and formatting in both frontend and backend.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          ".eslintrc.js and .prettierrc files are configured in both frontend and backend directories.",
+          "Linting and formatting scripts are added to package.json for both.",
+          "Running lint/format commands fixes common style issues and reports errors."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/.eslintrc.js",
+          "frontend/.prettierrc",
+          "frontend/package.json",
+          "backend/.eslintrc.js",
+          "backend/.prettierrc",
+          "backend/package.json"
+        ]
+      },
+      {
+        "id": "INFRA-006",
+        "description": "Implement basic GitHub Actions workflow for CI (linting and building) for both frontend and backend.",
+        "dependencies": [
+          "INFRA-003",
+          "INFRA-004",
+          "INFRA-005"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          ".github/workflows/ci.yml file is created.",
+          "Workflow triggers on push to main branch.",
+          "Workflow includes steps to lint and build both frontend and backend applications.",
+          "Workflow runs successfully on a test commit."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".github/workflows/ci.yml"
+        ]
+      },
+      {
+        "id": "DB-001",
+        "description": "Create PostgreSQL migration script for the 'users' table.",
+        "dependencies": [
+          "INFRA-002"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "Migration file for 'users' table is created (e.g., using a migration tool like `node-pg-migrate`).",
+          "Table schema matches design: id (UUID PK), username (VARCHAR UNIQUE), password_hash (VARCHAR), created_at (TIMESTAMP).",
+          "Migration can be applied successfully to the local PostgreSQL database.",
+          "Table exists and has correct columns in the database."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/migrations/V1__create_users_table.sql"
+        ]
+      },
+      {
+        "id": "DB-002",
+        "description": "Create PostgreSQL migration script for the 'tasks' table.",
+        "dependencies": [
+          "DB-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "Migration file for 'tasks' table is created.",
+          "Table schema matches design: id (UUID PK), user_id (UUID FK to users), title (VARCHAR), description (TEXT), completed (BOOLEAN), created_at (TIMESTAMP), updated_at (TIMESTAMP).",
+          "Foreign key constraint to 'users' table is correctly defined.",
+          "Migration can be applied successfully to the local PostgreSQL database.",
+          "Table exists and has correct columns and foreign key in the database."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/migrations/V2__create_tasks_table.sql"
+        ]
+      },
+      {
+        "id": "BE-001",
+        "description": "Initialize Node.js Express project in the 'backend' directory.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "backend/package.json is created with Express and basic dependencies.",
+          "A simple 'Hello World' Express server is set up (e.g., app.js or index.js).",
+          "Server can be started and responds to a basic GET request (e.g., /).",
+          "Project structure includes routes, controllers, and models directories."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/package.json",
+          "backend/app.js",
+          "backend/routes/",
+          "backend/controllers/",
+          "backend/models/"
+        ]
+      },
+      {
+        "id": "BE-002",
+        "description": "Configure database connection to PostgreSQL from the Node.js backend.",
+        "dependencies": [
+          "BE-001",
+          "DB-002"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Database configuration file is created (e.g., db.js or config/database.js).",
+          "PostgreSQL client (e.g., `pg` or `sequelize`) is installed and configured.",
+          "Connection pool is set up.",
+          "A test query can be executed successfully against the database from the backend application."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/config/database.js",
+          "backend/package.json"
+        ]
+      },
+      {
+        "id": "BE-003",
+        "description": "Implement Task model/schema and basic CRUD operations (create, read all) using the database connection.",
+        "dependencies": [
+          "BE-002"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Task model file is created (e.g., models/Task.js).",
+          "Functions for `createTask` and `getAllTasks` are implemented.",
+          "Functions interact directly with the PostgreSQL database.",
+          "No authentication or authorization logic is included yet."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-004",
+        "description": "Create API endpoint for `GET /api/tasks` to retrieve all tasks.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `GET /api/tasks` is defined in backend/routes/tasks.js.",
+          "Controller function for `getAllTasks` is implemented in backend/controllers/taskController.js.",
+          "Endpoint returns a JSON array of all tasks from the database.",
+          "Endpoint responds with appropriate HTTP status codes (200 OK, 500 Internal Server Error)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js"
+        ]
+      },
+      {
+        "id": "BE-005",
+        "description": "Create API endpoint for `POST /api/tasks` to create a new task.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `POST /api/tasks` is defined in backend/routes/tasks.js.",
+          "Controller function for `createTask` is implemented in backend/controllers/taskController.js.",
+          "Endpoint accepts a JSON body with 'title' and 'description'.",
+          "A new task is successfully inserted into the database.",
+          "Endpoint returns the created task object with HTTP status 201 Created.",
+          "Basic error handling for missing fields is implemented (e.g., 400 Bad Request)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js"
+        ]
+      },
+      {
+        "id": "FE-001",
+        "description": "Initialize React project in the 'frontend' directory.",
+        "dependencies": [
+          "INFRA-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "frontend/package.json is created with React and basic dependencies.",
+          "A simple React application is set up (e.g., App.js).",
+          "Application can be started and viewed in the browser.",
+          "Basic routing (e.g., React Router) is installed but not yet configured."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/package.json",
+          "frontend/src/App.js",
+          "frontend/src/index.js"
+        ]
+      },
+      {
+        "id": "FE-002",
+        "description": "Create basic application layout (header, main content area) and global styles.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `Layout` component or similar structure is created.",
+          "Header component with application title is present.",
+          "Main content area is defined.",
+          "Basic global CSS styles are applied (e.g., font, body margin).",
+          "Application renders the layout correctly in the browser."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/Layout.js",
+          "frontend/src/App.js",
+          "frontend/src/index.css"
+        ]
+      },
+      {
+        "id": "FE-003",
+        "description": "Develop `TaskList` component to display tasks fetched from `/api/tasks`.",
+        "dependencies": [
+          "FE-002",
+          "BE-004"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "TaskList component is created (e.g., `frontend/src/components/TaskList.js`).",
+          "Component fetches tasks from `GET /api/tasks` on mount.",
+          "Tasks are rendered as a list (e.g., `<ul>` or `<div>`s).",
+          "Each task displays its title and description.",
+          "Loading state and error handling for API calls are implemented.",
+          "Component updates when new tasks are added (e.g., by re-fetching)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/TaskList.js",
+          "frontend/src/api/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-004",
+        "description": "Develop `AddTaskForm` component to submit new tasks to `/api/tasks`.",
+        "dependencies": [
+          "FE-002",
+          "BE-005"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "AddTaskForm component is created (e.g., `frontend/src/components/AddTaskForm.js`).",
+          "Form includes input fields for task title and description.",
+          "Form submits data to `POST /api/tasks` on submission.",
+          "Form clears inputs after successful submission.",
+          "Error messages are displayed for invalid input or API errors.",
+          "User can successfully add a new task via the form."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/AddTaskForm.js",
+          "frontend/src/api/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-005",
+        "description": "Integrate `TaskList` and `AddTaskForm` into the main application view.",
+        "dependencies": [
+          "FE-003",
+          "FE-004"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Both `TaskList` and `AddTaskForm` components are rendered on the main page.",
+          "Adding a task via the form immediately updates the displayed task list.",
+          "Application provides a cohesive user experience for adding and viewing tasks."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/HomePage.js",
+          "frontend/src/App.js"
+        ]
+      },
+      {
+        "id": "BE-006",
+        "description": "Implement User model/schema and password hashing utility.",
+        "dependencies": [
+          "BE-002",
+          "DB-001"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "User model file is created (e.g., models/User.js).",
+          "Functions for `createUser` and `findUserByUsername` are implemented.",
+          "Password hashing utility (e.g., `bcrypt`) is integrated.",
+          "Passwords are hashed before storing in the database.",
+          "Password comparison function is implemented."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/models/User.js",
+          "backend/utils/passwordHash.js"
+        ]
+      },
+      {
+        "id": "BE-007",
+        "description": "Create API endpoint for `POST /api/auth/register`.",
+        "dependencies": [
+          "BE-006"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `POST /api/auth/register` is defined in backend/routes/auth.js.",
+          "Controller function for `registerUser` is implemented in backend/controllers/authController.js.",
+          "Endpoint accepts 'username' and 'password'.",
+          "New user is created with hashed password in the database.",
+          "Endpoint returns a success message or user ID with HTTP status 201 Created.",
+          "Handles duplicate usernames (e.g., 409 Conflict)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/auth.js",
+          "backend/controllers/authController.js"
+        ]
+      },
+      {
+        "id": "BE-008",
+        "description": "Create API endpoint for `POST /api/auth/login`.",
+        "dependencies": [
+          "BE-006"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `POST /api/auth/login` is defined in backend/routes/auth.js.",
+          "Controller function for `loginUser` is implemented in backend/controllers/authController.js.",
+          "Endpoint accepts 'username' and 'password'.",
+          "Validates credentials against hashed password in DB.",
+          "Returns a JWT token on successful login with HTTP status 200 OK.",
+          "Returns 401 Unauthorized for invalid credentials."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/auth.js",
+          "backend/controllers/authController.js"
+        ]
+      },
+      {
+        "id": "BE-009",
+        "description": "Implement JWT generation and validation utility.",
+        "dependencies": [
+          "BE-008"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "JWT utility file is created (e.g., `backend/utils/jwt.js`).",
+          "Function to generate a JWT with user ID payload is implemented.",
+          "Function to verify a JWT and extract payload is implemented.",
+          "Secret key for JWT is stored securely (e.g., environment variable)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/utils/jwt.js",
+          "backend/.env.example"
+        ]
+      },
+      {
+        "id": "BE-010",
+        "description": "Create JWT authentication middleware.",
+        "dependencies": [
+          "BE-009"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Authentication middleware file is created (e.g., `backend/middleware/auth.js`).",
+          "Middleware extracts JWT from 'Authorization' header.",
+          "Middleware verifies JWT using the utility function.",
+          "If valid, `req.user` is populated with user ID.",
+          "If invalid/missing, returns 401 Unauthorized or 403 Forbidden."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/middleware/auth.js"
+        ]
+      },
+      {
+        "id": "BE-011",
+        "description": "Apply JWT authentication middleware to all task-related API endpoints.",
+        "dependencies": [
+          "BE-010",
+          "BE-004",
+          "BE-005"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Auth middleware is applied to `GET /api/tasks` and `POST /api/tasks` routes.",
+          "Accessing these endpoints without a valid JWT results in a 401/403 error.",
+          "Accessing with a valid JWT proceeds to the controller."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js"
+        ]
+      },
+      {
+        "id": "BE-012",
+        "description": "Modify task endpoints to filter tasks by `user_id` based on authenticated user.",
+        "dependencies": [
+          "BE-011"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "In `GET /api/tasks`, only tasks belonging to `req.user.id` are returned.",
+          "In `POST /api/tasks`, the created task is associated with `req.user.id`.",
+          "Database queries are updated to include `WHERE user_id = req.user.id`.",
+          "Tests confirm that users can only see/create their own tasks."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/controllers/taskController.js",
+          "backend/models/Task.js"
+        ]
+      },
+      {
+        "id": "FE-006",
+        "description": "Create `RegisterForm` component.",
+        "dependencies": [
+          "FE-002",
+          "BE-007"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "RegisterForm component is created (e.g., `frontend/src/components/RegisterForm.js`).",
+          "Form includes input fields for username and password.",
+          "Form submits data to `POST /api/auth/register`.",
+          "Displays success message on successful registration.",
+          "Displays error messages for registration failures (e.g., duplicate username)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/RegisterForm.js",
+          "frontend/src/api/auth.js"
+        ]
+      },
+      {
+        "id": "FE-007",
+        "description": "Create `LoginForm` component.",
+        "dependencies": [
+          "FE-002",
+          "BE-008"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "LoginForm component is created (e.g., `frontend/src/components/LoginForm.js`).",
+          "Form includes input fields for username and password.",
+          "Form submits data to `POST /api/auth/login`.",
+          "On successful login, receives and stores JWT.",
+          "Displays error messages for login failures (e.g., invalid credentials)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/LoginForm.js",
+          "frontend/src/api/auth.js"
+        ]
+      },
+      {
+        "id": "FE-008",
+        "description": "Implement client-side JWT storage and handling (e.g., localStorage).",
+        "dependencies": [
+          "FE-007"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Utility functions for storing, retrieving, and removing JWT from localStorage are created.",
+          "JWT is stored after successful login.",
+          "JWT is removed on logout.",
+          "Application can retrieve the stored JWT for subsequent API calls."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/utils/auth.js"
+        ]
+      },
+      {
+        "id": "FE-009",
+        "description": "Integrate authentication forms and logic into the application, including routing.",
+        "dependencies": [
+          "FE-006",
+          "FE-007",
+          "FE-008"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Login and Register pages are accessible via routing.",
+          "User is redirected to task list after successful login/registration.",
+          "User is redirected to login page if trying to access protected routes without authentication.",
+          "Logout functionality is implemented (clears JWT and redirects)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/App.js",
+          "frontend/src/routes/index.js",
+          "frontend/src/pages/LoginPage.js",
+          "frontend/src/pages/RegisterPage.js"
+        ]
+      },
+      {
+        "id": "FE-010",
+        "description": "Modify API calls to include JWT in authorization headers.",
+        "dependencies": [
+          "FE-008",
+          "FE-009"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "All API calls to protected backend endpoints include the 'Authorization' header with the JWT.",
+          "Requests are successfully authenticated by the backend.",
+          "Tasks are fetched and created only for the authenticated user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/api/tasks.js",
+          "frontend/src/api/auth.js"
+        ]
+      },
+      {
+        "id": "FE-011",
+        "description": "Implement conditional rendering for authenticated vs. unauthenticated views.",
+        "dependencies": [
+          "FE-009"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Navigation bar or header displays 'Login/Register' when unauthenticated and 'Logout' when authenticated.",
+          "Task list and add form are only visible to authenticated users.",
+          "Unauthenticated users are prompted to login/register."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/Header.js",
+          "frontend/src/App.js"
+        ]
+      },
+      {
+        "id": "BE-013",
+        "description": "Create API endpoint for `GET /api/tasks/{id}` to retrieve a specific task.",
+        "dependencies": [
+          "BE-012"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `GET /api/tasks/:id` is defined.",
+          "Controller function for `getTaskById` is implemented.",
+          "Endpoint returns a single task object by ID for the authenticated user.",
+          "Returns 404 Not Found if task does not exist or does not belong to the user.",
+          "Returns 200 OK with the task data."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js",
+          "backend/models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-014",
+        "description": "Create API endpoint for `PUT /api/tasks/{id}` to update an existing task.",
+        "dependencies": [
+          "BE-012",
+          "BE-013"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `PUT /api/tasks/:id` is defined.",
+          "Controller function for `updateTask` is implemented.",
+          "Endpoint accepts JSON body with fields to update (e.g., title, description, completed).",
+          "Updates the specified task belonging to the authenticated user.",
+          "Returns the updated task object with HTTP status 200 OK.",
+          "Returns 404 Not Found if task does not exist or does not belong to the user.",
+          "Handles invalid input (e.g., 400 Bad Request)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js",
+          "backend/models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-015",
+        "description": "Create API endpoint for `DELETE /api/tasks/{id}` to delete a task.",
+        "dependencies": [
+          "BE-012",
+          "BE-013"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Route `DELETE /api/tasks/:id` is defined.",
+          "Controller function for `deleteTask` is implemented.",
+          "Deletes the specified task belonging to the authenticated user.",
+          "Returns 204 No Content on successful deletion.",
+          "Returns 404 Not Found if task does not exist or does not belong to the user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js",
+          "backend/models/Task.js"
+        ]
+      },
+      {
+        "id": "BE-016",
+        "description": "Implement input validation for all task API endpoints.",
+        "dependencies": [
+          "BE-005",
+          "BE-014"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Validation middleware (e.g., `express-validator`) is integrated.",
+          "Input fields for task creation and update (title, description, completed) are validated.",
+          "Appropriate error messages are returned for invalid input (e.g., missing title, invalid 'completed' type).",
+          "Validation errors result in 400 Bad Request responses."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/middleware/validation.js",
+          "backend/routes/tasks.js",
+          "backend/controllers/taskController.js"
+        ]
+      },
+      {
+        "id": "FE-012",
+        "description": "Develop `TaskItem` component with edit, delete, and complete actions.",
+        "dependencies": [
+          "FE-003"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A dedicated `TaskItem` component is created.",
+          "Each task item displays its title, description, and completion status.",
+          "Buttons/icons for 'Edit', 'Delete', and 'Toggle Complete' are present.",
+          "Clicking 'Toggle Complete' visually updates the task status.",
+          "Component is reusable within `TaskList`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/TaskItem.js"
+        ]
+      },
+      {
+        "id": "FE-013",
+        "description": "Implement edit task functionality (modal/inline editing) in the frontend.",
+        "dependencies": [
+          "FE-012",
+          "BE-014"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Clicking 'Edit' on a task opens an editable form (modal or inline).",
+          "Form is pre-populated with current task data.",
+          "Submitting the form sends a `PUT` request to `PUT /api/tasks/{id}`.",
+          "Task list updates to reflect the edited task.",
+          "Error handling for edit operations is displayed to the user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/TaskItem.js",
+          "frontend/src/components/EditTaskForm.js",
+          "frontend/src/api/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-014",
+        "description": "Implement delete task functionality in the frontend.",
+        "dependencies": [
+          "FE-012",
+          "BE-015"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Clicking 'Delete' on a task prompts for confirmation.",
+          "Confirming deletion sends a `DELETE` request to `DELETE /api/tasks/{id}`.",
+          "Task is removed from the displayed list upon successful deletion.",
+          "Error handling for delete operations is displayed."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/TaskItem.js",
+          "frontend/src/api/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-015",
+        "description": "Implement toggle task completion functionality in the frontend.",
+        "dependencies": [
+          "FE-012",
+          "BE-014"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Clicking a checkbox/button toggles the 'completed' status of a task.",
+          "Toggling sends a `PUT` request to `PUT /api/tasks/{id}` with the updated 'completed' status.",
+          "Visual indication (e.g., strikethrough) reflects the completion status.",
+          "Task list updates to reflect the changed status."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/TaskItem.js",
+          "frontend/src/api/tasks.js"
+        ]
+      },
+      {
+        "id": "FE-016",
+        "description": "Add basic CSS styling for improved UI/UX and responsiveness.",
+        "dependencies": [
+          "FE-005",
+          "FE-012"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Application has a consistent visual theme (colors, fonts).",
+          "Forms and buttons are styled for better usability.",
+          "Task list items are clearly distinguishable and well-formatted.",
+          "Application layout is responsive and usable on common screen sizes (mobile, tablet, desktop).",
+          "No major visual bugs or misalignments."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/styles/*.css",
+          "frontend/src/components/*.css"
+        ]
+      },
+      {
+        "id": "TEST-001",
+        "description": "Write unit tests for backend utility functions (e.g., password hashing, JWT generation/validation).",
+        "dependencies": [
+          "BE-006",
+          "BE-009"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Test files are created for `passwordHash.js` and `jwt.js`.",
+          "Tests cover successful hashing and comparison of passwords.",
+          "Tests cover successful JWT generation and verification.",
+          "Tests cover invalid JWT scenarios (e.g., expired, invalid signature).",
+          "All tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/tests/unit/passwordHash.test.js",
+          "backend/tests/unit/jwt.test.js"
+        ]
+      },
+      {
+        "id": "TEST-002",
+        "description": "Write integration tests for backend API endpoints (auth and tasks).",
+        "dependencies": [
+          "BE-016"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Integration test files are created for auth and task routes.",
+          "Tests cover successful user registration and login.",
+          "Tests cover successful CRUD operations for tasks (create, read, update, delete).",
+          "Tests verify authentication and authorization for task endpoints.",
+          "Tests cover edge cases and error responses (e.g., invalid input, unauthorized access).",
+          "All integration tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/tests/integration/auth.test.js",
+          "backend/tests/integration/tasks.test.js"
+        ]
+      },
+      {
+        "id": "TEST-003",
+        "description": "Write unit tests for React components (e.g., `AddTaskForm`, `TaskItem`).",
+        "dependencies": [
+          "FE-004",
+          "FE-012"
+        ],
+        "estimated_time": "12 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Test files are created for `AddTaskForm.js` and `TaskItem.js`.",
+          "Tests cover component rendering and initial state.",
+          "Tests simulate user interactions (e.g., typing in input, clicking buttons).",
+          "Tests verify correct function calls on form submission or button clicks.",
+          "All unit tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/__tests__/AddTaskForm.test.js",
+          "frontend/src/components/__tests__/TaskItem.test.js"
+        ]
+      },
+      {
+        "id": "TEST-004",
+        "description": "Write integration tests for frontend user flows (e.g., add task, view tasks, login/logout).",
+        "dependencies": [
+          "FE-015",
+          "FE-011"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Integration test files are created for key user flows.",
+          "Tests simulate full user journeys (e.g., register, login, add task, view task, logout).",
+          "Tests verify UI updates correctly after API interactions.",
+          "Tests cover navigation and conditional rendering based on authentication status.",
+          "All integration tests pass successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/tests/App.test.js",
+          "frontend/src/tests/AuthFlow.test.js"
+        ]
+      },
+      {
+        "id": "INFRA-007",
+        "description": "Configure Heroku deployment for Node.js backend and PostgreSQL database.",
+        "dependencies": [
+          "BE-016",
+          "DB-002"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Heroku application is created for the backend.",
+          "PostgreSQL add-on is provisioned and linked to the Heroku app.",
+          "Backend environment variables (e.g., DATABASE_URL, JWT_SECRET) are configured on Heroku.",
+          "Backend application is successfully deployed to Heroku.",
+          "API endpoints are accessible via the Heroku URL."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/Procfile",
+          "backend/package.json"
+        ]
+      },
+      {
+        "id": "INFRA-008",
+        "description": "Configure Vercel deployment for React frontend application.",
+        "dependencies": [
+          "FE-016"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "Vercel project is created and linked to the frontend GitHub repository.",
+          "Build settings are configured for a React application.",
+          "Frontend environment variables (e.g., REACT_APP_API_URL) are set on Vercel.",
+          "Frontend application is successfully deployed to Vercel.",
+          "Application is accessible via the Vercel URL."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/package.json",
+          "frontend/vercel.json"
+        ]
+      },
+      {
+        "id": "INFRA-009",
+        "description": "Enhance GitHub Actions for automated deployment to Heroku (backend) and Vercel (frontend).",
+        "dependencies": [
+          "INFRA-006",
+          "INFRA-007",
+          "INFRA-008"
+        ],
+        "estimated_time": "16 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "CI workflow is extended to include deployment steps.",
+          "Backend deployment to Heroku is automated on push to main.",
+          "Frontend deployment to Vercel is automated on push to main.",
+          "Deployment secrets (e.g., Heroku API key, Vercel token) are securely configured in GitHub Actions.",
+          "Full CI/CD pipeline runs successfully on a test commit, deploying both applications."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".github/workflows/ci.yml"
+        ]
+      },
+      {
+        "id": "INFRA-010",
+        "description": "Implement basic logging in Node.js backend (e.g., using Winston or similar library).",
+        "dependencies": [
+          "BE-001"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Logging library is installed and configured.",
+          "Application logs informational messages (e.g., server start, request received).",
+          "Application logs errors and warnings with relevant details (e.g., stack traces).",
+          "Logs are output to console or a file.",
+          "Log levels are configurable."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/config/logger.js",
+          "backend/app.js",
+          "backend/controllers/"
+        ]
+      },
+      {
+        "id": "INFRA-011",
+        "description": "Research and document basic Prometheus/Grafana setup for Node.js metrics (stretch goal).",
+        "dependencies": [
+          "INFRA-010"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "A document outlining steps to integrate Prometheus client library into Node.js is created.",
+          "Examples of collecting basic metrics (e.g., request count, response times) are provided.",
+          "Basic Grafana dashboard setup for these metrics is documented.",
+          "Recommendations for production monitoring are included."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docs/monitoring_setup.md"
+        ]
+      },
+      {
+        "id": "INFRA-012",
+        "description": "Research and document basic ELK stack setup for centralized logging (stretch goal).",
+        "dependencies": [
+          "INFRA-010"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "devops_engineer",
+        "acceptance_criteria": [
+          "A document outlining steps to send Node.js logs to Logstash is created.",
+          "Examples of configuring Logstash, Elasticsearch, and Kibana for log analysis are provided.",
+          "Recommendations for production logging are included."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docs/logging_setup.md"
+        ]
+      }
+    ],
+    "summary": "A detailed plan for developing the 'Hello World Task List' web application, covering frontend (React), backend (Node.js Express), and database (PostgreSQL) components, including user authentication, task management (CRUD), and automated deployment strategies. The plan is broken down into granular work items, suitable for a junior developer, ensuring a structured and comprehensive development process.",
+    "metadata": {
+      "estimated_total_time_hours": 464,
+      "estimated_total_time_days": 58,
+      "estimated_total_time_weeks": 11.6,
+      "key_technologies": {
+        "frontend": "React",
+        "backend": "Node.js (Express)",
+        "database": "PostgreSQL",
+        "architecture": "Client-Server (SPA + API)",
+        "deployment_platforms": "Vercel (Frontend), Heroku (Backend/Database)"
+      },
+      "risk_assessment_notes": "The plan addresses the initial BRD's lack of detail by incorporating user authentication, full CRUD operations, and robust setup for testing and deployment. Non-functional requirements like 'load quickly' are addressed by the chosen tech stack (React, Node.js, Vercel/Heroku) and the inclusion of CI/CD. Security is addressed through JWT authentication, password hashing, and the inclusion of security-focused testing. Further refinement of NFRs (specific metrics) is recommended as part of future iterations or dedicated workshops.",
+      "project_phases_breakdown": {
+        "Phase 0: Project Setup & Infrastructure": "5 days",
+        "Phase 1: Core Task CRUD & Basic UI (No Auth)": "12 days",
+        "Phase 2: User Authentication & Authorization": "14 days",
+        "Phase 3: UI/UX Enhancements & Testing": "18 days",
+        "Phase 4: Deployment & Monitoring Setup": "9 days"
+      }
+    }
+  },
+  "workflow_state_snapshot": {}
+}

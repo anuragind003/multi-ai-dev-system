@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "fastapi-operational-infrastructure"
+version = "0.1.0"
+description = "A FastAPI application with comprehensive operational infrastructure."
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0.post1"}
+sqlalchemy = "^2.0.23"
+psycopg2-binary = "^2.9.9"
+python-dotenv = "^1.0.0"
+pydantic = "^2.5.2"
+pydantic-settings = "^2.1.0"
+httpx = "^0.25.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.23.2"
+locust = "^2.19.0"
+black = "^23.11.0"
+flake8 = "^6.1.0"
+isort = "^5.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 120
+target-version = ['py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | \.mypy_cache
+  | \.pytest_cache
+  | \.vscode
+  | \.idea
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_first_party = ["app", "tests"]
+skip_glob = ["venv/", ".venv/", "build/", "dist/"]
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = "E203, W503" # E203: whitespace before ':', W503: line break before binary operator
+exclude = [".git", "__pycache__", "venv", ".venv", "build", "dist"]

@@ -1,0 +1,23 @@
+# elk/kibana/config/kibana.yml
+# Configuration for Kibana
+
+server.host: "0.0.0.0"
+server.port: 5601
+
+# Elasticsearch connection
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.username: "kibana_system" # Built-in Kibana system user
+elasticsearch.password: "${KIBANA_PASSWORD}"
+
+# For production, enable SSL and configure certificates
+# elasticsearch.ssl.verificationMode: full
+# elasticsearch.ssl.certificateAuthorities: ["/usr/share/kibana/config/certs/ca.crt"]
+
+# Logging configuration
+logging.dest: stdout
+logging.json: true
+logging.verbose: false
+
+# Other settings
+# i18n.locale: "en"
+# xpack.monitoring.ui.container.elasticsearch.enabled: true

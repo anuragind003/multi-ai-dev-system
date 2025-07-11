@@ -1,0 +1,564 @@
+{
+  "session_id": "session_a3c1e2fb-ea85-458e-8d74-cbb7e9a92b4b",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752041698,
+  "approval_data": {
+    "plan": {
+      "project_summary": {
+        "title": "Generated Project Plan",
+        "description": "Develop a simple web application for managing a list of tasks, including adding, viewing, marking as complete, and deleting tasks. The application will use React for the frontend, Node.js and Express for the backend, and MongoDB for data storage. The application will be deployed to Heroku.",
+        "overall_complexity": "Medium",
+        "estimated_duration": "TBD",
+        "key_challenges": [],
+        "success_criteria": []
+      },
+      "phases": [
+        {
+          "name": "Frontend Phase",
+          "description": "Tasks related to frontend phase",
+          "deliverables": [
+            "Completed FE-001",
+            "Completed FE-002",
+            "Completed FE-003",
+            "Completed FE-004",
+            "Completed FE-005",
+            "Completed FE-006",
+            "Completed FE-007",
+            "Completed FE-008",
+            "Completed FE-009",
+            "Completed FE-010",
+            "Completed FE-011",
+            "Completed TEST-001"
+          ],
+          "estimated_duration_hours": 53.0,
+          "work_items": [
+            {
+              "id": "FE-001",
+              "description": "Set up React project with Create React App.",
+              "dependencies": [],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Project initializes successfully.",
+                "Default React app runs without errors."
+              ],
+              "status": "pending",
+              "code_files": [
+                "package.json",
+                "src/App.js",
+                "src/index.js"
+              ]
+            },
+            {
+              "id": "FE-002",
+              "description": "Create basic HTML structure for the task list.",
+              "dependencies": [
+                "FE-001"
+              ],
+              "estimated_time": "2 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Page has a title.",
+                "Page has a container for the task list.",
+                "Page has a form for adding tasks."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-003",
+              "description": "Implement input field and button for adding tasks.",
+              "dependencies": [
+                "FE-002"
+              ],
+              "estimated_time": "3 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Input field accepts text input.",
+                "Button triggers an action when clicked."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-004",
+              "description": "Implement state to store tasks.",
+              "dependencies": [
+                "FE-003"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tasks are stored in an array.",
+                "State updates when a new task is added."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-005",
+              "description": "Implement function to add a new task to the state.",
+              "dependencies": [
+                "FE-004"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "New task is added to the task list when the button is clicked.",
+                "Input field is cleared after adding a task."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-006",
+              "description": "Render the list of tasks.",
+              "dependencies": [
+                "FE-004"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tasks are displayed in a list.",
+                "Each task displays its description."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-007",
+              "description": "Fetch tasks from the backend API on component mount.",
+              "dependencies": [
+                "FE-006",
+                "BE-005"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tasks are fetched from the backend API.",
+                "Tasks are displayed on the page."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-008",
+              "description": "Send new task to the backend API.",
+              "dependencies": [
+                "FE-005",
+                "BE-004"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "New task is sent to the backend API when the form is submitted.",
+                "Task list is updated after successful creation."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-009",
+              "description": "Implement functionality to mark tasks as complete.",
+              "dependencies": [
+                "FE-006",
+                "BE-006"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "User can mark a task as complete.",
+                "Task is updated in the backend.",
+                "Task is visually updated in the frontend."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-010",
+              "description": "Implement functionality to delete tasks.",
+              "dependencies": [
+                "FE-006",
+                "BE-007"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "User can delete a task.",
+                "Task is deleted from the backend.",
+                "Task is removed from the frontend."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-011",
+              "description": "Add basic styling to improve UI.",
+              "dependencies": [
+                "FE-006"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "UI is visually appealing.",
+                "UI is easy to use."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "TEST-001",
+              "description": "Write unit tests for frontend components.",
+              "dependencies": [
+                "FE-001",
+                "FE-004",
+                "FE-005",
+                "FE-006"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tests cover all major components.",
+                "Tests pass successfully."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/__tests__/App.test.js"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Backend Phase",
+          "description": "Tasks related to backend phase",
+          "deliverables": [
+            "Completed BE-001",
+            "Completed BE-003",
+            "Completed BE-004",
+            "Completed BE-005",
+            "Completed BE-006",
+            "Completed BE-007",
+            "Completed TEST-002",
+            "Completed SEC-001"
+          ],
+          "estimated_duration_hours": 40.0,
+          "work_items": [
+            {
+              "id": "BE-001",
+              "description": "Set up Node.js and Express project.",
+              "dependencies": [],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Project initializes successfully.",
+                "Express server runs without errors."
+              ],
+              "status": "pending",
+              "code_files": [
+                "package.json",
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-003",
+              "description": "Create a task model using Mongoose.",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Task model defines the schema (description, created_at, completed).",
+                "Mongoose is connected to the database."
+              ],
+              "status": "pending",
+              "code_files": [
+                "models/task.js"
+              ]
+            },
+            {
+              "id": "BE-004",
+              "description": "Implement API endpoint to create a new task (POST /api/tasks).",
+              "dependencies": [
+                "BE-001",
+                "BE-003"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint accepts POST requests to /api/tasks.",
+                "Endpoint saves the task to the database.",
+                "Endpoint returns the created task with 201 status."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-005",
+              "description": "Implement API endpoint to get all tasks (GET /api/tasks).",
+              "dependencies": [
+                "BE-001",
+                "BE-003"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint accepts GET requests to /api/tasks.",
+                "Endpoint retrieves all tasks from the database.",
+                "Endpoint returns the tasks with 200 status."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-006",
+              "description": "Implement API endpoint to update a task (PUT /api/tasks/:id).",
+              "dependencies": [
+                "BE-001",
+                "BE-003"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint accepts PUT requests to /api/tasks/:id.",
+                "Endpoint updates the task in the database.",
+                "Endpoint returns the updated task with 200 status."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-007",
+              "description": "Implement API endpoint to delete a task (DELETE /api/tasks/:id).",
+              "dependencies": [
+                "BE-001",
+                "BE-003"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint accepts DELETE requests to /api/tasks/:id.",
+                "Endpoint deletes the task from the database.",
+                "Endpoint returns 204 status."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "TEST-002",
+              "description": "Write unit tests for backend API endpoints.",
+              "dependencies": [
+                "BE-004",
+                "BE-005",
+                "BE-006",
+                "BE-007"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Tests cover all API endpoints.",
+                "Tests pass successfully."
+              ],
+              "status": "pending",
+              "code_files": [
+                "tests/index.test.js"
+              ]
+            },
+            {
+              "id": "SEC-001",
+              "description": "Implement input validation on the backend.",
+              "dependencies": [
+                "BE-004"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Input is validated to prevent XSS and SQL injection.",
+                "Invalid input returns an error response."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Database Phase",
+          "description": "Tasks related to database phase",
+          "deliverables": [
+            "Completed BE-002"
+          ],
+          "estimated_duration_hours": 4.0,
+          "work_items": [
+            {
+              "id": "BE-002",
+              "description": "Install and configure MongoDB.",
+              "dependencies": [],
+              "estimated_time": "4 hours",
+              "agent_role": "database_specialist",
+              "acceptance_criteria": [
+                "MongoDB is installed and running.",
+                "Database and collection are created."
+              ],
+              "status": "pending",
+              "code_files": []
+            }
+          ]
+        },
+        {
+          "name": "Devops_Engineer Phase",
+          "description": "Tasks related to devops_engineer phase",
+          "deliverables": [
+            "Completed DEPLOY-001",
+            "Completed DEPLOY-002",
+            "Completed SEC-002"
+          ],
+          "estimated_duration_hours": 10.0,
+          "work_items": [
+            {
+              "id": "DEPLOY-001",
+              "description": "Deploy frontend to Heroku.",
+              "dependencies": [
+                "FE-011"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "devops_engineer",
+              "acceptance_criteria": [
+                "Frontend is deployed to Heroku.",
+                "Frontend is accessible via a public URL."
+              ],
+              "status": "pending",
+              "code_files": []
+            },
+            {
+              "id": "DEPLOY-002",
+              "description": "Deploy backend to Heroku.",
+              "dependencies": [
+                "BE-007"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "devops_engineer",
+              "acceptance_criteria": [
+                "Backend is deployed to Heroku.",
+                "Backend API is accessible via a public URL."
+              ],
+              "status": "pending",
+              "code_files": []
+            },
+            {
+              "id": "SEC-002",
+              "description": "Configure HTTPS for the Heroku app.",
+              "dependencies": [
+                "DEPLOY-001",
+                "DEPLOY-002"
+              ],
+              "estimated_time": "2 hours",
+              "agent_role": "devops_engineer",
+              "acceptance_criteria": [
+                "HTTPS is enabled for the Heroku app.",
+                "All traffic is redirected to HTTPS."
+              ],
+              "status": "pending",
+              "code_files": []
+            }
+          ]
+        }
+      ],
+      "resource_allocation": [
+        {
+          "role": "Devops Engineer",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Devops_Engineer Phase"
+          ],
+          "skills_required": []
+        },
+        {
+          "role": "Database Specialist",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Database Phase"
+          ],
+          "skills_required": []
+        },
+        {
+          "role": "Backend Developer",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Backend Phase"
+          ],
+          "skills_required": []
+        },
+        {
+          "role": "Frontend Developer",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Frontend Phase"
+          ],
+          "skills_required": []
+        }
+      ],
+      "risks_and_mitigations": [],
+      "timeline": {
+        "start_date": "2025-07-09T11:44:57.344615",
+        "end_date": "TBD",
+        "milestones": []
+      },
+      "tech_stack": {},
+      "metadata": {
+        "generated_at": "2025-07-09T11:44:57.344615",
+        "version": "1.0",
+        "author": "Multi-AI Dev System",
+        "tags": [],
+        "notes": "Converted from WorkItemBacklog. Original summary: Develop a simple web application for managing a list of tasks, including adding, viewing, marking as complete, and deleting tasks. The application will use React for the frontend, Node.js and Express for the backend, and MongoDB for data storage. The application will be deployed to Heroku."
+      }
+    },
+    "summary": "Develop a simple web application for managing a list of tasks, including adding, viewing, marking as complete, and deleting tasks. The application will use React for the frontend, Node.js and Express for the backend, and MongoDB for data storage. The application will be deployed to Heroku.",
+    "metadata": {
+      "generated_at": "2025-07-09T11:44:57.344615",
+      "version": "1.0",
+      "author": "Multi-AI Dev System",
+      "tags": [],
+      "notes": "Converted from WorkItemBacklog. Original summary: Develop a simple web application for managing a list of tasks, including adding, viewing, marking as complete, and deleting tasks. The application will use React for the frontend, Node.js and Express for the backend, and MongoDB for data storage. The application will be deployed to Heroku."
+    }
+  },
+  "workflow_state_snapshot": {}
+}

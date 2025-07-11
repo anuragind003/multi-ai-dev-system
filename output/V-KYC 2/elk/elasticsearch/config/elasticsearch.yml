@@ -1,0 +1,29 @@
+# elk/elasticsearch/config/elasticsearch.yml
+# Configuration for Elasticsearch
+# For production, consider a multi-node setup and persistent storage.
+
+cluster.name: "elk-cluster"
+node.name: "es-node-1"
+
+# Network configuration
+network.host: 0.0.0.0
+http.port: 9200
+
+# Discovery configuration for single-node development setup
+# For production, use 'discovery.seed_hosts' and 'cluster.initial_master_nodes'
+# with actual hostnames/IPs of master-eligible nodes.
+discovery.type: single-node
+
+# X-Pack Security (enabled by default in recent versions)
+# This is enabled via environment variables in docker-compose.yml
+# xpack.security.enabled: true
+
+# Path to data and logs (managed by Docker volumes)
+# path.data: /usr/share/elasticsearch/data
+# path.logs: /usr/share/elasticsearch/logs
+
+# Memory settings are handled via ES_JAVA_OPTS in docker-compose.yml
+# For production, ensure these are set appropriately (e.g., 50% of available RAM, max 30.5GB)
+# jvm.options:
+#   -Xms1g
+#   -Xmx1g

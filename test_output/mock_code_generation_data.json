@@ -1,0 +1,654 @@
+{
+  "workflow_id": "test_workflow_1752029140",
+  "workflow_start_time": 1752029140.468419,
+  "brd_content": "\n    **Project: TaskMaster Pro - Task Management System**\n    \n    ## Business Overview\n    TaskMaster Pro is a modern task management application designed for small to medium teams.\n    The system allows teams to create, assign, track, and manage tasks collaboratively.\n    \n    ## Functional Requirements\n    - User authentication and authorization\n    - Task creation, editing, and deletion\n    - Task assignment to team members\n    - Task status tracking (todo, in-progress, done)\n    - Task filtering and search\n    - Team management functionality\n    - Real-time notifications\n    - Dashboard with task analytics\n    - File attachment support\n    - Comment system for tasks\n    \n    ## Non-Functional Requirements\n    - Support up to 1000 concurrent users\n    - 99.9% uptime availability\n    - Response time under 2 seconds\n    - GDPR compliance for EU users\n    - Mobile responsive design\n    - RESTful API design\n    \n    ## Target Users\n    - Project managers\n    - Team leads\n    - Individual contributors\n    - Small to medium business teams\n    \n    ## Success Criteria\n    - User adoption rate > 80% within first quarter\n    - Task completion rate improvement > 25%\n    - User satisfaction score > 4.0/5.0\n    ",
+  "requirements_analysis": {
+    "project_name": "TaskMaster Pro",
+    "project_summary": "A collaborative task management system for small to medium teams",
+    "project_goals": [
+      "Improve team collaboration on tasks",
+      "Increase task completion rates",
+      "Provide real-time visibility into project progress",
+      "Reduce project management overhead"
+    ],
+    "target_audience": [
+      "Project managers",
+      "Team leads",
+      "Individual contributors",
+      "Small to medium business teams"
+    ],
+    "business_context": "Modern teams need better tools for task coordination and progress tracking",
+    "functional_requirements": [
+      "User authentication and authorization system",
+      "CRUD operations for tasks",
+      "Task assignment and team management",
+      "Real-time status updates and notifications",
+      "Search and filtering capabilities",
+      "Dashboard with analytics",
+      "File attachment system",
+      "Comment and collaboration features"
+    ],
+    "non_functional_requirements": [
+      "Support 1000 concurrent users",
+      "99.9% uptime availability",
+      "Sub-2 second response times",
+      "GDPR compliance",
+      "Mobile responsive design",
+      "RESTful API architecture"
+    ],
+    "stakeholders": [
+      "Development team",
+      "Product manager",
+      "End users",
+      "Business stakeholders"
+    ],
+    "success_criteria": [
+      "80% user adoption within Q1",
+      "25% improvement in task completion rates",
+      "4.0/5.0 user satisfaction score"
+    ],
+    "constraints": [
+      "6-month development timeline",
+      "Limited budget for external integrations",
+      "Must integrate with existing authentication system"
+    ],
+    "assumptions": [
+      "Users have basic computer literacy",
+      "Internet connectivity is reliable",
+      "Team sizes will be under 50 members"
+    ],
+    "risks": [
+      "User adoption may be slower than expected",
+      "Performance issues with large datasets",
+      "Integration complexity with legacy systems"
+    ]
+  },
+  "tech_stack_recommendation": {
+    "backend": {
+      "language": "Python",
+      "framework": "FastAPI",
+      "reasoning": "FastAPI provides excellent performance, automatic API documentation, and strong typing support"
+    },
+    "frontend": {
+      "language": "TypeScript",
+      "framework": "React",
+      "reasoning": "React offers component reusability, large ecosystem, and TypeScript provides better code quality"
+    },
+    "database": {
+      "type": "PostgreSQL",
+      "reasoning": "PostgreSQL offers ACID compliance, excellent performance, and rich feature set for complex queries"
+    },
+    "architecture_pattern": "Microservices with API Gateway",
+    "deployment_environment": {
+      "hosting": "AWS",
+      "ci_cd": "GitHub Actions"
+    },
+    "key_libraries_tools": [
+      {
+        "name": "SQLAlchemy",
+        "purpose": "ORM for database operations"
+      },
+      {
+        "name": "Redis",
+        "purpose": "Caching and session management"
+      },
+      {
+        "name": "Material-UI",
+        "purpose": "Frontend component library"
+      },
+      {
+        "name": "JWT",
+        "purpose": "Authentication tokens"
+      }
+    ],
+    "estimated_complexity": "Medium"
+  },
+  "system_design": {
+    "architecture": {
+      "pattern": "Microservices Architecture",
+      "justification": "Allows independent scaling and deployment of different components",
+      "key_benefits": [
+        "Independent scalability",
+        "Technology diversity",
+        "Fault isolation",
+        "Team autonomy"
+      ]
+    },
+    "components": [
+      {
+        "name": "Authentication Service",
+        "description": "Handles user authentication and authorization",
+        "category": "backend",
+        "technologies": [
+          "Python",
+          "FastAPI",
+          "JWT"
+        ],
+        "responsibilities": [
+          "User login/logout",
+          "Token generation and validation",
+          "Role-based access control"
+        ]
+      },
+      {
+        "name": "Task Service",
+        "description": "Manages task CRUD operations and business logic",
+        "category": "backend",
+        "technologies": [
+          "Python",
+          "FastAPI",
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "Task creation and management",
+          "Task assignment logic",
+          "Status tracking",
+          "Search and filtering"
+        ]
+      },
+      {
+        "name": "Notification Service",
+        "description": "Handles real-time notifications and messaging",
+        "category": "backend",
+        "technologies": [
+          "Python",
+          "WebSocket",
+          "Redis"
+        ],
+        "responsibilities": [
+          "Real-time notifications",
+          "Email notifications",
+          "Push notifications"
+        ]
+      },
+      {
+        "name": "Frontend Application",
+        "description": "React-based user interface",
+        "category": "frontend",
+        "technologies": [
+          "React",
+          "TypeScript",
+          "Material-UI"
+        ],
+        "responsibilities": [
+          "User interface rendering",
+          "State management",
+          "API communication",
+          "User interactions"
+        ]
+      }
+    ],
+    "data_model": {
+      "schema_type": "relational",
+      "tables": [
+        {
+          "name": "users",
+          "purpose": "Store user account information",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "email",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "password_hash",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "first_name",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "last_name",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "role",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "teams",
+          "purpose": "Store team information",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "name",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "description",
+              "type": "TEXT",
+              "constraints": []
+            },
+            {
+              "name": "owner_id",
+              "type": "UUID",
+              "constraints": [
+                "FOREIGN KEY REFERENCES users(id)"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "tasks",
+          "purpose": "Store task information",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "title",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "description",
+              "type": "TEXT",
+              "constraints": []
+            },
+            {
+              "name": "status",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "priority",
+              "type": "VARCHAR(20)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "assignee_id",
+              "type": "UUID",
+              "constraints": [
+                "FOREIGN KEY REFERENCES users(id)"
+              ]
+            },
+            {
+              "name": "team_id",
+              "type": "UUID",
+              "constraints": [
+                "FOREIGN KEY REFERENCES teams(id)"
+              ]
+            },
+            {
+              "name": "due_date",
+              "type": "TIMESTAMP",
+              "constraints": []
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "api_endpoints": {
+      "style": "REST",
+      "base_url": "https://api.taskmaster.com/v1",
+      "authentication": "JWT Bearer Token",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "purpose": "Authenticate user and return JWT token",
+          "authentication_required": false
+        },
+        {
+          "method": "GET",
+          "path": "/tasks",
+          "purpose": "Retrieve tasks with filtering options",
+          "authentication_required": true
+        },
+        {
+          "method": "POST",
+          "path": "/tasks",
+          "purpose": "Create a new task",
+          "authentication_required": true
+        },
+        {
+          "method": "PUT",
+          "path": "/tasks/{task_id}",
+          "purpose": "Update an existing task",
+          "authentication_required": true
+        },
+        {
+          "method": "DELETE",
+          "path": "/tasks/{task_id}",
+          "purpose": "Delete a task",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/teams/{team_id}/members",
+          "purpose": "Get team members",
+          "authentication_required": true
+        }
+      ]
+    },
+    "security": {
+      "authentication_method": "JWT (JSON Web Tokens)",
+      "authorization_strategy": "RBAC (Role-Based Access Control)",
+      "data_encryption": {
+        "at_rest": "AES-256 encryption for sensitive data",
+        "in_transit": "TLS 1.3 for all API communications"
+      },
+      "security_measures": [
+        {
+          "category": "Authentication",
+          "implementation": "JWT tokens with short expiration and refresh mechanism",
+          "priority": "High"
+        },
+        {
+          "category": "Input Validation",
+          "implementation": "Pydantic models for request validation",
+          "priority": "High"
+        },
+        {
+          "category": "Rate Limiting",
+          "implementation": "Redis-based rate limiting per user/IP",
+          "priority": "Medium"
+        }
+      ]
+    }
+  },
+  "implementation_plan": {
+    "plan": {
+      "project_summary": {
+        "title": "TaskMaster Pro Development",
+        "description": "Full-stack task management application with microservices architecture",
+        "overall_complexity": "7/10",
+        "estimated_duration": "16 weeks",
+        "key_challenges": [
+          "Real-time notification system implementation",
+          "Microservices coordination and testing",
+          "Performance optimization for large datasets"
+        ]
+      },
+      "phases": [
+        {
+          "name": "Phase 1: Backend Core Services",
+          "description": "Implement core backend services and database",
+          "work_items": [
+            {
+              "id": "BE-001",
+              "description": "Set up project architecture and configuration files",
+              "dependencies": [],
+              "estimated_time": "1 day",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "FastAPI project structure is created",
+                "Database configuration is set up",
+                "Docker configuration is ready",
+                "Environment variables are configured"
+              ],
+              "status": "pending",
+              "code_files": [
+                "main.py",
+                "config.py",
+                "requirements.txt",
+                "Dockerfile",
+                "docker-compose.yml"
+              ]
+            },
+            {
+              "id": "BE-002",
+              "description": "Implement user authentication service with JWT",
+              "dependencies": [
+                "BE-001"
+              ],
+              "estimated_time": "3 days",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "User registration endpoint works",
+                "User login returns valid JWT token",
+                "Token validation middleware is implemented",
+                "Password hashing is secure",
+                "Unit tests pass with >80% coverage"
+              ],
+              "status": "pending",
+              "code_files": [
+                "auth/models.py",
+                "auth/routes.py",
+                "auth/utils.py",
+                "auth/dependencies.py",
+                "tests/test_auth.py"
+              ]
+            },
+            {
+              "id": "BE-003",
+              "description": "Implement task management service with CRUD operations",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "4 days",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Task creation endpoint works",
+                "Task retrieval supports filtering",
+                "Task update preserves data integrity",
+                "Task deletion handles dependencies",
+                "Database relationships are properly configured"
+              ],
+              "status": "pending",
+              "code_files": [
+                "tasks/models.py",
+                "tasks/routes.py",
+                "tasks/schemas.py",
+                "tasks/service.py",
+                "tests/test_tasks.py"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 2: Frontend Application",
+          "description": "Build React frontend with TypeScript",
+          "work_items": [
+            {
+              "id": "FE-001",
+              "description": "Set up React application with TypeScript and Material-UI",
+              "dependencies": [
+                "BE-001"
+              ],
+              "estimated_time": "2 days",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "React app is properly configured",
+                "TypeScript compilation works",
+                "Material-UI theme is set up",
+                "Routing is configured",
+                "Build process works correctly"
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.tsx",
+                "src/index.tsx",
+                "src/theme.ts",
+                "src/routes.tsx",
+                "package.json",
+                "tsconfig.json"
+              ]
+            },
+            {
+              "id": "FE-002",
+              "description": "Implement authentication UI components",
+              "dependencies": [
+                "FE-001",
+                "BE-002"
+              ],
+              "estimated_time": "3 days",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Login form validates input",
+                "Registration form works correctly",
+                "JWT token is stored securely",
+                "Protected routes redirect properly",
+                "Authentication state is managed"
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/components/LoginForm.tsx",
+                "src/components/RegisterForm.tsx",
+                "src/hooks/useAuth.ts",
+                "src/contexts/AuthContext.tsx",
+                "src/utils/auth.ts"
+              ]
+            },
+            {
+              "id": "FE-003",
+              "description": "Implement task management UI components",
+              "dependencies": [
+                "FE-002",
+                "BE-003"
+              ],
+              "estimated_time": "4 days",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Task list displays correctly",
+                "Task creation form validates input",
+                "Task editing works in-place",
+                "Task filtering is functional",
+                "Loading states are handled"
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/components/TaskList.tsx",
+                "src/components/TaskCard.tsx",
+                "src/components/TaskForm.tsx",
+                "src/components/TaskFilters.tsx",
+                "src/hooks/useTasks.ts"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 3: Database & Integration",
+          "description": "Database setup and service integration",
+          "work_items": [
+            {
+              "id": "DB-001",
+              "description": "Set up PostgreSQL database with migrations",
+              "dependencies": [
+                "BE-001"
+              ],
+              "estimated_time": "2 days",
+              "agent_role": "database_specialist",
+              "acceptance_criteria": [
+                "Database schema is created",
+                "Migration system is working",
+                "Indexes are optimized",
+                "Foreign key constraints are set",
+                "Seed data is available"
+              ],
+              "status": "pending",
+              "code_files": [
+                "migrations/001_initial.sql",
+                "migrations/002_indexes.sql",
+                "scripts/seed_data.py",
+                "database.py",
+                "models/__init__.py"
+              ]
+            }
+          ]
+        }
+      ],
+      "timeline": {
+        "total_duration": "16 weeks",
+        "phase_durations": {
+          "Phase 1": "6 weeks",
+          "Phase 2": "6 weeks",
+          "Phase 3": "4 weeks"
+        }
+      },
+      "tech_stack": {
+        "backend": "Python with FastAPI",
+        "frontend": "React with TypeScript",
+        "database": "PostgreSQL",
+        "deployment": "AWS with Docker"
+      }
+    }
+  },
+  "code_generation_result": {
+    "generated_files": {},
+    "status": "not_started"
+  },
+  "errors": [],
+  "completed_work_items": [],
+  "revision_counts": {},
+  "workflow_complete": false
+}

@@ -1,0 +1,99 @@
+{
+  "apiVersion": 1,
+  "providers": [
+    {
+      "name": "default",
+      "orgId": 1,
+      "folder": "",
+      "type": "file",
+      "disableDeletion": false,
+      "editable": true,
+      "options": {
+        "path": "/etc/grafana/provisioning/dashboards"
+      }
+    }
+  ],
+  "dashboards": [
+    {
+      "uid": "fastapi-app-overview",
+      "title": "FastAPI Application Overview",
+      "tags": ["fastapi", "application", "metrics"],
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "type": "graph",
+          "title": "HTTP Requests Total",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[5m])) by (endpoint, method, status_code)",
+              "legendFormat": "{{endpoint}} ({{method}}) - {{status_code}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "type": "graph",
+          "title": "HTTP Request Latency (P90)",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint, method))",
+              "legendFormat": "{{endpoint}} ({{method}}) - P90",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Healthy Instances",
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "targets": [
+            {
+              "expr": "sum(up{job='fastapi-app'})",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 1, "color": "green" }
+                ]
+              },
+              "unit": "short"
+            }
+          }
+        }
+      ],
+      "schemaVersion": 30,
+      "style": "dark",
+      "tags": ["fastapi", "application"],
+      "templating": {
+        "list": []
+      },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "version": 1
+    }
+  ]
+}

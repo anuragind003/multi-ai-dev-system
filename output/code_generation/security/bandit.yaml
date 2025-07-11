@@ -1,0 +1,43 @@
+# Bandit configuration file
+# For more details, see: https://bandit.readthedocs.io/en/latest/config.html
+
+# Exclude specific files or directories from scanning
+exclude_dirs:
+  - tests/
+  - .venv/
+  - venv/
+  - .git/
+  - .github/
+  - docs/
+  - prometheus/
+  - grafana/
+  - security/
+  - __pycache__/
+
+# Include only specific files (if exclude_dirs is not enough)
+# include:
+#   - app/*.py
+
+# Severity levels for reporting
+# HIGH, MEDIUM, LOW, UNDEFINED
+severity_level: medium
+confidence_level: medium
+
+# Specific checks to include or exclude
+# BXXX refers to Bandit test IDs (e.g., B101 for assert_used)
+# See: https://bandit.readthedocs.io/en/latest/plugins/index.html
+# Example:
+# checks:
+#   exclude:
+#     - B101 # assert_used (often used in tests, can be ignored for app code)
+#     - B603 # subprocess_without_shell_true (if you know what you're doing)
+
+# You can also specify specific checks to include
+# checks:
+#   include:
+#     - B104 # hardcoded_bind_all_interfaces
+#     - B105 # hardcoded_password_string
+#     - B106 # hardcoded_password_default_arg
+
+# For this project, we'll keep it simple and rely on default checks
+# with the specified severity and confidence levels.

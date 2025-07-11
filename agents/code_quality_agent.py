@@ -29,6 +29,7 @@ from models.data_contracts import (
     CodeGenerationOutput,
     GeneratedFile
 )
+from agent_state import StateFields
 
 # Enhanced memory and RAG imports
 from enhanced_memory_manager import create_memory_manager, EnhancedSharedProjectMemory
@@ -81,12 +82,20 @@ class CodeQualityAgent(BaseAgent):
         review_format_instructions = self.review_output_parser.get_format_instructions()
         
         # Base JSON directive for consistent formatting
-        json_directive = "Return ONLY valid JSON with no additional text or explanations.\n"
+        json_directive = """CRITICAL: You MUST respond with ONLY valid JSON. 
+        - Do NOT include any text before or after the JSON
+        - Do NOT include markdown formatting like ```json
+        - Do NOT include explanations or commentary
+        - Start your response directly with { and end with }
+        - Ensure all strings are properly quoted
+        - Ensure all JSON syntax is valid
+        
+        """
         
         # Main analysis template
         self.prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="Expert code quality analyst focusing on structure, quality, security, and performance."),
-            HumanMessage(content="""
+            SystemMessage(content="Expert code quality analyst focusing on structure, quality, security, and performance. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
                 # CODE
                 {generated_files}
                 
@@ -149,13 +158,13 @@ class CodeQualityAgent(BaseAgent):
         self.web_analysis_template = self._create_web_analysis_template(analysis_format_instructions)
         
         # Security analysis template
-        self.security_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="Security analyst identifying vulnerabilities in code."),
-            HumanMessage(content="""
-                Analyze these code files for security vulnerabilities:
+        self.security_analysis_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content="Security analyst identifying vulnerabilities in code. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
+                Analyze this {language} code for security vulnerabilities:
                 
                 # CODE
-                {code}
+                {code_content}
                 
                 # TECH STACK
                 {tech_stack}
@@ -183,8 +192,8 @@ class CodeQualityAgent(BaseAgent):
         
         # Tool analysis template
         self.tool_interpretation_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="Code quality analyst interpreting automated tool results."),
-            HumanMessage(content="""
+            SystemMessage(content="Code quality analyst interpreting automated tool results. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
                 Analyze these automated tool results:
                 
                 # AUTOMATED TOOL RESULTS
@@ -205,7 +214,150 @@ class CodeQualityAgent(BaseAgent):
                 Focus on actionable insights rather than repeating individual issues.
             """)
         ])
+
+        self.language_analysis_templates = {
+            "python": self.python_analysis_template,
+            "javascript": self.javascript_analysis_template,
+            "typescript": self.typescript_analysis_template,
+            "web": self.web_analysis_template,
+        }
     
+    def _create_python_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
+        """Creates the prompt template for Python code analysis."""
+        json_directive = """CRITICAL: You MUST respond with ONLY valid JSON. 
+        - Do NOT include any text before or after the JSON
+        - Do NOT include markdown formatting like ```json
+        - Do NOT include explanations or commentary
+        - Start your response directly with { and end with }
+        - Ensure all strings are properly quoted
+        - Ensure all JSON syntax is valid
+        
+        """
+        return ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a Python expert specializing in PEP 8, clean code, and performance. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
+                Review this Python code for quality and provide feedback.
+
+                # FILE
+                {file_path}
+
+                # CODE
+                {code_content}
+
+                # OUTPUT FORMAT
+                {format_instructions}
+
+                Focus on:
+                1. PEP 8 compliance
+                2. Docstring quality (style, completeness)
+                3. Error handling (try/except blocks, specific exceptions)
+                4. Readability and maintainability
+                5. Potential performance bottlenecks
+            """)
+        ])
+
+    def _create_javascript_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
+        """Creates the prompt template for JavaScript code analysis."""
+        json_directive = """CRITICAL: You MUST respond with ONLY valid JSON. 
+        - Do NOT include any text before or after the JSON
+        - Do NOT include markdown formatting like ```json
+        - Do NOT include explanations or commentary
+        - Start your response directly with { and end with }
+        - Ensure all strings are properly quoted
+        - Ensure all JSON syntax is valid
+        
+        """
+        return ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a JavaScript expert focused on modern practices (ES6+), async patterns, and security. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
+                Review this JavaScript code for quality and provide feedback.
+
+                # FILE
+                {file_path}
+
+                # CODE
+                {code_content}
+
+                # OUTPUT FORMAT
+                {format_instructions}
+
+                Focus on:
+                1. Use of modern ES6+ features
+                2. Asynchronous code handling (promises, async/await)
+                3. Error handling in async operations
+                4. Common security pitfalls (XSS, prototype pollution)
+                5. Code organization and modularity
+            """)
+        ])
+
+    def _create_typescript_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
+        """Creates the prompt template for TypeScript code analysis."""
+        json_directive = """CRITICAL: You MUST respond with ONLY valid JSON. 
+        - Do NOT include any text before or after the JSON
+        - Do NOT include markdown formatting like ```json
+        - Do NOT include explanations or commentary
+        - Start your response directly with { and end with }
+        - Ensure all strings are properly quoted
+        - Ensure all JSON syntax is valid
+        
+        """
+        return ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a TypeScript expert with deep knowledge of type safety, interfaces, and modern frameworks. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
+                Review this TypeScript code for quality and provide feedback.
+
+                # FILE
+                {file_path}
+
+                # CODE
+                {code_content}
+
+                # OUTPUT FORMAT
+                {format_instructions}
+
+                Focus on:
+                1. Type safety and effectiveness of type annotations
+                2. Use of interfaces, enums, and generics
+                3. Null and undefined handling
+                4. Consistency with framework-specific best practices (e.g., React, Angular)
+                5. Code structure and organization
+            """)
+        ])
+
+    def _create_web_analysis_template(self, format_instructions: str) -> ChatPromptTemplate:
+        """Creates the prompt template for HTML/CSS code analysis."""
+        json_directive = """CRITICAL: You MUST respond with ONLY valid JSON. 
+        - Do NOT include any text before or after the JSON
+        - Do NOT include markdown formatting like ```json
+        - Do NOT include explanations or commentary
+        - Start your response directly with { and end with }
+        - Ensure all strings are properly quoted
+        - Ensure all JSON syntax is valid
+        
+        """
+        return ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are a web development expert specializing in semantic HTML, accessibility (WCAG), and modern CSS. You respond ONLY in valid JSON format."),
+            HumanMessage(content=json_directive + """
+                Review this HTML/CSS code for quality and provide feedback.
+
+                # FILE
+                {file_path}
+
+                # CODE
+                {code_content}
+
+                # OUTPUT FORMAT
+                {format_instructions}
+
+                Focus on:
+                1. HTML semantic correctness
+                2. Accessibility issues (aria attributes, contrasts)
+                3. CSS architecture and scalability (e.g., BEM, utility classes)
+                4. Responsiveness and cross-browser compatibility
+                5. Performance (e.g., optimized selectors, use of modern properties)
+            """)
+        ])
+
     def get_default_response(self) -> Dict[str, Any]:
         """Returns a default code quality analysis when analysis fails."""
         # Create a valid default using the Pydantic model
@@ -238,49 +390,86 @@ class CodeQualityAgent(BaseAgent):
             status="error"
         )
         
-        return default_response.dict()
+        return default_response.model_dump()
     
     def run(self, work_item: WorkItem, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Performs a focused code quality review for a single work item.
-        """
-        logger.info(f"CodeQualityAgent reviewing work item: {work_item.id}")
-        
-        code_gen_result = state.get("code_generation_result", {})
-        generated_files = code_gen_result.get("generated_files", [])
+        """Execute code quality analysis for a specific work item."""
+        try:
+            self.log_start(f"Starting code quality analysis for work item: {work_item.id}")
+            
+            # Get generated files from state
+            code_generation_result = state.get(StateFields.CODE_GENERATION_RESULT)
+            tech_stack_recommendation = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+            
+            # Debug logging
+            self.log_info(f"Code generation result type: {type(code_generation_result)}")
+            if isinstance(code_generation_result, dict):
+                self.log_info(f"Code generation result keys: {list(code_generation_result.keys())}")
+            
+            # Extract generated files - handle both dict and Pydantic object formats
+            generated_files = []
+            if code_generation_result:
+                if hasattr(code_generation_result, 'generated_files'):
+                    # Pydantic object
+                    generated_files = code_generation_result.generated_files
+                    self.log_info(f"Extracted {len(generated_files)} files from Pydantic object")
+                elif isinstance(code_generation_result, dict):
+                    # Dictionary format - try multiple possible keys
+                    generated_files = (
+                        code_generation_result.get('generated_files') or 
+                        code_generation_result.get('files') or 
+                        code_generation_result.get('result', {}).get('generated_files') or
+                        []
+                    )
+                    
+                    # Handle case where generated_files might be a dict instead of list
+                    if isinstance(generated_files, dict):
+                        # Convert dict to list of GeneratedFile-like objects
+                        generated_files = [
+                            {'file_path': path, 'content': content} 
+                            for path, content in generated_files.items()
+                        ]
+                    
+                    self.log_info(f"Extracted {len(generated_files)} files from dict format")
+            if not generated_files:
+                self.log_warning("No generated files found for quality analysis")
+                return self.get_default_response()
+            
+            # Convert GeneratedFile objects to dictionaries for the comprehensive analysis
+            files_dict = {}
+            for i, file in enumerate(generated_files):
+                if hasattr(file, 'file_path') and hasattr(file, 'content'):
+                    # Pydantic GeneratedFile object
+                    files_dict[file.file_path] = file.content
+                elif isinstance(file, dict):
+                    # Dictionary format
+                    file_path = file.get('file_path') or file.get('path') or file.get('name', f'file_{i}')
+                    content = file.get('content', '')
+                    files_dict[file_path] = content
+                    self.log_info(f"Processed file {i}: {file_path} ({len(content)} chars)")
+                else:
+                    self.log_warning(f"Unknown file format at index {i}: {type(file)}")
+                    
+            self.log_info(f"Created files_dict with {len(files_dict)} files for analysis")
+            
+            # Perform comprehensive analysis
+            analysis_result = self.run_comprehensive_analysis(
+                code_generation_result={"generated_files": files_dict},
+                tech_stack_recommendation=tech_stack_recommendation
+            )
+            
+            self.log_success(f"Code quality analysis completed for work item: {work_item.id}")
+            return analysis_result
+            
+        except Exception as e:
+            self.log_error(f"Code quality analysis failed for work item {work_item.id}: {str(e)}", exc_info=True)
+            return self.get_default_response()
 
-        if not generated_files:
-            logger.warning(f"No files provided for quality review of work item {work_item.id}.")
-            return {"approved": True, "feedback": ["No files to review."]}
-
-        prompt = self._create_work_item_review_prompt(work_item, generated_files, state.get("tech_stack_recommendation", {}))
-
-        # Define the desired output structure
-        output_schema = {
-            "title": "Code Quality Review",
-            "description": "A review of the generated code for a single work item.",
-            "type": "object",
-            "properties": {
-                "approved": {
-                    "title": "Approval Status",
-                    "description": "True if the code passes quality checks, False otherwise.",
-                    "type": "boolean"
-                },
-                "feedback": {
-                    "title": "Feedback Items",
-                    "description": "A list of specific feedback points, suggestions, or required changes.",
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
-            },
-            "required": ["approved", "feedback"]
-        }
-
-        chain = self.llm.with_structured_output(output_schema)
-        review_result = chain.invoke(prompt)
-
-        logger.info(f"Review for {work_item.id} complete. Approved: {review_result.get('approved')}")
-        return review_result
+    async def arun(self, **kwargs: Any) -> Any:
+        """Async version of run method."""
+        import asyncio
+        # For now, just run the sync version in a thread
+        return await asyncio.to_thread(self.run, **kwargs)
 
     def _create_work_item_review_prompt(self, work_item: WorkItem, generated_files: List[Dict[str, Any]], tech_stack: Dict[str, Any]) -> str:
         code_str = ""
@@ -316,7 +505,7 @@ class CodeQualityAgent(BaseAgent):
         DEPRECATED: This method is part of the old, phase-based workflow.
         The new workflow uses the `run` method for work-item-based review.
         """
-        logger.warning("run_comprehensive_analysis is deprecated and should not be used in the new workflow.")
+        self.log_warning("run_comprehensive_analysis is deprecated and should not be used in the new workflow.")
         # Create and validate the input with Pydantic
         try:
             input_data = CodeQualityAnalysisInput(
@@ -345,7 +534,10 @@ class CodeQualityAgent(BaseAgent):
             
             # STAGE 1: Run automated tools first (token efficient - doesn't use LLM)
             self.log_info("Stage 1: Running automated quality checks")
-            automated_checks = self.run_automated_quality_checks(generated_files, tech_stack_recommendation)
+            automated_checks = self.run_automated_quality_checks(
+                input_data.code_generation_result["generated_files"], 
+                input_data.tech_stack_recommendation
+            )
             
             # STAGE 2: LLM interpretation of automated results (analytical)
             self.log_info("Stage 2: Processing automated check results")
@@ -373,8 +565,7 @@ class CodeQualityAgent(BaseAgent):
             
             # Execute main analysis with optimized context
             analysis_result = self.execute_llm_chain(
-                llm=llm_summary,
-                params={
+                inputs={
                     "generated_files": files_summary,
                     "tech_stack": json.dumps(tech_stack_recommendation, indent=2),
                     "rag_context": rag_context,
@@ -400,7 +591,7 @@ class CodeQualityAgent(BaseAgent):
                 }
                 
                 self.log_success(f"Multi-stage code quality analysis completed - Overall score: {validated_result.overall_quality_score}/10")
-                self.log_execution_summary(validated_result.dict())
+                self.log_execution_summary(validated_result.model_dump())
                   # Add message bus publishing
                 if hasattr(self, "message_bus") and self.message_bus:
                     self.message_bus.publish("code.quality.analysis.completed", {
@@ -430,7 +621,7 @@ class CodeQualityAgent(BaseAgent):
                         })
                         self.log_info(f"Published optimization priority update for {len(priority_files)} files with critical issues")
                 
-                return validated_result.dict()
+                return validated_result.model_dump()
                 
             except Exception as validation_error:
                 self.log_warning(f"Result validation error: {validation_error}")
@@ -454,18 +645,45 @@ class CodeQualityAgent(BaseAgent):
             tool_results_str = json.dumps(self.prune_tool_results(automated_checks), indent=2)
             tech_stack_str = self.prune_tech_stack(tech_stack)
             
-            # Format and execute prompt
-            format_instructions = "Return ONLY valid JSON with no additional text or explanations.\n" + self.json_parser.get_format_instructions()
-            prompt = self.tool_results_template.format(
-                tool_results=tool_results_str,
+            # Format and execute prompt with explicit JSON formatting
+            format_instructions = self.json_parser.get_format_instructions()
+            prompt = self.tool_interpretation_template.format(
+                automated_results=tool_results_str,
                 tech_stack=tech_stack_str,
                 format_instructions=format_instructions
             )
             
             # Execute with monitoring config
             response = llm.invoke(prompt, config=invoke_config)
-            results = self.json_parser.parse(response.content)
-            return results
+            try:
+                results = self.json_parser.parse(response.content)
+                return results
+            except Exception as parse_error:
+                # Try to extract JSON from markdown-formatted response
+                import re
+                content = response.content.strip()
+                
+                # Remove markdown code blocks if present
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+                if json_match:
+                    try:
+                        results = self.json_parser.parse(json_match.group(1))
+                        return results
+                    except Exception:
+                        pass
+                
+                # Try to extract JSON directly
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    try:
+                        results = self.json_parser.parse(json_match.group(0))
+                        return results
+                    except Exception:
+                        pass
+                
+                # If all parsing fails, return basic structure
+                self.log_warning(f"Failed to parse tool interpretation response: {parse_error}")
+                return {"interpretation_error": str(parse_error), "raw_response": content}
         
         except Exception as e:
             self.log_warning(f"Tool results interpretation failed: {e}")
@@ -556,8 +774,34 @@ class CodeQualityAgent(BaseAgent):
                     )
                     
                     response = self._get_llm_with_temperature(adjusted_temp).invoke(prompt, config=invoke_config)
-                    analysis = self.json_parser.parse(response.content)
-                    return {"file": file_path, "analysis": analysis}
+                    try:
+                        analysis = self.json_parser.parse(response.content)
+                        return {"file": file_path, "analysis": analysis}
+                    except Exception as parse_error:
+                        # Try to extract JSON from response
+                        import re
+                        content = response.content.strip()
+                        
+                        # Remove markdown code blocks if present
+                        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+                        if json_match:
+                            try:
+                                analysis = self.json_parser.parse(json_match.group(1))
+                                return {"file": file_path, "analysis": analysis}
+                            except Exception:
+                                pass
+                        
+                        # Try to extract JSON directly
+                        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                        if json_match:
+                            try:
+                                analysis = self.json_parser.parse(json_match.group(0))
+                                return {"file": file_path, "analysis": analysis}
+                            except Exception:
+                                pass
+                        
+                        # If all parsing fails, return error structure
+                        return {"file": file_path, "analysis": {"error": str(parse_error), "raw_response": content}}
                 except Exception as e:
                     self.log_warning(f"Failed to analyze {language_name} file {file_path}: {str(e)}")
                     return {"file": file_path, "analysis": {"error": str(e)}}
@@ -699,6 +943,30 @@ class CodeQualityAgent(BaseAgent):
                 
                 try:
                     analysis = self.json_parser.parse(response.content)
+                except Exception as parse_error:
+                    # Try to extract JSON from response
+                    import re
+                    content = response.content.strip()
+                    
+                    # Remove markdown code blocks if present
+                    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+                    if json_match:
+                        try:
+                            analysis = self.json_parser.parse(json_match.group(1))
+                        except Exception:
+                            analysis = {"vulnerabilities": [], "security_score": 8.0, "parse_error": str(parse_error)}
+                    else:
+                        # Try to extract JSON directly
+                        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                        if json_match:
+                            try:
+                                analysis = self.json_parser.parse(json_match.group(0))
+                            except Exception:
+                                analysis = {"vulnerabilities": [], "security_score": 8.0, "parse_error": str(parse_error)}
+                        else:
+                            analysis = {"vulnerabilities": [], "security_score": 8.0, "parse_error": str(parse_error)}
+                
+                if analysis:  # Only process if we have valid analysis
                     
                     # Format results when adding vulnerabilities
                     for vuln in analysis.get("vulnerabilities", []):
@@ -713,7 +981,7 @@ class CodeQualityAgent(BaseAgent):
                                 remediation=vuln.get("fix", vuln.get("remediation", None))
                             )
                             # Convert to dict and add to results
-                            security_results["vulnerabilities"].append(validated_vuln.dict())
+                            security_results["vulnerabilities"].append(validated_vuln.model_dump())
                         except Exception:
                             # Fall back to original if validation fails
                             if "location" not in vuln or not vuln["location"]:
@@ -725,8 +993,6 @@ class CodeQualityAgent(BaseAgent):
                         security_results["security_score"], 
                         analysis.get("security_score", 10.0)
                     )
-                except Exception as parse_e:
-                    self.log_warning(f"Failed to parse security analysis for {file_path}: {parse_e}")
         
             security_results["analysis_coverage"] = "comprehensive" if len(key_files) > 5 else "partial"
             security_results["files_analyzed"] = len(key_files)
@@ -937,7 +1203,7 @@ class CodeQualityAgent(BaseAgent):
                         working_dir=self.run_output_dir,
                         timeout=30
                     )
-                    results["linting"]["python"] = python_lint_result.output
+                    results["linting"]["python"] = python_lint_result.get("output", "")
                     
                     # Minimal additional tools with limited scope
                     try:
@@ -948,7 +1214,7 @@ class CodeQualityAgent(BaseAgent):
                             working_dir=self.run_output_dir,
                             timeout=20
                         )
-                        results["complexity"]["python"] = complexity_result.output
+                        results["complexity"]["python"] = complexity_result.get("output", "")
                     except Exception:
                         self.log_warning("Radon not available for Python complexity analysis")
                     
@@ -970,7 +1236,7 @@ class CodeQualityAgent(BaseAgent):
                         working_dir=self.run_output_dir,
                         timeout=30
                     )
-                    results["linting"]["javascript"] = js_lint_result.output
+                    results["linting"]["javascript"] = js_lint_result.get("output", "")
                 except Exception as e:
                     self.log_warning(f"JavaScript linting failed: {e}")
                     results["linting"]["javascript"] = f"Error: {str(e)}"
@@ -1068,6 +1334,146 @@ class CodeQualityAgent(BaseAgent):
         else:
             # Default: use base temperature
             return 0.2
+    
+    def create_efficient_files_summary(self, generated_files: dict) -> str:
+        """Create a token-efficient summary of generated files"""
+        if not generated_files:
+            return "No files generated"
+            
+        summary_parts = []
+        
+        # Group files by type
+        file_groups = {
+            'python': [],
+            'javascript': [],
+            'typescript': [],
+            'html': [],
+            'css': [],
+            'other': []
+        }
+        
+        for file_path, content in generated_files.items():
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == '.py':
+                file_groups['python'].append((file_path, len(content)))
+            elif ext in ['.js', '.jsx']:
+                file_groups['javascript'].append((file_path, len(content)))
+            elif ext in ['.ts', '.tsx']:
+                file_groups['typescript'].append((file_path, len(content)))
+            elif ext == '.html':
+                file_groups['html'].append((file_path, len(content)))
+            elif ext in ['.css', '.scss', '.sass']:
+                file_groups['css'].append((file_path, len(content)))
+            else:
+                file_groups['other'].append((file_path, len(content)))
+        
+        # Create summary for each group
+        for group_name, files in file_groups.items():
+            if files:
+                total_lines = sum(content_len // 50 for _, content_len in files)  # Rough line estimate
+                file_names = [os.path.basename(path) for path, _ in files[:3]]  # Show first 3 files
+                if len(files) > 3:
+                    file_names.append(f"and {len(files) - 3} more")
+                
+                summary_parts.append(f"{group_name.upper()}: {', '.join(file_names)} (~{total_lines} lines)")
+        
+        return "\n".join(summary_parts) if summary_parts else "No code files generated"
+    
+    def create_focused_results_summary(self, automated_checks: dict, tool_interpretation: dict, 
+                                     language_analyses: dict, security_analysis: dict) -> str:
+        """Create a focused summary of all analysis results"""
+        summary_parts = []
+        
+        # Automated checks summary
+        if automated_checks.get("overall_stats", {}).get("issues_found", 0) > 0:
+            issues_count = automated_checks["overall_stats"]["issues_found"]
+            summary_parts.append(f"AUTOMATED TOOLS: {issues_count} issues detected")
+        
+        # Language-specific analysis summary
+        total_language_issues = 0
+        for lang, analyses in language_analyses.items():
+            for analysis in analyses:
+                if isinstance(analysis.get("analysis"), dict):
+                    issues = analysis["analysis"].get("issues", [])
+                    total_language_issues += len(issues)
+        
+        if total_language_issues > 0:
+            summary_parts.append(f"LANGUAGE ANALYSIS: {total_language_issues} code quality issues")
+        
+        # Security analysis summary
+        vulnerability_count = len(security_analysis.get("vulnerabilities", []))
+        if vulnerability_count > 0:
+            security_score = security_analysis.get("security_score", 10)
+            summary_parts.append(f"SECURITY: {vulnerability_count} vulnerabilities found (score: {security_score}/10)")
+        
+        # Tool interpretation summary
+        if tool_interpretation and not tool_interpretation.get("interpretation_error"):
+            summary_parts.append("TOOL INTERPRETATION: Available")
+        
+        return "\n".join(summary_parts) if summary_parts else "No significant issues detected in automated analysis"
+    
+    def enhance_recommendations(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhance the analysis result with prioritized recommendations"""
+        try:
+            # Get existing recommendations or initialize empty list
+            recommendations = analysis_result.get("recommendations", [])
+            specific_issues = analysis_result.get("specific_issues", [])
+            
+            # Prioritize recommendations based on severity and impact
+            prioritized_recommendations = []
+            quick_wins = []
+            
+            # Categorize recommendations
+            for rec in recommendations:
+                if isinstance(rec, str):
+                    # Simple string recommendations
+                    if any(keyword in rec.lower() for keyword in ["critical", "security", "vulnerability"]):
+                        prioritized_recommendations.insert(0, rec)  # High priority
+                    elif any(keyword in rec.lower() for keyword in ["performance", "optimization"]):
+                        prioritized_recommendations.append(rec)  # Medium priority
+                    elif any(keyword in rec.lower() for keyword in ["style", "format", "naming"]):
+                        quick_wins.append(rec)  # Quick wins
+                    else:
+                        prioritized_recommendations.append(rec)  # Default priority
+            
+            # Identify quick wins from specific issues
+            for issue in specific_issues:
+                if isinstance(issue, dict):
+                    severity = issue.get("severity", "").lower()
+                    description = issue.get("description", "")
+                    
+                    if severity in ["low", "minor"] and any(keyword in description.lower() 
+                                                          for keyword in ["style", "format", "import", "unused"]):
+                        quick_wins.append(f"Fix {description}")
+            
+            # Add enhanced fields to the result
+            analysis_result["prioritized_recommendations"] = prioritized_recommendations
+            analysis_result["quick_wins"] = list(set(quick_wins))  # Remove duplicates
+            
+            # Add recommendation summary
+            analysis_result["recommendation_summary"] = {
+                "total_recommendations": len(recommendations),
+                "high_priority": len([r for r in prioritized_recommendations[:3]]),
+                "quick_wins_available": len(quick_wins),
+                "estimated_effort": "high" if len(specific_issues) > 10 else "medium" if len(specific_issues) > 5 else "low"
+            }
+            
+            return analysis_result
+            
+        except Exception as e:
+            self.log_warning(f"Failed to enhance recommendations: {e}")
+            return analysis_result
+    
+    def _get_llm_with_temperature(self, temperature: float):
+        """Get LLM instance with specific temperature"""
+        try:
+            # Create a new LLM instance with the specified temperature using the correct config function
+            from config import get_llm
+            return get_llm(temperature=temperature)
+        except Exception as e:
+            self.log_warning(f"Failed to create LLM with temperature {temperature}: {e}")
+            # Fallback to existing LLM
+            return self.llm
     
     def _setup_message_subscriptions(self) -> None:
         """Set up message bus subscriptions if available"""

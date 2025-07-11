@@ -1,0 +1,47 @@
+# Kubernetes Service for the FastAPI Backend Application
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-backend-service
+  labels:
+    app: fastapi-backend
+    tier: backend
+spec:
+  selector:
+    app: fastapi-backend # Selects pods with this label
+    tier: backend
+  ports:
+    - protocol: TCP
+      port: 80 # Port the service exposes (e.g., for Ingress or other services)
+      targetPort: 8000 # Port the container listens on
+  type: ClusterIP # Default type, makes the service only reachable within the cluster
+
+# Optional: If you want to expose it externally directly (not recommended for production without a proper Ingress/Load Balancer)
+# type: LoadBalancer
+# externalTrafficPolicy: Cluster # or Local for preserving client IP
+
+# Optional: Ingress for external access with SSL termination and routing
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: fastapi-backend-ingress
+#   annotations:
+#     kubernetes.io/ingress.class: nginx # Or your ingress controller
+#     cert-manager.io/cluster-issuer: letsencrypt-prod # For automated SSL with cert-manager
+# spec:
+#   tls:
+#     - hosts:
+#         - api.yourdomain.com
+#       secretName: fastapi-backend-tls # Secret where cert-manager stores the certificate
+#   rules:
+#     - host: api.yourdomain.com
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: fastapi-backend-service
+#                 port:
+#                   number: 80

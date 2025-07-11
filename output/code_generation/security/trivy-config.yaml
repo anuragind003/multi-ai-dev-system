@@ -1,0 +1,46 @@
+# Trivy configuration file for Docker image scanning
+# This file can be used to customize Trivy's behavior, e.g., ignoring specific vulnerabilities.
+
+# Severity levels to report. Options: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL
+severity:
+  - CRITICAL
+  - HIGH
+
+# Vulnerability types to scan. Options: os, library, config, secret, license
+vuln-type:
+  - os
+  - library
+
+# Ignore unfixed vulnerabilities. Set to true to only report vulnerabilities with available fixes.
+ignore-unfixed: true
+
+# List of vulnerability IDs to ignore.
+# Example:
+# ignore-vulnerabilities:
+#   - CVE-2023-1234
+#   - CVE-2023-5678
+
+# Path to a file containing vulnerability IDs to ignore.
+# ignore-file: .trivyignore
+
+# Policy for misconfigurations.
+# config-policy:
+#   - path: /path/to/policy.rego # Path to OPA Rego policy files
+
+# Secret scanning options
+# secret:
+#   enabled: true
+#   severity: HIGH # Severity for detected secrets
+
+# File patterns to skip during scanning (e.g., test files, documentation)
+# skip-files:
+#   - "**/*_test.py"
+#   - "**/docs/*"
+
+# Directory patterns to skip during scanning
+# skip-dirs:
+#   - "node_modules"
+#   - "vendor"
+
+# Timeout for the scan operation (e.g., 5m for 5 minutes)
+# timeout: 5m

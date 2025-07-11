@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Global styles for toast notifications */
+.Toastify__toast-container {
+  z-index: 9999;
+}
+
+.Toastify__toast--success {
+  background-color: #10B981 !important; /* Emerald 500 */
+  color: white !important;
+}
+
+.Toastify__toast--error {
+  background-color: #EF4444 !important; /* Red 500 */
+  color: white !important;
+}
+
+.Toastify__toast--info {
+  background-color: #3B82F6 !important; /* Blue 500 */
+  color: white !important;
+}
+
+.Toastify__toast--warning {
+  background-color: #F59E0B !important; /* Amber 500 */
+  color: white !important;
+}

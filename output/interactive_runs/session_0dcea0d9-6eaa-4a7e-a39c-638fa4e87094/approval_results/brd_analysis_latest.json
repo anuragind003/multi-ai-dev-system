@@ -1,0 +1,441 @@
+{
+  "session_id": "session_0dcea0d9-6eaa-4a7e-a39c-638fa4e87094",
+  "approval_type": "brd_analysis",
+  "timestamp": 1751958748,
+  "approval_data": {
+    "type": "brd_analysis",
+    "timestamp": 1751958748.2386837,
+    "project_name": "V-KYC recordings to be fetched for Audit requirements",
+    "project_summary": "Develop a portal/dashboard for V-KYC team leads and process managers to access and download V-KYC recordings for audit and other requirements.",
+    "business_context": "The V-KYC team currently relies on the IT data server team to provide recordings, which are stored on the LTF AWS server. This process is manual and time-consuming. This project aims to streamline the process by providing a self-service portal.",
+    "stakeholders": [
+      "Sankalp Shaswat (Prepared by)",
+      "Mayur Takale (Reviewed By)",
+      "Amir Khan (Reviewed By)",
+      "Atul Kantak (Authorized By)",
+      "Harsh Gangakhedkar (Authorized By)",
+      "VKYC Team",
+      "B. Ops – V-KYC Team"
+    ],
+    "success_criteria": [
+      "V-KYC recordings are easily accessible to authorized users.",
+      "Reduced dependency on the IT data server team.",
+      "Improved efficiency in retrieving and downloading recordings.",
+      "Compliance with audit requirements."
+    ],
+    "constraints": [
+      "File upload limit of 50 LAN IDs.",
+      "Maximum 10 records download at a time.",
+      "File upload format: CSV/TXT"
+    ],
+    "assumptions": [
+      "The backend API for processing the file upload is available.",
+      "The LTF AWS server is accessible and recordings are stored correctly.",
+      "The necessary infrastructure for the portal is available."
+    ],
+    "functional_requirements": [
+      "Upload CSV/TXT file with LAN IDs (max 50).",
+      "Trigger backend API call to process the file.",
+      "Display results in a tabular format.",
+      "Provide a 'Download All' option.",
+      "Implement table pagination (10 records per page).",
+      "Allow downloading a maximum of 10 records at a time.",
+      "Display recordings date and month wise.",
+      "Enable search by LAN ID.",
+      "Provide option for bulk video download."
+    ],
+    "non_functional_requirements": [
+      "Access to the portal should be restricted to authorized users (Team Leads and Process Managers)."
+    ],
+    "requirements": [
+      {
+        "id": "FR-1",
+        "title": "Functional Requirement 1",
+        "description": "Upload CSV/TXT file with LAN IDs (max 50).",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-2",
+        "title": "Functional Requirement 2",
+        "description": "Trigger backend API call to process the file.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-3",
+        "title": "Functional Requirement 3",
+        "description": "Display results in a tabular format.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-4",
+        "title": "Functional Requirement 4",
+        "description": "Provide a 'Download All' option.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-5",
+        "title": "Functional Requirement 5",
+        "description": "Implement table pagination (10 records per page).",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-6",
+        "title": "Functional Requirement 6",
+        "description": "Allow downloading a maximum of 10 records at a time.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-7",
+        "title": "Functional Requirement 7",
+        "description": "Display recordings date and month wise.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-8",
+        "title": "Functional Requirement 8",
+        "description": "Enable search by LAN ID.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-9",
+        "title": "Functional Requirement 9",
+        "description": "Provide option for bulk video download.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "NFR-1",
+        "title": "Non-Functional Requirement 1",
+        "description": "Access to the portal should be restricted to authorized users (Team Leads and Process Managers).",
+        "acceptance_criteria": []
+      }
+    ],
+    "extracted_requirements": [
+      {
+        "id": "FR-1",
+        "title": "Functional Requirement 1",
+        "description": "Upload CSV/TXT file with LAN IDs (max 50).",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-2",
+        "title": "Functional Requirement 2",
+        "description": "Trigger backend API call to process the file.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-3",
+        "title": "Functional Requirement 3",
+        "description": "Display results in a tabular format.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-4",
+        "title": "Functional Requirement 4",
+        "description": "Provide a 'Download All' option.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-5",
+        "title": "Functional Requirement 5",
+        "description": "Implement table pagination (10 records per page).",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-6",
+        "title": "Functional Requirement 6",
+        "description": "Allow downloading a maximum of 10 records at a time.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-7",
+        "title": "Functional Requirement 7",
+        "description": "Display recordings date and month wise.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-8",
+        "title": "Functional Requirement 8",
+        "description": "Enable search by LAN ID.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "FR-9",
+        "title": "Functional Requirement 9",
+        "description": "Provide option for bulk video download.",
+        "acceptance_criteria": []
+      },
+      {
+        "id": "NFR-1",
+        "title": "Non-Functional Requirement 1",
+        "description": "Access to the portal should be restricted to authorized users (Team Leads and Process Managers).",
+        "acceptance_criteria": []
+      }
+    ],
+    "raw_analysis": {
+      "project_name": "V-KYC recordings to be fetched for Audit requirements",
+      "project_summary": "Develop a portal/dashboard for V-KYC team leads and process managers to access and download V-KYC recordings for audit and other requirements.",
+      "project_goals": [
+        "Provide easy access to V-KYC recordings for audit and internal requirements.",
+        "Reduce dependency on IT data server team for retrieving recordings.",
+        "Improve efficiency in accessing and downloading recordings."
+      ],
+      "target_audience": [
+        "Team Leads (TL) of V-KYC process",
+        "Process Managers of V-KYC process"
+      ],
+      "business_context": "The V-KYC team currently relies on the IT data server team to provide recordings, which are stored on the LTF AWS server. This process is manual and time-consuming. This project aims to streamline the process by providing a self-service portal.",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "description": "The system shall allow users to upload a CSV/TXT file containing up to 50 LAN IDs.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-002",
+          "description": "The system shall trigger a backend API call to process the uploaded file.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-003",
+          "description": "The system shall display the results in a tabular format with a 'Download All' option.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-004",
+          "description": "The table shall have pagination to display 10 records at a time.",
+          "category": "functional",
+          "priority": 2
+        },
+        {
+          "id": "REQ-005",
+          "description": "The system shall allow downloading a maximum of 10 records at a time.",
+          "category": "functional",
+          "priority": 2
+        },
+        {
+          "id": "REQ-006",
+          "description": "The recordings shall be available date and month wise.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-007",
+          "description": "The recordings shall be searchable by LAN ID.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-008",
+          "description": "Access to the portal shall be restricted to Team Leads and Process Managers.",
+          "category": "non_functional",
+          "priority": 1
+        }
+      ],
+      "functional_requirements": [
+        "Upload CSV/TXT file with LAN IDs (max 50).",
+        "Trigger backend API call to process the file.",
+        "Display results in a tabular format.",
+        "Provide a 'Download All' option.",
+        "Implement table pagination (10 records per page).",
+        "Allow downloading a maximum of 10 records at a time.",
+        "Display recordings date and month wise.",
+        "Enable search by LAN ID.",
+        "Provide option for bulk video download."
+      ],
+      "non_functional_requirements": [
+        "Access to the portal should be restricted to authorized users (Team Leads and Process Managers)."
+      ],
+      "stakeholders": [
+        "Sankalp Shaswat (Prepared by)",
+        "Mayur Takale (Reviewed By)",
+        "Amir Khan (Reviewed By)",
+        "Atul Kantak (Authorized By)",
+        "Harsh Gangakhedkar (Authorized By)",
+        "VKYC Team",
+        "B. Ops – V-KYC Team"
+      ],
+      "success_criteria": [
+        "V-KYC recordings are easily accessible to authorized users.",
+        "Reduced dependency on the IT data server team.",
+        "Improved efficiency in retrieving and downloading recordings.",
+        "Compliance with audit requirements."
+      ],
+      "constraints": [
+        "File upload limit of 50 LAN IDs.",
+        "Maximum 10 records download at a time.",
+        "File upload format: CSV/TXT"
+      ],
+      "assumptions": [
+        "The backend API for processing the file upload is available.",
+        "The LTF AWS server is accessible and recordings are stored correctly.",
+        "The necessary infrastructure for the portal is available."
+      ],
+      "risks": [
+        "Backend API failure.",
+        "Issues with accessing the LTF AWS server.",
+        "Security vulnerabilities in the portal.",
+        "Performance issues with large data sets."
+      ],
+      "domain_specific_details": {},
+      "quality_assessment": {
+        "clarity_score": 7.0,
+        "completeness_score": 8.0,
+        "consistency_score": 8.0,
+        "recommendations": [
+          "Specify the backend API details (e.g., API endpoints, data formats).",
+          "Define the security measures for the portal.",
+          "Detail the error handling and logging mechanisms."
+        ]
+      },
+      "gap_analysis": {
+        "identified_gaps": [
+          "Detailed API specifications are missing.",
+          "Security requirements are not fully defined.",
+          "Error handling and logging are not specified."
+        ],
+        "recommendations_for_completion": [
+          "Provide detailed API documentation.",
+          "Define security requirements (authentication, authorization, data encryption).",
+          "Specify error handling and logging procedures."
+        ]
+      }
+    }
+  },
+  "workflow_state_snapshot": {
+    "requirements_analysis": {
+      "project_name": "V-KYC recordings to be fetched for Audit requirements",
+      "project_summary": "Develop a portal/dashboard for V-KYC team leads and process managers to access and download V-KYC recordings for audit and other requirements.",
+      "project_goals": [
+        "Provide easy access to V-KYC recordings for audit and internal requirements.",
+        "Reduce dependency on IT data server team for retrieving recordings.",
+        "Improve efficiency in accessing and downloading recordings."
+      ],
+      "target_audience": [
+        "Team Leads (TL) of V-KYC process",
+        "Process Managers of V-KYC process"
+      ],
+      "business_context": "The V-KYC team currently relies on the IT data server team to provide recordings, which are stored on the LTF AWS server. This process is manual and time-consuming. This project aims to streamline the process by providing a self-service portal.",
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "description": "The system shall allow users to upload a CSV/TXT file containing up to 50 LAN IDs.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-002",
+          "description": "The system shall trigger a backend API call to process the uploaded file.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-003",
+          "description": "The system shall display the results in a tabular format with a 'Download All' option.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-004",
+          "description": "The table shall have pagination to display 10 records at a time.",
+          "category": "functional",
+          "priority": 2
+        },
+        {
+          "id": "REQ-005",
+          "description": "The system shall allow downloading a maximum of 10 records at a time.",
+          "category": "functional",
+          "priority": 2
+        },
+        {
+          "id": "REQ-006",
+          "description": "The recordings shall be available date and month wise.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-007",
+          "description": "The recordings shall be searchable by LAN ID.",
+          "category": "functional",
+          "priority": 1
+        },
+        {
+          "id": "REQ-008",
+          "description": "Access to the portal shall be restricted to Team Leads and Process Managers.",
+          "category": "non_functional",
+          "priority": 1
+        }
+      ],
+      "functional_requirements": [
+        "Upload CSV/TXT file with LAN IDs (max 50).",
+        "Trigger backend API call to process the file.",
+        "Display results in a tabular format.",
+        "Provide a 'Download All' option.",
+        "Implement table pagination (10 records per page).",
+        "Allow downloading a maximum of 10 records at a time.",
+        "Display recordings date and month wise.",
+        "Enable search by LAN ID.",
+        "Provide option for bulk video download."
+      ],
+      "non_functional_requirements": [
+        "Access to the portal should be restricted to authorized users (Team Leads and Process Managers)."
+      ],
+      "stakeholders": [
+        "Sankalp Shaswat (Prepared by)",
+        "Mayur Takale (Reviewed By)",
+        "Amir Khan (Reviewed By)",
+        "Atul Kantak (Authorized By)",
+        "Harsh Gangakhedkar (Authorized By)",
+        "VKYC Team",
+        "B. Ops – V-KYC Team"
+      ],
+      "success_criteria": [
+        "V-KYC recordings are easily accessible to authorized users.",
+        "Reduced dependency on the IT data server team.",
+        "Improved efficiency in retrieving and downloading recordings.",
+        "Compliance with audit requirements."
+      ],
+      "constraints": [
+        "File upload limit of 50 LAN IDs.",
+        "Maximum 10 records download at a time.",
+        "File upload format: CSV/TXT"
+      ],
+      "assumptions": [
+        "The backend API for processing the file upload is available.",
+        "The LTF AWS server is accessible and recordings are stored correctly.",
+        "The necessary infrastructure for the portal is available."
+      ],
+      "risks": [
+        "Backend API failure.",
+        "Issues with accessing the LTF AWS server.",
+        "Security vulnerabilities in the portal.",
+        "Performance issues with large data sets."
+      ],
+      "domain_specific_details": {},
+      "quality_assessment": {
+        "clarity_score": 7.0,
+        "completeness_score": 8.0,
+        "consistency_score": 8.0,
+        "recommendations": [
+          "Specify the backend API details (e.g., API endpoints, data formats).",
+          "Define the security measures for the portal.",
+          "Detail the error handling and logging mechanisms."
+        ]
+      },
+      "gap_analysis": {
+        "identified_gaps": [
+          "Detailed API specifications are missing.",
+          "Security requirements are not fully defined.",
+          "Error handling and logging are not specified."
+        ],
+        "recommendations_for_completion": [
+          "Provide detailed API documentation.",
+          "Define security requirements (authentication, authorization, data encryption).",
+          "Specify error handling and logging procedures."
+        ]
+      }
+    }
+  }
+}

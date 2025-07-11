@@ -1,0 +1,69 @@
+import React, { useState } from 'react';
+
+interface TestRunFormProps {
+  onSubmit: (formData: any) => void; // Replace 'any' with a specific type for your form data
+}
+
+function TestRunForm({ onSubmit }: TestRunFormProps) {
+  const [formData, setFormData] = useState({
+    testCaseId: '',
+    testerName: '',
+    // Add other form fields
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+    // Optionally, reset the form
+    setFormData({ testCaseId: '', testerName: '' });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="testCaseId">
+          Test Case ID
+        </label>
+        <input
+          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          id="testCaseId"
+          type="text"
+          placeholder="TC-001"
+          name="testCaseId"
+          value={formData.testCaseId}
+          onChange={handleChange}
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="testerName">
+          Tester Name
+        </label>
+        <input
+          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          id="testerName"
+          type="text"
+          placeholder="John Doe"
+          name="testerName"
+          value={formData.testerName}
+          onChange={handleChange}
+        />
+      </div>
+      {/* Add more form fields here */}
+      <div className="flex items-center justify-between">
+        <button
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+          type="submit"
+        >
+          Submit
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default TestRunForm;

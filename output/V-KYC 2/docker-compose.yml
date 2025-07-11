@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # FastAPI Application Service
+  fastapi_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production # Use the production stage from the Dockerfile
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    environment:
+      # Use .env for sensitive data in production, or Docker secrets
+      # For development, direct environment variables are fine.
+      LOGSTASH_HOST: logstash
+      LOGSTASH_PORT: 5000
+      APP_ENV: production
+      # Example of a secret, should be managed via Docker secrets in production
+      # API_KEY: ${API_KEY}
+    env_file:
+      - .env # Load environment variables from .env file
+    depends_on:
+      - logstash # Ensure Logstash is up before the app tries to send logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file" # Default Docker logging driver, Logstash will read these logs
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Elasticsearch Service
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false # Disable security for development/demo. ENABLE FOR PRODUCTION!
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m # Adjust memory as needed
+    volumes:
+      - esdata:/usr/share/elasticsearch/data # Persist Elasticsearch data
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Logstash Service
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.14.0
+    container_name: logstash
+    ports:
+      - "5000:5000/tcp" # For FastAPI app to send logs
+      - "9600:9600" # Monitoring API
+    volumes:
+      - ./logstash/pipeline.conf:/usr/share/logstash/pipeline/logstash.conf:ro # Logstash configuration
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m # Adjust memory as needed
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9600"] # Logstash monitoring API
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Kibana Service
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200 # Connect to Elasticsearch service
+    volumes:
+      - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"overall\":{\"lastUpdated\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  esdata: # Volume for Elasticsearch data persistence

@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093 # Alertmanager service name in docker-compose
+
+# Rule files for alerting
+rule_files:
+  - 'rules.yml'
+
+scrape_configs:
+  # Scrape config for the FastAPI application
+  - job_name: 'fastapi_app'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['app:8000'] # 'app' is the service name in docker-compose
+
+  # Scrape config for Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape config for Grafana (if it exposes metrics)
+  # Grafana exposes metrics on /metrics by default
+  - job_name: 'grafana'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  # Scrape config for Alertmanager
+  - job_name: 'alertmanager'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['alertmanager:9093']

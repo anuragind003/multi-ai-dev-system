@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090'] # Prometheus itself
+
+  - job_name: 'fastapi_app'
+    # Assuming your FastAPI app exposes metrics on /metrics endpoint
+    # You might need a separate library like 'prometheus_client' in your FastAPI app
+    # Or use a sidecar/exporter for application metrics
+    metrics_path: /metrics # If you have a custom metrics endpoint
+    static_configs:
+      - targets: ['app:8000'] # 'app' is the service name in docker-compose.prod.yml
+
+  - job_name: 'node_exporter'
+    # To monitor the host machine where Docker is running
+    # You would need to run node_exporter on the host or as a separate container
+    static_configs:
+      - targets: ['host.docker.internal:9100'] # For Docker Desktop on Mac/Windows
+      # For Linux, you might need to use the host IP or run node_exporter in a privileged container
+      # - targets: ['<HOST_IP>:9100']
+
+  - job_name: 'cadvisor'
+    # To monitor Docker containers themselves
+    # Run cAdvisor as a separate container: docker run --volume=/:/rootfs:ro --volume=/var/run:/var/run:ro --volume=/sys:/sys:ro --volume=/var/lib/docker/:/var/lib/docker:ro --volume=/dev/disk/:/dev/disk:ro --publish=8080:8080 --detach=true --name=cadvisor gcr.io/cadvisor/cadvisor:latest
+    static_configs:
+      - targets: ['cadvisor:8080'] # If cAdvisor is another service in docker-compose
+
+# Alerting rules (example)
+# rule_files:
+#   - "/etc/prometheus/alert.rules.yml"
+
+# Example alert rule file (alert.rules.yml)
+# groups:
+#   - name: fastapi_alerts
+#     rules:
+#       - alert: HighRequestLatency
+#         expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+#         for: 1m
+#         labels:
+#           severity: critical
+#         annotations:
+#           summary: "High request latency detected on FastAPI app"
+#           description: "The 99th percentile request latency is above 0.5 seconds for 1 minute."
+#
+#       - alert: HighErrorRate
+#         expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+#         for: 2m
+#         labels:
+#           severity: warning
+#         annotations:
+#           summary: "High error rate detected on FastAPI app"
+#           description: "More than 5% of requests are returning 5xx errors for 2 minutes."

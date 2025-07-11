@@ -1,0 +1,676 @@
+{
+  "session_id": "session_faae13f1-06dd-43f4-b890-1012140e9bc7",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752065290,
+  "approval_data": {
+    "work_items": [
+      {
+        "id": "SYS-001",
+        "description": "Initialize a new Git repository on the company's version control system (e.g., GitHub, GitLab). Create a standard README.md, .gitignore (for Python and Node.js), and a basic project structure with `backend` and `frontend` directories.",
+        "dependencies": [],
+        "estimated_time": "2 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A Git repository for the project is created.",
+          "The repository is cloned locally.",
+          "A `.gitignore` file is present and configured for Python/FastAPI and Node/React projects.",
+          "The root directory contains `backend` and `frontend` subdirectories."
+        ],
+        "status": "pending",
+        "code_files": [
+          "README.md",
+          ".gitignore"
+        ]
+      },
+      {
+        "id": "SYS-002",
+        "description": "Create a `Dockerfile` for the FastAPI backend application. It should install Python dependencies from `requirements.txt`, copy the application code, and specify the command to run the application using Uvicorn.",
+        "dependencies": [
+          "SYS-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A `Dockerfile` exists in the `backend/` directory.",
+          "The Docker image can be built successfully without errors.",
+          "The container starts the Uvicorn server on the exposed port."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/Dockerfile"
+        ]
+      },
+      {
+        "id": "SYS-003",
+        "description": "Create a `Dockerfile` for the React frontend application. It should use a multi-stage build to first build the static assets (`npm run build`) and then serve them using a lightweight web server like Nginx.",
+        "dependencies": [
+          "SYS-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A `Dockerfile` exists in the `frontend/` directory.",
+          "The Docker image can be built successfully.",
+          "The resulting image serves the static React application via Nginx."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/Dockerfile"
+        ]
+      },
+      {
+        "id": "SYS-004",
+        "description": "Create a `docker-compose.yml` file for local development. This file should define services for the backend, frontend, and a PostgreSQL database, linking them together and managing environment variables.",
+        "dependencies": [
+          "SYS-002",
+          "SYS-003"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A `docker-compose.yml` file exists in the project root.",
+          "Running `docker-compose up` successfully starts all three services (backend, frontend, db).",
+          "The backend service can connect to the PostgreSQL service.",
+          "The frontend can make requests to the backend."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docker-compose.yml"
+        ]
+      },
+      {
+        "id": "DB-001",
+        "description": "Initialize a new FastAPI project in the `backend` directory. Set up the basic file structure including `main.py`, `app/`, `app/routers/`, `app/models/`, `app/schemas/`, and `app/services/`. Install initial dependencies like `fastapi`, `uvicorn`, `sqlalchemy`, and `psycopg2-binary`.",
+        "dependencies": [
+          "SYS-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The `backend` directory contains a functional, empty FastAPI application.",
+          "A `requirements.txt` file is created with initial dependencies.",
+          "The application runs successfully via `uvicorn`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/main.py",
+          "backend/requirements.txt",
+          "backend/app/__init__.py"
+        ]
+      },
+      {
+        "id": "DB-002",
+        "description": "Configure the database connection using Pydantic's `BaseSettings` to read from environment variables. Create a database session dependency (`get_db`) to be used in API routes.",
+        "dependencies": [
+          "DB-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A `config.py` file exists for managing settings.",
+          "Database URL is loaded from an environment variable.",
+          "A `database.py` file defines the SQLAlchemy engine, session local, and a `get_db` dependency.",
+          "The application can establish a connection to the PostgreSQL database defined in docker-compose."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/config.py",
+          "backend/app/database.py"
+        ]
+      },
+      {
+        "id": "DB-003",
+        "description": "Create the SQLAlchemy model for the `users` table in `app/models/user.py` as per the system design, including fields for id, username, hashed_password, role, and is_active.",
+        "dependencies": [
+          "DB-002"
+        ],
+        "estimated_time": "1 hour",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "The `app/models/user.py` file contains a `User` class inheriting from the SQLAlchemy declarative base.",
+          "All fields and constraints from the data model are correctly defined."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/models/user.py"
+        ]
+      },
+      {
+        "id": "DB-004",
+        "description": "Create the SQLAlchemy model for the `recordings` table in `app/models/recording.py` as per the system design, including fields for id, lan_number, file_path, and recording_date.",
+        "dependencies": [
+          "DB-002"
+        ],
+        "estimated_time": "1 hour",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "The `app/models/recording.py` file contains a `Recording` class.",
+          "All fields, constraints, and indexes from the data model are correctly defined."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/models/recording.py"
+        ]
+      },
+      {
+        "id": "DB-005",
+        "description": "Create the SQLAlchemy model for the `audit_logs` table in `app/models/audit_log.py` as per the system design, including fields for id, user_id (with foreign key), action, details (JSONB), and timestamp.",
+        "dependencies": [
+          "DB-003"
+        ],
+        "estimated_time": "1 hour",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "The `app/models/audit_log.py` file contains an `AuditLog` class.",
+          "All fields and the foreign key relationship to the `users` table are correctly defined."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/models/audit_log.py"
+        ]
+      },
+      {
+        "id": "DB-006",
+        "description": "Initialize Alembic for database migrations. Generate the initial migration script that creates the `users`, `recordings`, and `audit_logs` tables.",
+        "dependencies": [
+          "DB-003",
+          "DB-004",
+          "DB-005"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "Alembic is configured in the backend project.",
+          "An initial migration file is generated in the `alembic/versions` directory.",
+          "Running `alembic upgrade head` successfully creates all three tables in the PostgreSQL database."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/alembic.ini",
+          "backend/alembic/env.py",
+          "backend/alembic/versions/xxxx_initial_migration.py"
+        ]
+      },
+      {
+        "id": "BE-001",
+        "description": "Implement security utility functions for password hashing (using passlib) and JWT creation/decoding (using python-jose). Create Pydantic schemas for token data.",
+        "dependencies": [
+          "DB-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A `security.py` file contains a function to hash passwords.",
+          "The `security.py` file contains a function to verify a plain password against a hash.",
+          "The `security.py` file contains a function to create a JWT access token.",
+          "A Pydantic schema for the token payload is defined."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/security.py",
+          "backend/app/schemas/token.py"
+        ]
+      },
+      {
+        "id": "BE-002",
+        "description": "Create the `/api/v1/auth/token` endpoint. It should accept form data (username, password), authenticate the user against the `users` table, and return a JWT access token on success.",
+        "dependencies": [
+          "DB-003",
+          "BE-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A POST request to `/api/v1/auth/token` with valid credentials returns a 200 OK status.",
+          "The response body contains `access_token` and `token_type: 'bearer'`.",
+          "A request with invalid credentials returns a 401 Unauthorized error.",
+          "A script to create an initial admin user with a hashed password is created and used for testing."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/auth.py",
+          "backend/scripts/create_initial_user.py"
+        ]
+      },
+      {
+        "id": "BE-003",
+        "description": "Create a reusable dependency function (`get_current_active_user`) that validates the JWT from the Authorization header, decodes it, and retrieves the corresponding active user from the database. It should raise an HTTP 401/403 exception if the token is invalid, expired, or the user is inactive.",
+        "dependencies": [
+          "BE-002"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A dependency function is created that can be injected into protected routes.",
+          "The function correctly validates a valid JWT and returns the user model.",
+          "The function raises `HTTPException` with status 401 for invalid or missing tokens.",
+          "The function raises `HTTPException` with status 403 for valid tokens belonging to an inactive user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/auth.py"
+        ]
+      },
+      {
+        "id": "FE-001",
+        "description": "Initialize a new React project in the `frontend` directory using Create React App with the TypeScript template. Install initial dependencies: `axios`, `react-router-dom`, and a UI component library like Material-UI or Ant Design.",
+        "dependencies": [
+          "SYS-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "The `frontend` directory contains a functional React application.",
+          "The `package.json` file includes `axios`, `react-router-dom`, and a UI library.",
+          "The application runs successfully via `npm start`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/package.json",
+          "frontend/src/index.tsx"
+        ]
+      },
+      {
+        "id": "FE-002",
+        "description": "Set up a global Axios instance for API calls. Configure the `baseURL` to point to the backend API (using environment variables for different environments) and set up interceptors to attach the JWT to outgoing requests.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "An `api.ts` or `axiosConfig.ts` file exists.",
+          "The Axios instance is configured with the correct base URL.",
+          "An interceptor is in place to add the `Authorization: Bearer <token>` header if a token exists."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/services/api.ts"
+        ]
+      },
+      {
+        "id": "FE-003",
+        "description": "Create a `LoginPage.tsx` component. This component should render a form with 'Username' and 'Password' input fields and a 'Login' button using the chosen UI library.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A login page is rendered at the `/login` route.",
+          "The form contains two text inputs and one button.",
+          "Component state correctly tracks the values of the input fields."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/LoginPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-004",
+        "description": "Implement the login logic. On form submission, call the `/api/v1/auth/token` endpoint. On success, store the received JWT in `localStorage` and redirect the user to the main dashboard. On failure, display an error message to the user.",
+        "dependencies": [
+          "BE-002",
+          "FE-002",
+          "FE-003"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Submitting the form with valid credentials stores a token and redirects to `/`.",
+          "Submitting with invalid credentials shows an error message (e.g., 'Invalid username or password').",
+          "The login API call is made using the configured Axios instance."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/LoginPage.tsx",
+          "frontend/src/services/authService.ts"
+        ]
+      },
+      {
+        "id": "FE-005",
+        "description": "Implement an authentication context (`AuthContext`) to manage user state globally. Create a `ProtectedRoute` component that uses this context to check for an authenticated user and redirects to `/login` if none is found.",
+        "dependencies": [
+          "FE-004"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "An `AuthContext` provides authentication status and a logout function.",
+          "The `App` component is wrapped in the `AuthProvider`.",
+          "Attempting to access a route wrapped in `ProtectedRoute` without being logged in redirects to `/login`.",
+          "A logged-in user can access the protected route."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/context/AuthContext.tsx",
+          "frontend/src/components/ProtectedRoute.tsx",
+          "frontend/src/App.tsx"
+        ]
+      },
+      {
+        "id": "BE-004",
+        "description": "Create the `/api/v1/recordings` GET endpoint. It must be protected by the `get_current_active_user` dependency. It should accept query parameters for `lan_number`, `start_date`, `end_date`, `page`, and `size`.",
+        "dependencies": [
+          "BE-003",
+          "DB-004"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A GET endpoint exists at `/api/v1/recordings`.",
+          "Accessing it without a valid token returns 401 Unauthorized.",
+          "The endpoint function signature includes all specified query parameters with default values."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/recordings.py"
+        ]
+      },
+      {
+        "id": "BE-005",
+        "description": "Implement the database query logic for the `/recordings` endpoint. The query should dynamically build `WHERE` clauses based on the provided `lan_number` and date range filters. Implement pagination using `LIMIT` and `OFFSET`.",
+        "dependencies": [
+          "BE-004"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint correctly filters results by `lan_number`.",
+          "The endpoint correctly filters results by `start_date` and `end_date`.",
+          "The endpoint correctly returns a paginated list of 10 items by default.",
+          "The response includes the items, total count, page number, and page size."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/recordings.py",
+          "backend/app/services/recording_service.py"
+        ]
+      },
+      {
+        "id": "BE-006",
+        "description": "Implement the audit logging service and integrate it with the login and search endpoints. A log entry should be created in the `audit_logs` table for every successful login and every search request.",
+        "dependencies": [
+          "DB-005",
+          "BE-002",
+          "BE-005"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A `services/audit_service.py` is created.",
+          "A successful login creates an `audit_logs` record with action 'LOGIN'.",
+          "A request to `/recordings` creates an `audit_logs` record with action 'SEARCH' and the search parameters in the `details` field."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/services/audit_service.py",
+          "backend/app/routers/auth.py",
+          "backend/app/routers/recordings.py"
+        ]
+      },
+      {
+        "id": "FE-006",
+        "description": "Create a `DashboardPage.tsx` component. This page should contain a layout with a search form area and a results table area. It will serve as the main interface for the application.",
+        "dependencies": [
+          "FE-005"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `DashboardPage.tsx` is created and accessible at the root route for logged-in users.",
+          "The page has a clear section for search controls.",
+          "The page has a clear section where the results table will be rendered."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-007",
+        "description": "Implement the search form component with inputs for 'LAN Number' and a date range picker. On submit, it should trigger a function passed via props with the current search parameters.",
+        "dependencies": [
+          "FE-006"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `SearchForm.tsx` component is created and used in the dashboard.",
+          "The component correctly manages the state of its input fields.",
+          "Clicking the 'Search' button calls a parent handler function with the search criteria."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/SearchForm.tsx"
+        ]
+      },
+      {
+        "id": "FE-008",
+        "description": "Implement the `ResultsTable.tsx` component. It should accept an array of recordings and display them in a table with columns: 'Sr. No', 'LAN No.', 'Date', 'Month', 'Year'.",
+        "dependencies": [
+          "FE-006"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `ResultsTable.tsx` component is created.",
+          "When passed an array of recording data, it renders a table with the correct headers.",
+          "Each row in the table correctly displays the data for one recording."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/ResultsTable.tsx"
+        ]
+      },
+      {
+        "id": "FE-009",
+        "description": "Integrate the search functionality on the `DashboardPage`. Manage the application state for search results and pagination. When the search form is submitted, call the `/api/v1/recordings` endpoint and update the state, passing the results to the `ResultsTable`.",
+        "dependencies": [
+          "BE-005",
+          "FE-007",
+          "FE-008"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Searching from the form triggers an API call to the backend.",
+          "The `ResultsTable` is updated with the data returned from the API.",
+          "A loading indicator is shown while the API call is in progress.",
+          "Errors from the API are handled and displayed to the user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx",
+          "frontend/src/services/recordingService.ts"
+        ]
+      },
+      {
+        "id": "FE-010",
+        "description": "Implement a `Pagination` component and integrate it with the `DashboardPage`. The component should display page numbers and next/previous buttons. Clicking a page number should re-trigger the search API call with the new page parameter.",
+        "dependencies": [
+          "FE-009"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A pagination component is displayed below the results table.",
+          "The component correctly reflects the total number of pages from the API response.",
+          "Clicking a new page number fetches and displays the data for that page."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/Pagination.tsx",
+          "frontend/src/pages/DashboardPage.tsx"
+        ]
+      },
+      {
+        "id": "BE-007",
+        "description": "Create the `/api/v1/recordings/download/{lan_number}` GET endpoint. It should find the recording's file path from the database and return the video file from the NFS mount as a `StreamingResponse`.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint is protected and requires authentication.",
+          "Given a valid LAN, it returns a 200 OK with the file stream.",
+          "The `Content-Disposition` header is set to trigger a download in the browser.",
+          "Given an invalid LAN or if the file doesn't exist on the filesystem, it returns a 404 Not Found error.",
+          "The download action is logged in the `audit_logs` table."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/recordings.py"
+        ]
+      },
+      {
+        "id": "FE-011",
+        "description": "In the `ResultsTable` component, make the 'LAN No.' column a clickable link or add a download icon/button to each row. Clicking it should trigger a GET request to the download endpoint for that specific LAN.",
+        "dependencies": [
+          "BE-007",
+          "FE-008"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "Each row in the results table has a clickable element for downloading.",
+          "Clicking the element initiates a file download in the browser.",
+          "The downloaded file has the correct name (e.g., `{lan_number}.mp4`)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/ResultsTable.tsx"
+        ]
+      },
+      {
+        "id": "BE-008",
+        "description": "Create the `/api/v1/recordings/bulk-search` POST endpoint. It must accept a file upload (`UploadFile`), validate that it is a `.csv` or `.txt` file, and parse its contents to extract a list of LANs.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint accepts multipart/form-data with a file.",
+          "It returns a 422 Unprocessable Entity error for invalid file types.",
+          "It correctly reads LANs, one per line, from the file.",
+          "It validates that the number of LANs is between 2 and 50, returning 422 if not.",
+          "It queries the database for all valid LANs and returns a list of results with a 'Found'/'Not Found' status for each."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/recordings.py"
+        ]
+      },
+      {
+        "id": "FE-012",
+        "description": "Add a file upload component to the `DashboardPage` for bulk search. Use a library like `react-dropzone`. On file upload, call the `/api/v1/recordings/bulk-search` endpoint and display the results in the `ResultsTable`.",
+        "dependencies": [
+          "BE-008",
+          "FE-009"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A file dropzone or upload button is present on the dashboard.",
+          "Uploading a valid file triggers the bulk search API call.",
+          "The results table is populated with the response from the bulk search.",
+          "Validation errors from the backend (e.g., wrong file type, too many LANs) are displayed to the user."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/BulkSearchUpload.tsx",
+          "frontend/src/pages/DashboardPage.tsx"
+        ]
+      },
+      {
+        "id": "BE-009",
+        "description": "Create the `/api/v1/recordings/bulk-download` POST endpoint. It should accept a JSON array of up to 10 `lan_numbers`. It will then create a ZIP archive on-the-fly, streaming the requested files into it, and return the archive as a `StreamingResponse`.",
+        "dependencies": [
+          "BE-007"
+        ],
+        "estimated_time": "6 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint accepts a JSON body with a list of LANs.",
+          "It validates that the list contains no more than 10 LANs.",
+          "It returns a ZIP file stream containing the correct video files.",
+          "The `Content-Disposition` header is set to trigger a download of `recordings.zip`.",
+          "The bulk download action is logged to the audit table."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/app/routers/recordings.py"
+        ]
+      },
+      {
+        "id": "FE-013",
+        "description": "Add a 'Download All' button to the `DashboardPage`. This button should be enabled only when there are search results displayed. When clicked, it should take the LANs from the currently displayed page of results and call the `/api/v1/recordings/bulk-download` endpoint.",
+        "dependencies": [
+          "BE-009",
+          "FE-009"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A 'Download All' button is visible near the results table.",
+          "The button is disabled if there are no results.",
+          "Clicking the button sends a POST request with the LANs from the current page (max 10).",
+          "The request triggers a download of a ZIP file in the browser."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx"
+        ]
+      },
+      {
+        "id": "SYS-005",
+        "description": "Implement comprehensive unit tests for critical backend logic. This includes tests for authentication, JWT handling, search query generation, and bulk file parsing.",
+        "dependencies": [
+          "BE-008",
+          "BE-009"
+        ],
+        "estimated_time": "2 days",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "Unit tests for `security.py` functions are written.",
+          "Unit tests for the search service logic are written.",
+          "Unit tests for the bulk search file parser are written.",
+          "The test suite runs successfully and achieves a reasonable level of coverage for critical modules."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/tests/"
+        ]
+      },
+      {
+        "id": "SYS-006",
+        "description": "Configure a basic CI/CD pipeline using GitHub Actions or Jenkins. The pipeline should trigger on pushes to the main branch, install dependencies, run linters, execute the backend unit tests, and build the Docker images.",
+        "dependencies": [
+          "SYS-004",
+          "SYS-005"
+        ],
+        "estimated_time": "1 day",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A workflow file (e.g., `.github/workflows/ci.yml`) is created.",
+          "The pipeline automatically runs on new commits.",
+          "The pipeline fails if linting or tests fail.",
+          "Successful runs result in the Docker images being built (and optionally pushed to a registry)."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".github/workflows/ci.yml"
+        ]
+      }
+    ],
+    "summary": "This project plan outlines the development of a V-KYC Recording Portal. The plan is structured in phases, starting with foundational setup (DevOps, CI/CD), followed by core backend and database implementation using Python/FastAPI and PostgreSQL. The frontend will be built with React, starting with authentication and progressively adding search, download, and bulk operation features. Each work item is designed to be a small, self-contained task for a developer, with clear dependencies and acceptance criteria. The plan prioritizes a secure, functional, and auditable system, directly addressing all requirements from the BRD and system design.",
+    "metadata": {
+      "estimated_total_time": "20-25 person-days",
+      "risk_assessment": "Medium. Key risks include dependency on the existing NFS server's performance and availability, and the critical need for robust security and access control to protect sensitive PII in the recordings. Mitigation strategies are built into the plan, including audit logging, strict authorization, and streaming responses to manage load.",
+      "stack": "React (Frontend), Python/FastAPI (Backend), PostgreSQL (Database), Docker (Containerization), Nginx (Reverse Proxy)"
+    }
+  },
+  "workflow_state_snapshot": {}
+}

@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: 'FastAPI Dashboards'
+    orgId: 1
+    folder: '' # Or specify a folder like 'FastAPI App'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      # This path should contain your actual dashboard JSON files.
+      # For this example, we assume a file named 'fastapi_overview.json' exists.
+      # You would typically export a dashboard from Grafana and place it here.

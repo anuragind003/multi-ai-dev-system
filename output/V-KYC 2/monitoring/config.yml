@@ -1,0 +1,47 @@
+# monitoring/config.yml
+# Prometheus configuration for scraping FastAPI application metrics
+
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+
+# Alerting configuration (example, requires Alertmanager)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Rule files (for defining alerts and recording rules)
+# rule_files:
+#   - "alert.rules"
+
+scrape_configs:
+  # Scrape configuration for the FastAPI application
+  - job_name: 'fastapi-app'
+    # metrics_path defaults to /metrics
+    # scheme defaults to http
+
+    # For a single EC2 instance, you can use static_configs
+    static_configs:
+      - targets: ['<EC2_INSTANCE_IP>:8000'] # Replace with your actual EC2 instance IP
+        labels:
+          environment: production
+          application: fastapi-monolith
+
+    # In a dynamic environment (e.g., Kubernetes, or if using AWS Service Discovery),
+    # you would use a discovery mechanism instead of static_configs.
+    # Example for EC2 discovery (requires IAM permissions for Prometheus):
+    # ec2_sd_configs:
+    #   - region: us-east-1
+    #     port: 8000
+    #     filters:
+    #       - name: tag:Name
+    #         values: ['fastapi-monolith-instance'] # Match the EC2 instance tag
+    #     # Relabeling to get instance IP as instance label
+    #     relabel_configs:
+    #       - source_labels: [__meta_ec2_private_ip]
+    #         target_label: instance
+    #       - source_labels: [__meta_ec2_tag_Name]
+    #         target_label: ec2_name
+    #       - source_labels: [__meta_ec2_instance_id]
+    #         target_label: instance_id

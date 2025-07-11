@@ -1,0 +1,193 @@
+name: FastAPI CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  DOCKER_IMAGE_NAME: fastapi-monitoring-app
+  DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }} # Or docker.io/your-dockerhub-username
+  APP_PORT: 8000
+  PROMETHEUS_PORT: 9090
+  GRAFANA_PORT: 3000
+  ALERTMANAGER_PORT: 9093
+
+jobs:
+  lint_and_format:
+    name: Lint and Format Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install black flake8
+
+      - name: Run Black (Formatter)
+        run: black --check .
+        continue-on-error: true # Allow pipeline to continue, but show warning
+
+      - name: Run Flake8 (Linter)
+        run: flake8 .
+
+  security_scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint_and_format
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit (Python Security Linter)
+        run: bandit -r app/ -ll -f json -o bandit_report.json || true # Allow failure for reporting
+
+      - name: Upload Bandit Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit_report.json
+
+      - name: Build Docker Image for Trivy Scan
+        run: docker build -t ${{ env.DOCKER_IMAGE_NAME }}:latest .
+
+      - name: Run Trivy (Vulnerability Scanner)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.DOCKER_IMAGE_NAME }}:latest'
+          format: 'table'
+          exit-code: '1' # Fail if critical vulnerabilities found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: security_scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt pytest requests
+
+      - name: Run Unit Tests
+        run: pytest tests/test_unit.py
+
+      - name: Run Integration Tests
+        run: pytest tests/test_integration.py
+
+      - name: Run Performance Tests
+        run: python tests/test_performance.py
+
+  build_and_push_image:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' # Only push on main branch
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Or ${{ secrets.DOCKER_HUB_TOKEN }} for Docker Hub
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }} -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest .
+
+      - name: Push Docker image
+        run: docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }} && docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build_and_push_image
+    if: github.ref == 'refs/heads/main' # Only deploy on main branch
+    environment: production # Link to GitHub Environments for secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.PROD_SERVER_HOST }} >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy application
+        env:
+          PROD_SERVER_USER: ${{ secrets.PROD_SERVER_USER }}
+          PROD_SERVER_HOST: ${{ secrets.PROD_SERVER_HOST }}
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # Copy docker-compose.prod.yml and .env.prod to the server
+          scp docker-compose.prod.yml .env.prod ${PROD_SERVER_USER}@${PROD_SERVER_HOST}:/opt/fastapi-app/
+          scp -r prometheus alertmanager grafana ${PROD_SERVER_USER}@${PROD_SERVER_HOST}:/opt/fastapi-app/
+
+          # SSH into the server and deploy
+          ssh ${PROD_SERVER_USER}@${PROD_SERVER_HOST} << 'EOF'
+            cd /opt/fastapi-app/
+            # Pull the latest image
+            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+            # Stop and remove old containers (for rollback, keep old image)
+            docker-compose -f docker-compose.prod.yml down --remove-orphans
+
+            # Deploy new version
+            docker-compose -f docker-compose.prod.yml up -d
+
+            # Health check after deployment
+            sleep 10 # Give containers time to start
+            docker-compose -f docker-compose.prod.yml ps
+            docker-compose -f docker-compose.prod.yml logs app
+            curl -f http://localhost:${APP_PORT}/health || { echo "Health check failed!"; exit 1; }
+          EOF
+        # Rollback on failure (simplified, real-world would use more robust orchestration)
+        if: failure()
+        run: |
+          echo "Deployment failed. Attempting rollback..."
+          ssh ${PROD_SERVER_USER}@${PROD_SERVER_HOST} << 'EOF'
+            cd /opt/fastapi-app/
+            # Assuming the previous image is still available or a specific rollback tag
+            # For simplicity, this example just restarts the previous state if it exists.
+            # A more robust rollback would involve tagging previous successful images.
+            docker-compose -f docker-compose.prod.yml down --remove-orphans
+            # Revert to a known good image/tag or previous compose file
+            # For this example, we'll just indicate a manual rollback is needed.
+            echo "Manual rollback might be required. Check previous successful deployments."
+          EOF
+          exit 1 # Fail the workflow

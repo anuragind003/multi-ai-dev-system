@@ -1,5 +1,5 @@
 """
-Streamlined BRD Analyst Agent using direct tool execution for efficiency.
+Streamlined BRD Analyst Agent using consistent patterns and shared utilities.
 """
 
 import logging
@@ -7,16 +7,16 @@ import asyncio
 from typing import Dict, Any
 
 from agents.base_agent import BaseAgent
-
-# Import THE ONLY tool this agent will use
 from tools.brd_analysis_tools_enhanced import generate_comprehensive_brd_analysis
+from models.data_contracts import BRDRequirementsAnalysis
+from utils.analysis_tool_utils import create_error_response, log_tool_execution
 
 logger = logging.getLogger(__name__)
 
 class BRDAnalystReActAgent(BaseAgent):
     """
     A streamlined agent specializing in analyzing Business Requirement Documents (BRDs).
-    Directly calls the BRD analysis tool without ReAct framework overhead.
+    Uses consistent patterns with other analysis agents and standardized error handling.
     """
     def __init__(self, llm=None, **kwargs):
         """
@@ -29,7 +29,7 @@ class BRDAnalystReActAgent(BaseAgent):
         super().__init__(
             llm=llm,
             agent_name="BRD Analyst ReAct Agent",
-            agent_description="Analyzes Business Requirements Documents directly.",
+            agent_description="Analyzes Business Requirements Documents using enhanced tools.",
             **kwargs
         )
 
@@ -43,27 +43,38 @@ class BRDAnalystReActAgent(BaseAgent):
         Returns:
             A dictionary containing the structured analysis of the BRD.
         """
-        self.log_info("Starting BRD analysis with direct tool execution.")
+        operation_name = "BRD Agent Analysis"
+        self.log_info(f"Starting {operation_name}")
 
         try:
-            # Directly call the BRD analysis tool - no ReAct framework needed
-            result = generate_comprehensive_brd_analysis.invoke({"raw_brd_content": raw_brd})
+            # Use the enhanced tool with proper LLM passing
+            result = generate_comprehensive_brd_analysis.func(
+                raw_brd_content=raw_brd,
+                llm=self.llm
+            )
             
-            if isinstance(result, dict):
-                if "error" in result:
-                    self.log_error(f"BRD analysis tool returned error: {result}")
-                    return {"error": "BRD analysis failed", "details": result}
-                else:
-                    self.log_success("Successfully completed BRD analysis.")
-                    self.log_info(f"Analysis result keys: {list(result.keys())}")
-                    return result
-            else:
-                self.log_error(f"Unexpected result type from BRD analysis tool: {type(result)}")
-                return {"error": "Unexpected result format from BRD analysis tool"}
+            # Check for tool-level errors
+            if isinstance(result, dict) and "error" in result:
+                self.log_error(f"Tool returned error: {result}")
+                return self.get_default_response(Exception(result.get("details", "Tool execution failed")))
+            
+            # Validate result structure
+            if not isinstance(result, dict):
+                self.log_error(f"Tool returned unexpected type: {type(result)}")
+                return self.get_default_response(Exception("Invalid tool response format"))
+            
+            # Store successful result in memory
+            self.store_memory("last_brd_analysis", result)
+            
+            # Log success with key metrics
+            requirements_count = len(result.get('requirements', []))
+            self.log_success(f"BRD analysis completed successfully with {requirements_count} requirements extracted")
+            
+            return result
                 
         except Exception as e:
             self.log_error(f"Failed to execute BRD analysis: {str(e)}")
-            return {"error": "BRD analysis execution failed", "details": str(e)}
+            return self.get_default_response(e)
 
     async def arun(self, raw_brd: str) -> Dict[str, Any]:
         """
@@ -73,21 +84,55 @@ class BRDAnalystReActAgent(BaseAgent):
         return await asyncio.to_thread(self.run, raw_brd)
 
     def store_memory(self, key: str, value: Any):
-        """Helper to store data in agent's memory."""
+        """Helper to store data in agent's memory with enhanced capabilities."""
         try:
-            if hasattr(self, 'memory') and self.memory:
-                self.memory.save_to_memory(key, value)
-                logger.info(f"Stored '{key}' in agent memory.")
+            # Use enhanced memory if available
+            if hasattr(self, '_enhanced_memory') and self._enhanced_memory:
+                self.enhanced_set(key, value, context=self.agent_name)
+            elif hasattr(self, 'memory') and self.memory:
+                if hasattr(self.memory, 'save_to_memory'):
+                    self.memory.save_to_memory(key, value)
+                elif hasattr(self.memory, 'set'):
+                    self.memory.set(key, value)
+            self.log_info(f"Stored '{key}' in agent memory")
         except Exception as e:
-            logger.warning(f"Could not store '{key}' in memory: {e}")
+            self.log_warning(f"Could not store '{key}' in memory: {e}")
 
-    def get_default_response(self, error: Exception) -> Dict[str, Any]:
+    def get_default_response(self, error: Exception = None) -> Dict[str, Any]:
         """Returns a default, safe response in case of a critical failure."""
-        logger.error(f"Executing default response due to error: {error}", exc_info=True)
+        if error:
+            self.log_error(f"Executing default response due to error: {error}", exc_info=True)
+        
         return {
-            "status": "error",
-            "message": f"A critical error occurred: {error}",
-            "requirements_analysis": {}
+            "project_name": "Unknown Project",
+            "project_summary": "BRD analysis could not be completed due to an error.",
+            "project_goals": [],
+            "target_audience": [],
+            "business_context": "Analysis failed - manual review required.",
+            "requirements": [],
+            "functional_requirements": [],
+            "non_functional_requirements": [],
+            "stakeholders": [],
+            "success_criteria": [],
+            "constraints": [],
+            "assumptions": [],
+            "risks": ["BRD analysis tool failure - manual review required"],
+            "domain_specific_details": {},
+            "quality_assessment": {
+                "completeness_score": 0,
+                "clarity_score": 0,
+                "consistency_score": 0,
+                "recommendations": ["Manual BRD review required due to analysis failure"]
+            },
+            "gap_analysis": {
+                "identified_gaps": ["Automated analysis failed"],
+                "recommendations_for_completion": ["Perform manual BRD analysis and validation"]
+            },
+            "error_info": {
+                "error_type": "analysis_failure",
+                "error_message": str(error) if error else "Unknown error occurred",
+                "requires_manual_review": True
+            }
         }
 
     

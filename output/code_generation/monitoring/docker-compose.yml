@@ -1,0 +1,55 @@
+# monitoring/docker-compose.yml
+# Docker Compose configuration for Prometheus and Grafana
+
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.44.0
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus # Persistent storage for Prometheus data
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring-network
+      - app-network # To scrape metrics from the backend service
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana # Persistent storage for Grafana data
+      # Optional: Provision dashboards and datasources
+      # - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      # - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin # CHANGE THIS IN PRODUCTION!
+      - GF_SERVER_ROOT_URL=http://localhost:3000 # Adjust if Grafana is behind a proxy
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring-network:
+    driver: bridge
+  # This network allows Grafana/Prometheus to communicate with the application backend.
+  # Ensure your application's docker-compose file also uses 'app-network'.
+  app-network:
+    external: true # Assumes 'app-network' is created by the main app's docker-compose

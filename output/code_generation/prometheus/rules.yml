@@ -1,0 +1,49 @@
+groups:
+  - name: fastapi_app_alerts
+    rules:
+      - alert: AppDown
+        expr: up{job="fastapi_app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI application is down"
+          description: "The FastAPI application instance {{ $labels.instance }} (job {{ $labels.job }}) is down for more than 1 minute."
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.99, sum by (le, method, endpoint) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency detected"
+          description: "The 99th percentile of request latency for {{ $labels.method }} requests to {{ $labels.endpoint }} is above 0.5 seconds for 2 minutes."
+
+      - alert: HighErrorRate
+        expr: sum by (endpoint) (rate(http_requests_total{status_code=~"5..|4..", job="fastapi_app"}[5m])) / sum by (endpoint) (rate(http_requests_total{job="fastapi_app"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "The error rate for endpoint {{ $labels.endpoint }} is above 10% for 2 minutes."
+
+      - alert: InstanceRestarted
+        expr: changes(process_start_time_seconds{job="fastapi_app"}[5m]) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "FastAPI instance restarted"
+          description: "The FastAPI application instance {{ $labels.instance }} (job {{ $labels.job }}) has restarted recently."
+
+      - alert: PrometheusHostOutOfDiskSpace
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus host out of disk space"
+          description: "The host running Prometheus ({{ $labels.instance }}) has less than 10% disk space remaining on the root partition."
+          # Note: This requires node_exporter to be running on the host where Prometheus is deployed.
+          # For a simple docker-compose setup, this might not be directly applicable unless node_exporter is added.
+          # It's included as an example of a common infrastructure alert.

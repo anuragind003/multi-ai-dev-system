@@ -16,53 +16,28 @@ from async_graph_nodes import (
     async_tech_stack_recommendation_node,
     async_system_design_node,
     async_planning_node,
-    async_work_item_iterator_node,
+    async_work_item_iterator_node_command,  # NEW: Command API version
+    async_work_item_iterator_node,  # Keep legacy version for compatibility
     async_code_generation_dispatcher_node,
     async_code_quality_analysis_node,
-    async_phase_completion_node,
-    async_increment_revision_count_node,
-    async_testing_module_node,
+    async_test_execution_node,
+    async_integration_node,
     async_finalize_workflow,
+    async_phase_completion_node,
     
-    # Decision functions
-    async_has_next_phase,
+    # Import decision functions
     async_decide_on_code_quality,
+    async_decide_on_test_results,
+    async_decide_on_integration_test_results,
+    async_increment_revision_count_node,
+    async_mark_work_item_complete_node,
+    async_check_circuit_breaker,  # NEW: Circuit breaker function
     
-    # Add these missing decision functions
-    async_decide_on_architecture_quality,
-    async_decide_on_database_quality,
-    async_decide_on_backend_quality,
-    async_decide_on_frontend_quality,
-    async_decide_on_integration_quality,
-    
-    # Quality nodes - add these explicitly 
-    async_architecture_quality_node,
-    async_database_quality_node,
-    async_backend_quality_node,
-    async_frontend_quality_node,
-    async_integration_quality_node,
-    
-    # Legacy compatibility functions if needed
-    async_architecture_generator_node,
-    async_database_generator_node,
-    async_backend_generator_node,
-    async_frontend_generator_node,
-    async_integration_generator_node,
-    async_code_optimizer_node,
-    async_quality_module,
-    async_planning_module,
-    async_testing_module,
-    async_checkpoint_state,
-    async_attempt_recovery,
-    # NEW: Import generic approval nodes
+    # Human approval components
     async_make_human_feedback_node,
     async_decide_after_human,
     async_mark_stage_complete_node,
-    route_after_completion,
-    async_test_execution_node,
-    async_integration_node,
-    async_decide_on_integration_test_results,
-    async_decide_on_test_results,
+    route_after_completion
 )
 import monitoring
 from platform_config import get_platform_client
@@ -133,9 +108,134 @@ def validate_workflow_configuration(config: Dict[str, Any]) -> List[str]:
     
     return issues
 
+async def create_async_phased_workflow_command_api() -> StateGraph:
+    """
+    🚀 ADVANCED: Create a phased development workflow using LangGraph Command API.
+    This version uses the Command API for direct routing control, solving state propagation issues.
+    """
+    workflow = StateGraph(AgentState)
+
+    # Add state initialization
+    workflow.add_node("initialize_state_node", async_initialize_workflow_state)
+
+    # --- Agent Nodes ---
+    workflow.add_node("brd_analysis_node", async_brd_analysis_node)
+    workflow.add_node("tech_stack_recommendation_node", async_tech_stack_recommendation_node)
+    workflow.add_node("system_design_node", async_system_design_node)
+    workflow.add_node("planning_node", async_planning_node)
+    workflow.add_node("code_generation_node", async_code_generation_dispatcher_node)
+    
+    # 🚀 COMMAND API: Use the advanced Command API iterator
+    workflow.add_node("work_item_iterator_node", async_work_item_iterator_node_command)
+    
+    workflow.add_node("test_execution_node", async_test_execution_node)
+    workflow.add_node("phase_completion_node", async_phase_completion_node)
+    workflow.add_node("increment_revision_node", async_increment_revision_count_node)
+    workflow.add_node("finalize_node", async_finalize_workflow)
+    workflow.add_node("code_quality_node", async_code_quality_analysis_node)
+    workflow.add_node("async_integration_node", async_integration_node)
+
+    # --- Human Approval Nodes (created by a generic factory) ---
+    brd_feedback_node = async_make_human_feedback_node(StateFields.REQUIREMENTS_ANALYSIS, "BRD Analysis")
+    tech_stack_feedback_node = async_make_human_feedback_node(StateFields.TECH_STACK_RECOMMENDATION, "Tech Stack Recommendation")
+    system_design_feedback_node = async_make_human_feedback_node(StateFields.SYSTEM_DESIGN, "System Design")
+    planning_feedback_node = async_make_human_feedback_node(StateFields.IMPLEMENTATION_PLAN, "Implementation Plan")
+    code_generation_feedback_node = async_make_human_feedback_node(StateFields.CODE_GENERATION_OUTPUT, "Code Generation")
+
+    workflow.add_node("human_approval_brd_node", RunnableLambda(brd_feedback_node))
+    workflow.add_node("human_approval_tech_stack_node", RunnableLambda(tech_stack_feedback_node))
+    workflow.add_node("human_approval_system_design_node", RunnableLambda(system_design_feedback_node))
+    workflow.add_node("human_approval_plan_node", RunnableLambda(planning_feedback_node))
+    workflow.add_node("human_approval_code_node", RunnableLambda(code_generation_feedback_node))
+
+    # --- Generic State Management Nodes ---
+    workflow.add_node("mark_stage_complete_node", async_mark_stage_complete_node)
+
+    # === Define Workflow Edges ===
+    workflow.set_entry_point("initialize_state_node")
+    workflow.add_edge("initialize_state_node", "brd_analysis_node")
+
+    # --- BRD Analysis Approval Gate ---
+    workflow.add_edge("brd_analysis_node", "human_approval_brd_node")
+    workflow.add_conditional_edges("human_approval_brd_node", async_decide_after_human, {
+        "proceed": "tech_stack_recommendation_node",
+        "revise": "brd_analysis_node",
+        "end": END
+    })
+
+    # --- Tech Stack Approval Gate ---
+    workflow.add_edge("tech_stack_recommendation_node", "human_approval_tech_stack_node")
+    workflow.add_conditional_edges("human_approval_tech_stack_node", async_decide_after_human, {
+        "proceed": "system_design_node",
+        "revise": "tech_stack_recommendation_node",
+        "end": END
+    })
+
+    # --- System Design Approval Gate ---
+    workflow.add_edge("system_design_node", "human_approval_system_design_node")
+    workflow.add_conditional_edges("human_approval_system_design_node", async_decide_after_human, {
+        "proceed": "planning_node",
+        "revise": "system_design_node",
+        "end": END
+    })
+
+    # --- Implementation Plan Approval Gate ---
+    workflow.add_edge("planning_node", "human_approval_plan_node")
+    workflow.add_conditional_edges(
+        "human_approval_plan_node",
+        async_decide_after_human,
+        {
+            "proceed": "work_item_iterator_node", # If approved, start the development loop
+            "revise": "planning_node",           # If revision is needed, go back to planning
+            "end": END
+        }
+    )
+
+    # 🚀 COMMAND API: Main Development Loop
+    # The Command API iterator directly routes to the appropriate node
+    # NO conditional edges needed - the Command specifies the next node directly!
+    # This completely bypasses the state propagation timing issues.
+
+    # The core self-correction loop: Generate -> Quality -> Test -> Integrate
+    workflow.add_edge("code_generation_node", "code_quality_node")
+
+    # After static code quality analysis, decide to proceed or revise.
+    workflow.add_conditional_edges("code_quality_node", async_decide_on_code_quality, {
+        "approve": "test_execution_node",  # If quality is good, run unit tests
+        "revise": "increment_revision_node"   # If not, increment revision and regenerate
+    })
+
+    # After running unit tests, decide to proceed or revise.
+    workflow.add_conditional_edges("test_execution_node", async_decide_on_test_results, {
+        "approve": "async_integration_node", # If tests pass, proceed to integration
+        "revise": "increment_revision_node"    # If tests fail, increment and regenerate
+    })
+
+    # After integration, check results and proceed to mark the work item as complete.
+    workflow.add_conditional_edges("async_integration_node", async_decide_on_integration_test_results, {
+        "proceed": "phase_completion_node",
+        "proceed_with_warning": "phase_completion_node" # For now, both outcomes lead to completion
+    })
+    
+    # FIXED: After a revision is triggered, check circuit breaker before continuing
+    workflow.add_conditional_edges("increment_revision_node", async_check_circuit_breaker, {
+        "continue": "code_generation_node",  # Normal case: continue with revision
+        "stop": "finalize_node"             # Circuit breaker triggered: stop workflow
+    })
+
+    # 🚀 COMMAND API: After a work item is successfully completed, 
+    # loop back to the iterator which will use Command API to route directly
+    workflow.add_edge("phase_completion_node", "work_item_iterator_node")
+
+    # Finalize the workflow once complete
+    workflow.add_edge("finalize_node", END)
+
+    return workflow
+
 async def create_async_phased_workflow() -> StateGraph:
     """
     Create a phased development workflow with human-in-the-loop approval gates.
+    This is the legacy version - prefer create_async_phased_workflow_command_api() for new implementations.
     """
     workflow = StateGraph(AgentState)
 
@@ -212,14 +312,16 @@ async def create_async_phased_workflow() -> StateGraph:
         }
     )
 
-    # --- Main Development Loop ---
-    # The iterator checks if there are pending work items.
+    # --- Main Development Loop (Legacy approach with conditional edges) ---
+    # Import the sync routing function for compatibility
+    from async_graph_nodes import sync_route_after_work_item_iterator
+    
     workflow.add_conditional_edges(
         "work_item_iterator_node",
-        async_has_next_phase, # This should check for next work item
+        sync_route_after_work_item_iterator,
         {
-            "proceed": "code_generation_node", # If there's a work item, start generation
-            "end": "finalize_node"                # If all work items are done, finalize
+            "proceed": "code_generation_node",
+            "workflow_complete": "finalize_node"
         }
     )
 
@@ -244,13 +346,16 @@ async def create_async_phased_workflow() -> StateGraph:
         "proceed_with_warning": "phase_completion_node" # For now, both outcomes lead to completion
     })
     
-    # After a revision is triggered, increment the counter and loop back to the start of generation.
-    workflow.add_edge("increment_revision_node", "code_generation_node")
+    # FIXED: After a revision is triggered, check circuit breaker before continuing
+    workflow.add_conditional_edges("increment_revision_node", async_check_circuit_breaker, {
+        "continue": "code_generation_node",  # Normal case: continue with revision
+        "stop": "finalize_node"             # Circuit breaker triggered: stop workflow
+    })
 
     # After a work item is successfully completed, loop back to the iterator for the next one.
     workflow.add_edge("phase_completion_node", "work_item_iterator_node")
 
-    # Set the final node for the workflow.
+    # Finalize the workflow once complete
     workflow.add_edge("finalize_node", END)
 
     return workflow
@@ -258,11 +363,26 @@ async def create_async_phased_workflow() -> StateGraph:
 async def get_async_workflow(workflow_type: str) -> StateGraph:
     """
     Factory function to get a specific async workflow graph.
-    Supports "phased", "iterative", "basic", "modular", "implementation", 
-    "enhanced_phased", and "resumable".
+    Now uses the FIXED workflow that solves state propagation issues.
     """
     if workflow_type in ["phased", "resumable", "iterative", "basic", "modular", "implementation", "enhanced"]:
+        # 🚀 Use the FIXED workflow that solves state propagation issues
+        from fixed_workflow import get_fixed_workflow
+        return await get_fixed_workflow()
+    elif workflow_type == "state_driven":
+        # Alternative: State-driven approach
+        from async_graph_state_driven import create_state_driven_workflow
+        return await create_state_driven_workflow()
+    elif workflow_type == "command_api":
+        # Keep Command API version for debugging/comparison
+        return await create_async_phased_workflow_command_api()
+    elif workflow_type == "legacy":
+        # Legacy version for compatibility
         return await create_async_phased_workflow()
+    elif workflow_type == "simple":
+        # Keep the simple workflow for comparison
+        from async_graph_simple import create_simple_sequential_workflow
+        return await create_simple_sequential_workflow()
     else:
         raise ValueError(f"Unknown workflow type: {workflow_type}")
 

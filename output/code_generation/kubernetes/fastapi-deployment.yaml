@@ -1,0 +1,138 @@
+# kubernetes/fastapi-deployment.yaml
+# Kubernetes Deployment and Service for FastAPI Backend
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-app
+  labels:
+    app: fastapi-app
+spec:
+  replicas: 3 # Number of desired pods. Adjust based on load and resource availability.
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+      annotations:
+        prometheus.io/scrape: "true" # Annotation for Prometheus to discover this pod
+        prometheus.io/port: "8000" # Port Prometheus should scrape
+        prometheus.io/path: "/metrics" # Path for metrics endpoint
+    spec:
+      containers:
+        - name: fastapi-app
+          image: ghcr.io/your-org/your-repo:latest # Replace with your actual image and tag
+          imagePullPolicy: Always # Always pull the latest image
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: fastapi-app-secrets # Load sensitive env vars from Kubernetes Secret
+            - configMapRef:
+                name: fastapi-app-config # Load non-sensitive env vars from ConfigMap
+          resources:
+            requests:
+              cpu: "100m" # Request 0.1 CPU core
+              memory: "128Mi" # Request 128 MiB memory
+            limits:
+              cpu: "500m" # Limit to 0.5 CPU core
+              memory: "512Mi" # Limit to 512 MiB memory
+          livenessProbe: # Checks if the container is still running
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe: # Checks if the container is ready to serve traffic
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false # Do not allow privilege escalation
+            readOnlyRootFilesystem: true # Make root filesystem read-only
+            runAsNonRoot: true # Run as non-root user
+            runAsUser: 1000 # Example UID for appuser (from Dockerfile)
+            runAsGroup: 1000 # Example GID for appuser (from Dockerfile)
+            capabilities:
+              drop:
+                - ALL # Drop all capabilities
+      serviceAccountName: fastapi-app-sa # Assign a dedicated Service Account
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-app-service
+  labels:
+    app: fastapi-app
+spec:
+  selector:
+    app: fastapi-app
+  ports:
+    - protocol: TCP
+      port: 80 # Service port
+      targetPort: 8000 # Container port
+  type: ClusterIP # Use ClusterIP for internal communication, Ingress for external
+
+---
+# Optional: Kubernetes Ingress for external access (requires an Ingress Controller like Nginx, Traefik)
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: fastapi-app-ingress
+#   annotations:
+#     nginx.ingress.kubernetes.io/rewrite-target: /$1
+#     # cert-manager.io/cluster-issuer: "letsencrypt-prod" # For automatic HTTPS with cert-manager
+# spec:
+#   ingressClassName: nginx # Or your specific ingress controller class
+#   rules:
+#     - host: api.yourdomain.com # Replace with your domain
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: fastapi-app-service
+#                 port:
+#                   number: 80
+#   # tls: # For HTTPS
+#   #   - hosts:
+#   #       - api.yourdomain.com
+#   #     secretName: your-tls-secret # Secret containing your TLS certificate
+
+---
+# Optional: Kubernetes ConfigMap for non-sensitive environment variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-app-config
+data:
+  APP_ENV: "production"
+  DEBUG: "False"
+  ENABLE_PROMETHEUS_METRICS: "True"
+  CORS_ORIGINS: "https://your-frontend.com,https://another-domain.com"
+  LOG_LEVEL: "INFO"
+  # Add other non-sensitive variables here
+
+---
+# Optional: Kubernetes Secret for sensitive environment variables
+# Create this secret using `kubectl create secret generic fastapi-app-secrets --from-literal=SECRET_KEY='your_super_secret_key' --from-literal=DATABASE_URL='your_db_url'`
+# Do NOT commit sensitive data to Git!
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fastapi-app-secrets
+type: Opaque
+stringData: # Use stringData for easier management, but ensure it's not committed
+  SECRET_KEY: "your_super_secret_key_from_env_example"
+  DATABASE_URL: "postgresql+asyncpg://user:password@db_host:5432/db_name"
+  # Add other sensitive variables here

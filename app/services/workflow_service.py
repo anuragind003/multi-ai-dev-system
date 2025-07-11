@@ -19,7 +19,6 @@ import json
 
 from agent_state import StateFields
 from enhanced_memory_manager_with_recovery import get_enhanced_memory_manager
-from async_graph import create_async_phased_workflow
 from models.human_approval import ApprovalPayload
 
 logger = logging.getLogger(__name__)
@@ -34,22 +33,27 @@ async def get_enhanced_workflow(session_id: str):
     """Get or create enhanced workflow for session"""
     global _enhanced_workflow_cache
     if session_id not in _enhanced_workflow_cache:
-        from async_graph import get_async_workflow
+        from unified_workflow import get_unified_workflow
         from enhanced_memory_manager_with_recovery import get_enhanced_memory_manager
         
         enhanced_memory = get_enhanced_memory_manager()
-        graph_builder = await get_async_workflow("phased")
+        graph_builder = await get_unified_workflow()
         
         # Compile the ASYNC graph with explicit interrupt configuration
+        # This list defines which nodes should trigger a pause for human feedback.
+        # We remove 'human_approval_code_node' as the new simple workflow automates
+        # the implementation loop without mid-loop human approval, fixing state issues.
+        interrupt_nodes = [
+            "human_approval_brd_node",
+            "human_approval_tech_stack_node",
+            "human_approval_system_design_node",
+            "human_approval_plan_node"
+        ]
+
+        # Compile the graph with the checkpointer and interrupt points
         workflow = graph_builder.compile(
             checkpointer=enhanced_memory,
-            interrupt_before=[
-                "human_approval_brd_node", 
-                "human_approval_tech_stack_node", 
-                "human_approval_system_design_node", 
-                "human_approval_plan_node", 
-                "human_approval_code_node"
-            ]
+            interrupt_before=interrupt_nodes
         )
         
         _enhanced_workflow_cache[session_id] = {"graph": workflow}
@@ -102,7 +106,10 @@ async def run_resumable_graph(session_id: str, brd_content: str, user_feedback: 
         # Get enhanced workflow components
         workflow_components = await get_enhanced_workflow(session_id)
         graph = workflow_components["graph"]
-        config = {"configurable": {"thread_id": session_id}}
+        config = {
+            "configurable": {"thread_id": session_id},
+            "recursion_limit": 100  # Increase recursion limit to handle complex workflows
+        }
 
         if user_feedback:
             logger.info(f"Resuming workflow {session_id} with user feedback: {user_feedback}")
@@ -129,9 +136,35 @@ async def run_resumable_graph(session_id: str, brd_content: str, user_feedback: 
             
             logger.info(f"State update for resumption: {state_update}")
             
+            # Determine which approval node should receive the update based on current stage
+            stage_to_approval_node = {
+                "brd_analysis": "human_approval_brd_node",
+                "tech_stack_recommendation": "human_approval_tech_stack_node",
+                "system_design": "human_approval_system_design_node",
+                "implementation_plan": "human_approval_plan_node",
+                "code_generation": "human_approval_code_node"
+            }
+            
+            # Get the current workflow state to determine which node we're resuming from
+            current_state = graph.get_state(config)
+            as_node = None
+            
+            if current_state and current_state.next:
+                # If we have next nodes, check if any are human approval nodes
+                for next_node in current_state.next:
+                    if next_node in stage_to_approval_node.values():
+                        as_node = next_node
+                        break
+            
+            # Fallback to using the current stage mapping if we can't determine from state
+            if not as_node:
+                as_node = stage_to_approval_node.get(current_stage, "human_approval_plan_node")
+            
+            logger.info(f"Updating workflow state as node: {as_node}")
+            
             # Update the state in the checkpointer and then resume
             logger.info("Updating workflow state with human decision...")
-            await asyncio.to_thread(graph.update_state, config, state_update)
+            await asyncio.to_thread(graph.update_state, config, state_update, as_node=as_node)
             logger.info("State updated successfully. Resuming workflow from checkpoint.")
             
             # For resuming, inputs should be None - the graph will continue from where it left off

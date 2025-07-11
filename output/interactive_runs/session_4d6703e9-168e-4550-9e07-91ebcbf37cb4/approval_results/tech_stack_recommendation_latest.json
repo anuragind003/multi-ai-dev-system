@@ -1,0 +1,497 @@
+{
+  "session_id": "session_4d6703e9-168e-4550-9e07-91ebcbf37cb4",
+  "approval_type": "tech_stack_recommendation",
+  "timestamp": 1752125525,
+  "approval_data": {
+    "frontend_options": [
+      {
+        "name": "React",
+        "language": "JavaScript/TypeScript",
+        "reasoning": "React is an excellent choice for building interactive dashboards and user interfaces. Its component-based architecture facilitates reusability and maintainability. With a large ecosystem and strong community support, it offers numerous libraries for UI components, state management, and data fetching, which are crucial for the search, filter, and tabular display requirements. TypeScript integration enhances code quality and reduces bugs, which is important for a critical internal tool.",
+        "key_libraries": [
+          "React Router",
+          "Axios",
+          "React Query",
+          "Material-UI/Ant Design"
+        ],
+        "pros": [
+          "Component reusability and modularity",
+          "Virtual DOM for efficient updates and performance",
+          "Rich ecosystem and large community support",
+          "Excellent for complex and interactive UIs"
+        ],
+        "cons": [
+          "Can have a steeper learning curve for beginners",
+          "Requires external libraries for state management (e.g., Redux, Zustand)",
+          "Build tooling setup can be complex initially"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Vue.js",
+        "language": "JavaScript/TypeScript",
+        "reasoning": "Vue.js is a progressive framework known for its ease of learning and excellent documentation, making it highly productive for development teams. It offers a good balance between flexibility and opinionation, suitable for building single-page applications with interactive elements like search, tables, and file uploads. Its reactivity system simplifies data binding, and its growing ecosystem provides ample resources for UI development.",
+        "key_libraries": [
+          "Vue Router",
+          "Pinia/Vuex",
+          "Axios",
+          "Vuetify/Element Plus"
+        ],
+        "pros": [
+          "Gentle learning curve and excellent documentation",
+          "Reactive data binding simplifies UI updates",
+          "Flexible and adaptable for various project sizes",
+          "Good performance for web applications"
+        ],
+        "cons": [
+          "Smaller community and ecosystem compared to React/Angular",
+          "Less established in large enterprise environments",
+          "Potentially fewer third-party integrations for niche requirements"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Angular",
+        "language": "TypeScript",
+        "reasoning": "Angular is a comprehensive, opinionated framework that provides a structured approach to building enterprise-grade applications. Its strong TypeScript integration, built-in features for routing, forms, and state management, and robust CLI make it suitable for large, complex projects requiring consistency and scalability. While potentially overkill for smaller projects, its full-fledged nature ensures a complete solution for the portal's requirements.",
+        "key_libraries": [
+          "Angular Material",
+          "RxJS"
+        ],
+        "pros": [
+          "Full-fledged framework with 'batteries included'",
+          "Strong TypeScript integration and type safety",
+          "Consistent structure and patterns for large teams",
+          "Robust CLI for development and scaffolding"
+        ],
+        "cons": [
+          "Steepest learning curve among the options",
+          "More verbose and opinionated, potentially slower for rapid prototyping",
+          "Larger bundle sizes compared to lighter frameworks"
+        ],
+        "selected": false
+      }
+    ],
+    "backend_options": [
+      {
+        "name": "Node.js (NestJS)",
+        "language": "TypeScript",
+        "reasoning": "Node.js, especially with a framework like NestJS, is highly efficient for I/O-bound operations such as handling file uploads, serving video recordings, and managing API requests. NestJS provides a structured, modular, and scalable architecture inspired by Angular, making it suitable for enterprise-grade applications. Its strong TypeScript support aligns well with a TypeScript-based frontend, enabling full-stack type safety and developer productivity.",
+        "key_libraries": [
+          "Express (underlying)",
+          "TypeORM/Prisma",
+          "Passport.js",
+          "Multer"
+        ],
+        "pros": [
+          "High performance for I/O-bound tasks due to non-blocking nature",
+          "Single language (TypeScript) across frontend and backend",
+          "Large ecosystem of NPM packages",
+          "NestJS provides a structured and scalable framework"
+        ],
+        "cons": [
+          "Less efficient for CPU-bound tasks (though not primary for this project)",
+          "Can lead to callback hell if not using async/await properly",
+          "Dependency management can become complex in large projects"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Python (FastAPI)",
+        "language": "Python",
+        "reasoning": "Python is known for its readability and rapid development capabilities, with a vast ecosystem of libraries. FastAPI is a modern, high-performance web framework built on standard Python type hints, making it excellent for building robust APIs. It's well-suited for handling file operations, data processing (e.g., parsing CSV/TXT files for bulk uploads), and interacting with file systems like NFS. Its asynchronous capabilities make it performant for I/O.",
+        "key_libraries": [
+          "SQLAlchemy",
+          "Pydantic",
+          "python-multipart",
+          "Requests"
+        ],
+        "pros": [
+          "Rapid development and high developer productivity",
+          "Excellent for data processing and scripting tasks",
+          "FastAPI offers high performance and built-in data validation",
+          "Large community and extensive libraries"
+        ],
+        "cons": [
+          "Global Interpreter Lock (GIL) can limit true parallelism for CPU-bound tasks",
+          "Performance can be lower than compiled languages for certain workloads",
+          "Dependency management can sometimes be challenging"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Java (Spring Boot)",
+        "language": "Java",
+        "reasoning": "Java with Spring Boot is a highly mature, robust, and scalable choice for enterprise applications. Spring Boot simplifies the development of production-ready services, offering strong type safety, comprehensive security features, and a vast ecosystem. It's ideal for systems requiring high reliability, performance under load, and complex business logic, making it a solid option for handling sensitive VKYC data and audit requirements.",
+        "key_libraries": [
+          "Spring Data JPA",
+          "Spring Security",
+          "Apache POI",
+          "Jackson"
+        ],
+        "pros": [
+          "Extremely robust, scalable, and reliable for enterprise use",
+          "Strong type safety and excellent tooling support",
+          "Mature ecosystem with extensive libraries and community",
+          "High performance and security features"
+        ],
+        "cons": [
+          "Can be more verbose and require more boilerplate code",
+          "Steeper learning curve for developers new to Java/Spring",
+          "Higher memory footprint compared to some lighter alternatives"
+        ],
+        "selected": false
+      }
+    ],
+    "database_options": [
+      {
+        "name": "PostgreSQL",
+        "language": null,
+        "reasoning": "PostgreSQL is a powerful, open-source relational database known for its reliability, advanced features, and strong adherence to SQL standards. It's an excellent choice for storing structured metadata about VKYC recordings (LAN ID, date, path), user information for access control, and audit logs. Its support for advanced indexing, transactional integrity (ACID compliance), and JSONB data type provides flexibility for current and future data needs.",
+        "key_libraries": [
+          "pg-promise/node-postgres (Node.js)",
+          "psycopg2 (Python)",
+          "JDBC (Java)"
+        ],
+        "pros": [
+          "ACID compliance ensures data integrity and reliability",
+          "Feature-rich with advanced indexing and query capabilities",
+          "Strong community support and extensibility",
+          "Suitable for both small and large datasets"
+        ],
+        "cons": [
+          "Can be more resource-intensive than simpler databases for very small projects",
+          "Scaling read replicas can add operational complexity"
+        ],
+        "selected": false
+      },
+      {
+        "name": "MySQL",
+        "language": null,
+        "reasoning": "MySQL is a widely adopted and mature open-source relational database. It offers good performance, ease of setup, and a large community, making it a popular choice for web applications. It is well-suited for managing the structured data required by the V-KYC portal, including recording metadata, user profiles, and access logs, providing a reliable and straightforward database solution.",
+        "key_libraries": [
+          "mysql2 (Node.js)",
+          "mysql-connector-python (Python)",
+          "JDBC (Java)"
+        ],
+        "pros": [
+          "High performance and reliability",
+          "Ease of use and widespread adoption",
+          "Extensive tooling and community support",
+          "Good for general-purpose web applications"
+        ],
+        "cons": [
+          "Less feature-rich than PostgreSQL in some advanced areas (e.g., complex indexing, JSON support)",
+          "Some licensing complexities under Oracle ownership"
+        ],
+        "selected": false
+      },
+      {
+        "name": "MongoDB",
+        "language": null,
+        "reasoning": "MongoDB is a NoSQL document database that offers a flexible schema, allowing for rapid iteration and evolution of data models. While the current requirements lean towards structured data, MongoDB could be considered if the metadata schema for VKYC recordings is expected to change frequently or if there's a need to store more complex, semi-structured audit trails. It excels in horizontal scalability for large volumes of data.",
+        "key_libraries": [
+          "Mongoose (Node.js)",
+          "PyMongo (Python)",
+          "Spring Data MongoDB (Java)"
+        ],
+        "pros": [
+          "Flexible schema for evolving data structures",
+          "High scalability and horizontal scaling (sharding)",
+          "Good for rapid development and prototyping",
+          "Handles large volumes of unstructured/semi-structured data well"
+        ],
+        "cons": [
+          "Lacks strong transactional guarantees compared to relational databases (though improving)",
+          "Less suitable for highly relational data models",
+          "Potential for data inconsistency if schema is not carefully managed"
+        ],
+        "selected": false
+      }
+    ],
+    "cloud_options": [
+      {
+        "name": "AWS (Amazon Web Services)",
+        "language": null,
+        "reasoning": "AWS is the leading cloud provider, offering the most comprehensive suite of services, including compute (EC2, ECS), storage (S3, EBS), networking, and managed databases (RDS). Its robust security features (IAM, VPC) are crucial for handling sensitive VKYC data. AWS provides unparalleled scalability, reliability, and global reach, making it a strong choice for hosting the portal and its backend services, with flexible options for integrating with existing on-premise resources like NFS.",
+        "key_libraries": null,
+        "pros": [
+          "Market leader with the most extensive range of services",
+          "High scalability, reliability, and global infrastructure",
+          "Robust security and compliance features",
+          "Mature ecosystem and strong community support"
+        ],
+        "cons": [
+          "Can be complex to navigate and optimize costs",
+          "Potential for vendor lock-in",
+          "Steeper learning curve for new users"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Azure (Microsoft Azure)",
+        "language": null,
+        "reasoning": "Azure is a strong competitor to AWS, particularly well-suited for organizations with existing Microsoft investments (e.g., Active Directory for user management). It offers comparable services for compute (VMs, App Services, AKS), storage, and managed databases (Azure SQL Database, Azure Database for PostgreSQL/MySQL). Azure's hybrid cloud capabilities and enterprise focus make it a viable option for integrating with existing on-premise infrastructure and ensuring robust security.",
+        "key_libraries": null,
+        "pros": [
+          "Excellent integration with Microsoft products and Active Directory",
+          "Strong enterprise focus and hybrid cloud capabilities",
+          "Competitive pricing and global data centers",
+          "Good developer tools and managed services"
+        ],
+        "cons": [
+          "Can be complex to manage for non-Microsoft environments",
+          "Documentation can sometimes be overwhelming",
+          "Some services might be less mature than AWS counterparts"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Google Cloud Platform (GCP)",
+        "language": null,
+        "reasoning": "GCP is known for its strong data analytics, machine learning, and Kubernetes offerings, providing a modern and developer-friendly cloud experience. It offers robust infrastructure services (Compute Engine, App Engine, GKE), managed databases (Cloud SQL), and storage (Cloud Storage). GCP's focus on open-source technologies and its global network infrastructure make it an attractive option for building scalable and efficient applications.",
+        "key_libraries": null,
+        "pros": [
+          "Excellent for data analytics and machine learning workloads",
+          "Strong support for Kubernetes (GKE)",
+          "Competitive pricing and high-performance global network",
+          "Good developer experience and focus on open standards"
+        ],
+        "cons": [
+          "Smaller market share and community compared to AWS/Azure",
+          "Fewer services in some niche areas",
+          "Less mature enterprise support for some services"
+        ],
+        "selected": false
+      }
+    ],
+    "architecture_options": [
+      {
+        "pattern": "Monolithic Architecture",
+        "scalability_score": 6.0,
+        "maintainability_score": 7.0,
+        "development_speed_score": 8.0,
+        "overall_score": 8.0,
+        "reasoning": "For an internal portal with a defined set of functionalities and a limited user base, a monolithic architecture is highly pragmatic. It simplifies initial development, deployment, and testing by keeping all components (UI, API, business logic, NFS interaction) within a single codebase. This reduces the overhead of distributed systems, allowing for quicker iteration and easier debugging. Scalability can be achieved by deploying multiple instances behind a load balancer, which is sufficient for the project's current scope and user volume. This approach offers the best balance of speed, cost-effectiveness, and manageability for this specific project."
+      },
+      {
+        "pattern": "Microservices Architecture",
+        "scalability_score": 9.0,
+        "maintainability_score": 8.0,
+        "development_speed_score": 6.0,
+        "overall_score": 7.0,
+        "reasoning": "A microservices architecture involves breaking down the application into smaller, independently deployable services (e.g., a user service, a recording metadata service, a file download service). This pattern offers superior long-term scalability, allowing individual services to be scaled independently based on demand. It also promotes team autonomy and technology diversity. However, for the current project scope, it introduces significant operational complexity (inter-service communication, distributed tracing, monitoring, deployment pipelines) and a slower initial development phase, which might be an over-engineering for a focused internal tool."
+      },
+      {
+        "pattern": "Serverless Architecture (FaaS)",
+        "scalability_score": 9.0,
+        "maintainability_score": 7.0,
+        "development_speed_score": 7.0,
+        "overall_score": 6.0,
+        "reasoning": "Serverless architecture, using Function-as-a-Service (FaaS) like AWS Lambda, offers automatic scaling and a pay-per-execution cost model, making it highly cost-efficient for intermittent workloads. It can accelerate the deployment of individual functions. However, managing file downloads directly from serverless functions, especially large video files from an NFS, can be challenging due to limitations like execution duration, memory, and cold starts. Integrating with an on-premise NFS from serverless functions often requires complex networking setups (e.g., VPC access), adding complexity that might outweigh the benefits for this specific use case."
+      }
+    ],
+    "tool_options": [
+      {
+        "name": "Git (GitHub/GitLab)",
+        "language": null,
+        "reasoning": "Essential for version control, allowing teams to track changes, collaborate efficiently, and manage code releases. GitHub or GitLab provide robust platforms for hosting repositories, managing pull requests, and integrating with CI/CD pipelines.",
+        "key_libraries": null,
+        "pros": [
+          "Industry standard for version control",
+          "Facilitates collaborative development",
+          "Provides history and rollback capabilities",
+          "Integrated CI/CD features with platforms like GitLab/GitHub Actions"
+        ],
+        "cons": [
+          "Can have a learning curve for complex operations (e.g., rebasing, cherry-picking)",
+          "Requires discipline for commit messages and branching strategies"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Docker",
+        "language": null,
+        "reasoning": "Docker enables containerization of the application, packaging the code and all its dependencies into a consistent unit. This ensures that the application runs reliably across different environments (development, testing, production), simplifying deployment and reducing 'it works on my machine' issues. It's crucial for consistent deployment.",
+        "key_libraries": null,
+        "pros": [
+          "Ensures consistent environments across development and production",
+          "Simplifies deployment and scaling",
+          "Improves resource utilization",
+          "Enhances portability of applications"
+        ],
+        "cons": [
+          "Adds a layer of abstraction and complexity to the development workflow",
+          "Requires understanding of containerization concepts",
+          "Can have a slight performance overhead compared to bare metal"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Jira & Confluence",
+        "language": null,
+        "reasoning": "Jira is a leading tool for agile project management, enabling the team to track requirements, tasks, bugs, and progress effectively. Confluence serves as a collaborative knowledge base for documentation, meeting notes, and project specifications, ensuring all stakeholders have access to up-to-date information. Together, they streamline project execution and communication.",
+        "key_libraries": null,
+        "pros": [
+          "Comprehensive project management and issue tracking",
+          "Supports agile methodologies (Scrum, Kanban)",
+          "Excellent for team collaboration and documentation",
+          "Integrates with many other development tools"
+        ],
+        "cons": [
+          "Can be expensive for larger teams",
+          "Can be overly complex for very small projects",
+          "Requires initial setup and configuration effort"
+        ],
+        "selected": false
+      },
+      {
+        "name": "Prometheus & Grafana",
+        "language": null,
+        "reasoning": "Prometheus is an open-source monitoring system that collects metrics from applications and infrastructure. Grafana is a powerful visualization tool that creates interactive dashboards from these metrics. This combination provides real-time insights into the portal's performance, resource utilization, and health, which is critical for identifying and resolving issues quickly, especially for file serving performance.",
+        "key_libraries": null,
+        "pros": [
+          "Powerful open-source monitoring and alerting",
+          "Highly customizable dashboards for visualizing metrics",
+          "Good for real-time performance insights",
+          "Scalable for various monitoring needs"
+        ],
+        "cons": [
+          "Requires setup and configuration of exporters and agents",
+          "Can be resource-intensive for very large-scale monitoring",
+          "Steeper learning curve for advanced configurations"
+        ],
+        "selected": false
+      },
+      {
+        "name": "ELK Stack (Elasticsearch, Logstash, Kibana)",
+        "language": null,
+        "reasoning": "The ELK Stack provides a centralized logging solution. Elasticsearch stores and indexes logs, Logstash processes and ingests them from various sources, and Kibana offers powerful visualization and analysis capabilities. Centralized logging is crucial for debugging, auditing user activities (especially for sensitive VKYC data), and monitoring system behavior in a production environment.",
+        "key_libraries": null,
+        "pros": [
+          "Centralized log aggregation and analysis",
+          "Real-time insights into system behavior and errors",
+          "Powerful search and filtering capabilities for logs",
+          "Scalable for large volumes of log data"
+        ],
+        "cons": [
+          "Resource-intensive, especially Elasticsearch",
+          "Complex to set up and maintain for production environments",
+          "Can incur significant costs for large log volumes"
+        ],
+        "selected": false
+      },
+      {
+        "name": "OWASP ZAP / Burp Suite",
+        "language": null,
+        "reasoning": "These are leading web application security testing tools (Dynamic Application Security Testing - DAST). Given the sensitive nature of VKYC recordings, regularly scanning the portal for common web vulnerabilities (e.g., XSS, SQL Injection, broken access control) is paramount. These tools help identify security flaws in the running application, complementing secure coding practices.",
+        "key_libraries": null,
+        "pros": [
+          "Identifies common web application vulnerabilities",
+          "Helps improve the overall security posture",
+          "Can be integrated into CI/CD pipelines for automated scanning",
+          "Widely recognized and supported by security professionals"
+        ],
+        "cons": [
+          "Requires expertise to interpret results and prioritize fixes",
+          "Cannot detect all types of vulnerabilities (e.g., business logic flaws)",
+          "Can generate false positives that require manual verification"
+        ],
+        "selected": false
+      }
+    ],
+    "risks": [
+      {
+        "category": "Security",
+        "description": "Data security and access control implementation challenges for sensitive VKYC recordings, including unauthorized access or data breaches.",
+        "severity": "High",
+        "likelihood": "Medium",
+        "mitigation": "Implement robust authentication (e.g., integration with corporate IdP, MFA) and fine-grained authorization (Role-Based Access Control - RBAC). Ensure data encryption in transit (HTTPS) and at rest (for metadata). Conduct regular security audits, penetration testing, and vulnerability assessments. Adhere to least privilege principles for all system components and users."
+      },
+      {
+        "category": "Performance",
+        "description": "Performance issues with fetching and downloading large volumes of video recordings from the LTF NFS server, leading to slow response times or timeouts.",
+        "severity": "High",
+        "likelihood": "Medium",
+        "mitigation": "Conduct thorough performance testing, especially for file I/O and bulk operations. Implement efficient file streaming mechanisms from NFS. Optimize database queries for metadata retrieval. Consider asynchronous processing for bulk download requests (e.g., using message queues) to avoid blocking the UI. Implement caching for frequently accessed metadata."
+      },
+      {
+        "category": "Integration",
+        "description": "Complexities in integrating the new portal with the existing LTF NFS server and any necessary backend APIs for video processing/retrieval.",
+        "severity": "Medium",
+        "likelihood": "High",
+        "mitigation": "Conduct early technical spikes and proof-of-concept development to understand NFS access patterns, permissions, and performance characteristics. Define clear API contracts and communication protocols for interaction with existing backend services. Utilize robust file system libraries in the chosen backend language and ensure proper error handling for external system interactions."
+      },
+      {
+        "category": "User Adoption",
+        "description": "Low user adoption due to the portal not being intuitive, reliable, or failing to meet user expectations for ease of access and functionality.",
+        "severity": "Medium",
+        "likelihood": "Medium",
+        "mitigation": "Involve target users (VKYC Team Leads, Process Managers) in the design and testing phases (e.g., through UX workshops, user acceptance testing). Prioritize user experience (UX) and intuitive UI design. Provide clear documentation, training, and support channels. Ensure high availability and quick response times to build user trust."
+      },
+      {
+        "category": "Scalability",
+        "description": "Scalability issues if the volume of VKYC recordings or the number of concurrent users (even if limited) increases significantly beyond initial estimates, impacting performance and availability.",
+        "severity": "Medium",
+        "likelihood": "Low",
+        "mitigation": "Design the application with modularity and horizontal scalability in mind (even within a monolith). Monitor key performance indicators (CPU, memory, network I/O, disk I/O, database performance). Utilize cloud services that allow for easy scaling of compute and database resources. If NFS becomes a bottleneck for storage, explore strategies for migrating recordings to cloud object storage (e.g., S3) in the future."
+      }
+    ],
+    "synthesis": {
+      "backend": {
+        "name": "Node.js",
+        "language": "TypeScript",
+        "framework": "NestJS",
+        "reasoning": "Chosen for its high performance in I/O-bound operations, which is critical for serving video recordings and handling file uploads. NestJS provides a structured, enterprise-grade framework with strong TypeScript support, aligning well with a modern frontend and promoting full-stack type safety and developer productivity."
+      },
+      "frontend": {
+        "name": "React",
+        "language": "TypeScript",
+        "framework": "React",
+        "reasoning": "Selected for its component-based architecture, extensive ecosystem, and ability to build highly interactive and performant user interfaces. It's ideal for the dashboard, search, filtering, and tabular data display requirements, ensuring a smooth and intuitive experience for VKYC team leads and process managers. TypeScript integration enhances code quality and maintainability."
+      },
+      "database": {
+        "name": "PostgreSQL",
+        "type": "Relational Database",
+        "reasoning": "A robust, open-source relational database known for its reliability, data integrity (ACID compliance), and rich feature set. It's perfectly suited for storing structured metadata about VKYC recordings (LAN ID, date, file paths), user authentication details, and comprehensive audit logs, providing a solid and scalable data foundation."
+      },
+      "architecture_pattern": "Monolithic Architecture",
+      "deployment_environment": {
+        "platform": "AWS (Amazon Web Services)",
+        "compute": "EC2 instances (for Monolith)",
+        "database_service": "RDS for PostgreSQL",
+        "storage_integration": "Direct integration with LTF NFS (via VPN/Direct Connect or dedicated gateway if on-premise) for video files, S3 for application assets/logs.",
+        "reasoning": "AWS offers the most comprehensive and mature cloud platform, providing the necessary compute, managed database, and robust security services crucial for handling sensitive VKYC data. A monolithic architecture deployed on EC2 instances behind a load balancer simplifies initial development and deployment for this focused internal application, while still allowing for horizontal scaling as needed. Integration with the existing LTF NFS will be a key focus."
+      },
+      "key_libraries_tools": [
+        {
+          "name": "Git (GitHub/GitLab)",
+          "purpose": "Version control and collaborative code management."
+        },
+        {
+          "name": "Docker",
+          "purpose": "Containerization for consistent application environments and simplified deployment."
+        },
+        {
+          "name": "Jira & Confluence",
+          "purpose": "Project management, task tracking, and centralized documentation."
+        },
+        {
+          "name": "Prometheus & Grafana",
+          "purpose": "Monitoring application and infrastructure performance and health."
+        },
+        {
+          "name": "ELK Stack",
+          "purpose": "Centralized logging for debugging, auditing, and operational insights."
+        },
+        {
+          "name": "OWASP ZAP / Burp Suite",
+          "purpose": "Web application security testing to identify vulnerabilities."
+        }
+      ],
+      "estimated_complexity": "Medium"
+    },
+    "selected_stack": null
+  },
+  "workflow_state_snapshot": {}
+}

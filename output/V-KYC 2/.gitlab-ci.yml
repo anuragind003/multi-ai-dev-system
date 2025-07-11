@@ -1,0 +1,207 @@
+# .gitlab-ci.yml
+# GitLab CI/CD pipeline for FastAPI Monolith application
+
+# Define default image for all jobs
+default:
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker info
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  APP_NAME: fastapi-monolith
+  APP_VERSION: $CI_COMMIT_SHORT_SHA
+  # AWS EC2 details - Set these as CI/CD variables in GitLab
+  # AWS_ACCESS_KEY_ID: Your AWS Access Key ID
+  # AWS_SECRET_ACCESS_KEY: Your AWS Secret Access Key
+  # AWS_DEFAULT_REGION: Your AWS Region (e.g., us-east-1)
+  # EC2_INSTANCE_IP: Public IP of your EC2 instance
+  # EC2_SSH_USER: User for SSH (e.g., ec2-user, ubuntu)
+  # SSH_PRIVATE_KEY: Your SSH private key for EC2 (as a file variable)
+
+stages:
+  - lint
+  - test
+  - build
+  - scan
+  - deploy
+  - rollback
+
+.python_base:
+  image: python:3.10-slim-buster
+  before_script:
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+
+lint:
+  stage: lint
+  extends: .python_base
+  script:
+    - echo "Running code quality checks..."
+    - black --check .
+    - flake8 .
+    - isort --check-only .
+  allow_failure: false # Fail the pipeline if linting issues are found
+  tags:
+    - docker
+
+unit_test:
+  stage: test
+  extends: .python_base
+  script:
+    - echo "Running unit tests..."
+    - pytest tests/unit/
+  tags:
+    - docker
+
+integration_test:
+  stage: test
+  extends: .python_base
+  services:
+    - docker:20.10.16-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_VERIFY: "0"
+  script:
+    - echo "Running integration tests..."
+    - docker-compose -f docker-compose.yml up -d --build app db
+    - sleep 10 # Give services time to start
+    - docker ps
+    - pytest tests/integration/
+    - docker-compose -f docker-compose.yml down
+  tags:
+    - docker
+
+performance_test:
+  stage: test
+  extends: .python_base
+  services:
+    - docker:20.10.16-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_VERIFY: "0"
+  script:
+    - echo "Running performance tests with Locust..."
+    - docker-compose -f docker-compose.yml up -d --build app
+    - sleep 10 # Give app time to start
+    - docker ps
+    - locust -f tests/performance/locustfile.py --host http://localhost:8000 --users 10 --spawn-rate 2 --run-time 30s --headless --csv=locust_report
+    - cat locust_report_stats.csv
+    - docker-compose -f docker-compose.yml down
+  allow_failure: true # Performance tests might be informational, can be set to false for strict requirements
+  tags:
+    - docker
+
+build_image:
+  stage: build
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $CI_REGISTRY/$CI_PROJECT_PATH/$APP_NAME:$APP_VERSION -t $CI_REGISTRY/$CI_PROJECT_PATH/$APP_NAME:latest .
+    - echo "Pushing Docker image to GitLab Container Registry..."
+    - docker push $CI_REGISTRY/$CI_PROJECT_PATH/$APP_NAME:$APP_VERSION
+    - docker push $CI_REGISTRY/$CI_PROJECT_PATH/$APP_NAME:latest
+  tags:
+    - docker
+
+vulnerability_scan:
+  stage: scan
+  image: aquasec/trivy:latest
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_SEVERITY: "HIGH,CRITICAL" # Only report high and critical vulnerabilities
+    TRIVY_EXIT_CODE: "1" # Fail if vulnerabilities are found
+  script:
+    - echo "Scanning Docker image for vulnerabilities..."
+    - trivy image --ignore-unfixed $CI_REGISTRY/$CI_PROJECT_PATH/$APP_NAME:$APP_VERSION
+  allow_failure: false # Fail the pipeline if critical vulnerabilities are found
+  tags:
+    - docker
+
+deploy_staging:
+  stage: deploy
+  image: alpine/git:latest # A lightweight image with SSH client
+  before_script:
+    - chmod 600 "$SSH_PRIVATE_KEY" # Ensure private key permissions are correct
+    - apk add --no-cache openssh-client curl # Install SSH client and curl
+  script:
+    - echo "Deploying to Staging EC2 instance..."
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $EC2_SSH_USER@$EC2_INSTANCE_IP "
+        export CI_REGISTRY_USER='$CI_REGISTRY_USER';
+        export CI_REGISTRY_PASSWORD='$CI_REGISTRY_PASSWORD';
+        export CI_REGISTRY='$CI_REGISTRY';
+        export CI_PROJECT_PATH='$CI_PROJECT_PATH';
+        export APP_NAME='$APP_NAME';
+        export APP_VERSION='$APP_VERSION';
+        bash -s" < scripts/deploy.sh
+    - echo "Deployment to Staging complete. Verifying health check..."
+    - sleep 10 # Give app time to start
+    - curl -f http://$EC2_INSTANCE_IP:8000/health || { echo "Health check failed!"; exit 1; }
+  environment:
+    name: staging
+    url: http://$EC2_INSTANCE_IP:8000
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"' # Deploy to staging on every push to main
+  tags:
+    - docker
+
+deploy_production:
+  stage: deploy
+  image: alpine/git:latest
+  before_script:
+    - chmod 600 "$SSH_PRIVATE_KEY"
+    - apk add --no-cache openssh-client curl
+  script:
+    - echo "Deploying to Production EC2 instance..."
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $EC2_SSH_USER@$EC2_INSTANCE_IP "
+        export CI_REGISTRY_USER='$CI_REGISTRY_USER';
+        export CI_REGISTRY_PASSWORD='$CI_REGISTRY_PASSWORD';
+        export CI_REGISTRY='$CI_REGISTRY';
+        export CI_PROJECT_PATH='$CI_PROJECT_PATH';
+        export APP_NAME='$APP_NAME';
+        export APP_VERSION='$APP_VERSION';
+        bash -s" < scripts/deploy.sh
+    - echo "Deployment to Production complete. Verifying health check..."
+    - sleep 10 # Give app time to start
+    - curl -f http://$EC2_INSTANCE_IP:8000/health || { echo "Health check failed!"; exit 1; }
+  environment:
+    name: production
+    url: http://$EC2_INSTANCE_IP:8000
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual # Manual approval for production deployment
+  tags:
+    - docker
+
+rollback_production:
+  stage: rollback
+  image: alpine/git:latest
+  before_script:
+    - chmod 600 "$SSH_PRIVATE_KEY"
+    - apk add --no-cache openssh-client curl
+  script:
+    - echo "Initiating rollback to previous stable version on Production..."
+    # This assumes 'deploy.sh' keeps a track of the previous successful image or a specific tag.
+    # For simplicity, this example will just re-deploy the 'latest' tag, which might not be the *previous*
+    # For a true rollback, you'd need to pass the specific previous successful image tag.
+    # Example: Retrieve previous successful tag from GitLab deployment history or a custom registry tag.
+    - ssh -o StrictHostKeyChecking=no -i "$SSH_PRIVATE_KEY" $EC2_SSH_USER@$EC2_INSTANCE_IP "
+        export CI_REGISTRY_USER='$CI_REGISTRY_USER';
+        export CI_REGISTRY_PASSWORD='$CI_REGISTRY_PASSWORD';
+        export CI_REGISTRY='$CI_REGISTRY';
+        export CI_PROJECT_PATH='$CI_PROJECT_PATH';
+        export APP_NAME='$APP_NAME';
+        export APP_VERSION='latest'; # Or a specific previous tag
+        bash -s" < scripts/deploy.sh
+    - echo "Rollback complete. Verifying health check..."
+    - sleep 10
+    - curl -f http://$EC2_INSTANCE_IP:8000/health || { echo "Health check failed!"; exit 1; }
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  tags:
+    - docker

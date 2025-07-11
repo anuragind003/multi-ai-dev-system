@@ -1,0 +1,47 @@
+groups:
+  - name: fastapi_redis_alerts
+    rules:
+      - alert: FastAPIAppDown
+        expr: up{job="fastapi_app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI application is down"
+          description: "The FastAPI application instance {{ $labels.instance }} is unreachable for more than 1 minute."
+
+      - alert: RedisConnectionFailed
+        expr: probe_success{job="fastapi_app", instance=~".*health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI Redis connection failed"
+          description: "The FastAPI application at {{ $labels.instance }} is reporting a failed connection to Redis."
+
+      - alert: RedisMemoryUsageHigh
+        expr: redis_memory_used_bytes / redis_total_system_memory_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis instance {{ $labels.instance }} is using more than 80% of its allocated memory."
+
+      - alert: RedisLatencyHigh
+        expr: redis_commands_latency_seconds_average > 0.1 # Example: average command latency over 100ms
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis command latency is high"
+          description: "Redis instance {{ $labels.instance }} is experiencing high command latency."
+
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{job="fastapi_app", code=~"5..|404"}[5m])) by (instance) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on FastAPI application"
+          description: "FastAPI application instance {{ $labels.instance }} is serving more than 5 5xx/404 errors per second."

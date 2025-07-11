@@ -47,14 +47,30 @@ const steps = [
 ];
 
 const getStepStatus = (stepId: string): 'completed' | 'active' | 'pending' => {
+  // Check if this stage is completed
   if (completedStages.value[stepId]) {
     return 'completed';
   }
   
-  const completedCount = Object.keys(completedStages.value).length;
-  const currentIndex = steps.findIndex(s => s.id === stepId);
-
-  if (completedCount === currentIndex && status.value !== 'idle' && status.value !== 'completed') {
+  // Map step IDs to their expected completion order
+  const stepOrder = ['brd_analysis', 'tech_stack_recommendation', 'system_design', 'implementation_plan', 'code_generation'];
+  const currentStepIndex = stepOrder.indexOf(stepId);
+  
+  // Count how many previous steps are completed
+  let previousStepsCompleted = 0;
+  for (let i = 0; i < currentStepIndex; i++) {
+    if (completedStages.value[stepOrder[i]]) {
+      previousStepsCompleted++;
+    }
+  }
+  
+  // A step is active if:
+  // 1. All previous steps are completed
+  // 2. This step is not completed
+  // 3. Workflow is running or paused (not idle or error)
+  if (previousStepsCompleted === currentStepIndex && 
+      !completedStages.value[stepId] && 
+      (status.value === 'running' || status.value === 'paused')) {
     return 'active';
   }
 

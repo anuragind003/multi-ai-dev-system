@@ -1,45 +1,56 @@
 """
-Enhanced, consolidated BRD analysis tool to minimize API calls and improve reliability.
+Enhanced, consolidated BRD analysis tool using shared utilities for consistency.
 """
 import logging
 import json
-import re
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from config import get_llm
-from models.data_contracts import (
-    Requirement,
-    QualityAssessment,
-    GapAnalysis,
-    BRDRequirementsAnalysis
+from models.data_contracts import BRDRequirementsAnalysis
+from utils.analysis_tool_utils import (
+    robust_json_parser,
+    standardized_llm_invoke,
+    validate_and_convert_to_model,
+    create_error_response,
+    log_tool_execution,
+    log_tool_start,
+    AnalysisToolError
 )
 
 logger = logging.getLogger(__name__)
 
-# --- The New, Consolidated Tool ---
-
 class ComprehensiveBRDInput(BaseModel):
     raw_brd_content: str = Field(description="The full, raw text content of the Business Requirements Document (BRD).")
+    llm: BaseChatModel = Field(None, description="The language model to use for the analysis.")
 
 @tool(args_schema=ComprehensiveBRDInput)
-def generate_comprehensive_brd_analysis(raw_brd_content: str) -> BRDRequirementsAnalysis:
+def generate_comprehensive_brd_analysis(raw_brd_content: str, llm: BaseChatModel = None) -> Dict[str, Any]:
     """
     Analyzes raw BRD text and generates a comprehensive, structured analysis in a single step.
-    This includes requirements, quality assessment, and gap analysis.
-
-    This tool extracts requirements, goals, constraints, performs a quality assessment,
+    This includes requirements, goals, constraints, performs a quality assessment,
     and identifies any gaps in the provided Business Requirements Document.
+
     The output is a structured JSON object conforming to the BRDRequirementsAnalysis model.
     """
-    logger.info("Executing consolidated tool: generate_comprehensive_brd_analysis")
+    operation_name = "BRD comprehensive analysis"
+    start_time = logger.handlers[0].formatter.formatTime(logger.makeRecord(
+        logger.name, logging.INFO, __file__, 0, "", (), None
+    )) if logger.handlers else 0
     
-    # The prompt now includes instructions to output raw JSON.
-    prompt_template = ChatPromptTemplate.from_messages([
-        ("system", """You are a world-class business analyst AI. Your task is to analyze the provided Business Requirements Document (BRD) and convert it into a structured JSON object.
+    log_tool_start(operation_name, "Starting analysis")
+    
+    try:
+        # Use the provided LLM or get a default one
+        llm_instance = llm or get_llm(temperature=0.2)
+        
+        # Create the prompt template for BRD analysis
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", """You are a world-class business analyst AI. Your task is to analyze the provided Business Requirements Document (BRD) and convert it into a structured JSON object.
 
 You MUST return ONLY a valid JSON object that follows this exact structure. No explanations, no markdown, no additional text - just the JSON object:
 
@@ -78,76 +89,44 @@ You MUST return ONLY a valid JSON object that follows this exact structure. No e
 }}
 
 CRITICAL: Your response must be ONLY this JSON object. Start with {{ and end with }}. No other text."""),
-        ("human", "Analyze this BRD and extract all requirements and details:\n\n{brd_content}")
-    ])
-    
-    # The Pydantic model is now used to generate a JSON schema for the prompt.
-    json_schema = json.dumps(BRDRequirementsAnalysis.model_json_schema(), indent=2)
-    
-    # The parser is removed from the chain.
-    chain = prompt_template | get_llm(temperature=0.2)
-
-    try:
-        # The chain now outputs raw text.
-        response_text = chain.invoke({
-            "brd_content": raw_brd_content
-        }).content
-
-        # Log the raw response for debugging
-        logger.info(f"Raw LLM response (first 500 chars): {response_text[:500]}")
-
-        # The model sometimes wraps the JSON in markdown, so we extract the raw JSON string.
-        try:
-            # Handle markdown code blocks and extract JSON
-            if '```json' in response_text:
-                # Extract JSON from markdown code block
-                json_start = response_text.find('```json') + 7
-                json_end = response_text.find('```', json_start)
-                if json_end != -1:
-                    clean_json_str = response_text[json_start:json_end].strip()
-                else:
-                    # Fallback to finding the JSON object
-                    json_start_index = response_text.index('{')
-                    json_end_index = response_text.rindex('}') + 1
-                    clean_json_str = response_text[json_start_index:json_end_index]
-            elif '```' in response_text and '{' in response_text:
-                # Handle generic code blocks
-                json_start = response_text.find('{')
-                json_end = response_text.rfind('}') + 1
-                clean_json_str = response_text[json_start:json_end]
-            else:
-                # Standard JSON extraction
-                json_start_index = response_text.index('{')
-                json_end_index = response_text.rindex('}') + 1
-                clean_json_str = response_text[json_start_index:json_end_index]
-            
-            # Clean up any trailing commas
-            clean_json_str = re.sub(r',\s*([}\]])', r'\1', clean_json_str)
-            
-            response_json = json.loads(clean_json_str)
-        except ValueError:
-            # This handles cases where the '{' or '}' are not found.
-            raise json.JSONDecodeError("Could not find JSON object in response", response_text, 0)
+            ("human", "Analyze this BRD and extract all requirements and details:\n\n{brd_content}")
+        ])
         
-        logger.info("Successfully parsed LLM response into JSON.")
-        logger.info(f"Parsed JSON keys: {list(response_json.keys())}")
+        # Use standardized LLM invocation
+        response_text = standardized_llm_invoke(
+            llm=llm_instance,
+            prompt_template=prompt_template,
+            inputs={"brd_content": raw_brd_content},
+            operation_name=operation_name
+        )
         
-        # Convert the response JSON to a BRDRequirementsAnalysis instance
-        try:
-            analysis_instance = BRDRequirementsAnalysis(**response_json)
-            result = analysis_instance.model_dump()
-            logger.info(f"BRDRequirementsAnalysis instance created successfully. Result keys: {list(result.keys())}")
-            # Return the dict representation to maintain compatibility with the workflow
-            return result
-        except Exception as e:
-            logger.error(f"Failed to create BRDRequirementsAnalysis instance: {e}")
-            logger.info(f"Returning raw JSON with keys: {list(response_json.keys())}")
-            # Return the raw JSON if model creation fails
-            return response_json
+        # Use robust JSON parser
+        response_json = robust_json_parser(response_text)
+        
+        # Validate and convert using shared utilities
+        result = validate_and_convert_to_model(
+            data=response_json,
+            model_class=BRDRequirementsAnalysis,
+            apply_field_fixes=True
+        )
+        
+        log_tool_execution(operation_name, True, f"Analysis completed with {len(result.get('requirements', []))} requirements")
+        return result
 
+    except AnalysisToolError as e:
+        # Tool-specific errors (LLM invocation failed)
+        error_response = create_error_response("tool_execution_error", str(e), operation_name)
+        log_tool_execution(operation_name, False, str(e))
+        return error_response
+        
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON from LLM response: {e}\nRaw response: {response_text}", exc_info=True)
-        return {"error": "json_decode_error", "details": f"Failed to parse LLM output: {e}"}
+        # JSON parsing errors
+        error_response = create_error_response("json_decode_error", f"Failed to parse LLM output: {e}", operation_name)
+        log_tool_execution(operation_name, False, f"JSON parsing failed: {e}")
+        return error_response
+        
     except Exception as e:
-        logger.error(f"Failed to generate comprehensive BRD analysis: {e}", exc_info=True)
-        return {"error": "tool_execution_error", "details": str(e)} 
+        # Any other unexpected errors
+        error_response = create_error_response("unexpected_error", str(e), operation_name)
+        log_tool_execution(operation_name, False, f"Unexpected error: {e}")
+        return error_response 

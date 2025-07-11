@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-app-deployment
+  labels:
+    app: fastapi-app
+spec:
+  replicas: 2 # Number of desired pods
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+    spec:
+      containers:
+      - name: fastapi-app
+        image: ghcr.io/your-github-username/fastapi-app:latest # Replace with your actual image and registry
+        imagePullPolicy: Always # Ensure the latest image is pulled
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: fastapi-app-secrets # Referencing a Kubernetes Secret for sensitive env vars
+        - configMapRef:
+            name: fastapi-app-config # Referencing a Kubernetes ConfigMap for non-sensitive env vars
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m" # 0.25 CPU core
+          limits:
+            memory: "256Mi"
+            cpu: "500m" # 0.5 CPU core
+        livenessProbe: # Checks if the container is still running
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe: # Checks if the container is ready to serve traffic
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      # Optional: ImagePullSecrets if your registry requires authentication
+      # imagePullSecrets:
+      # - name: regcred # Name of the secret containing Docker registry credentials

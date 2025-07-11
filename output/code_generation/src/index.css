@@ -1,0 +1,30 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Custom styles or overrides */
+body {
+  font-family: 'Inter', sans-serif;
+  @apply bg-background text-text;
+}
+
+/* Basic focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid theme('colors.primary');
+  outline-offset: 2px;
+  border-radius: 4px; /* Adjust as needed for component shape */
+}
+
+/* Custom spinner animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin 1.5s linear infinite;
+}

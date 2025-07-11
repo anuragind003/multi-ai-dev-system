@@ -1,0 +1,111 @@
+openapi: 3.0.0
+info:
+  title: FastAPI Monitoring Service API
+  description: A sample FastAPI application with integrated Prometheus monitoring and health checks.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.yourdomain.com
+    description: Production server
+tags:
+  - name: Health
+    description: Application health checks
+  - name: Metrics
+    description: Prometheus metrics endpoint
+  - name: Items
+    description: Example item management endpoints
+paths:
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  message:
+                    type: string
+                    example: Service is up and running!
+  /metrics:
+    get:
+      summary: Prometheus Metrics
+      operationId: metrics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Prometheus metrics in text format
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP http_requests_total Total HTTP requests
+                  # TYPE http_requests_total counter
+                  http_requests_total{method="GET",endpoint="/health",status_code="200"} 1.0
+                  # HELP http_request_duration_seconds HTTP request latency in seconds
+                  # TYPE http_request_duration_seconds histogram
+                  http_request_duration_seconds_bucket{method="GET",endpoint="/health",le="0.005"} 1.0
+                  # HELP app_info Application information
+                  # TYPE app_info gauge
+                  app_info{version="1.0.0",environment="development"} 1.0
+  /items/{item_id}:
+    get:
+      summary: Get Item
+      operationId: read_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+            description: The ID of the item to retrieve.
+      responses:
+        '200':
+          description: Successful response with item details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item_id:
+                    type: integer
+                    example: 1
+                  name:
+                    type: string
+                    example: Item 1
+        '404':
+          description: Item not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Item not found
+        '500':
+          description: Internal Server Error (simulated).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Simulated Internal Server Error
+components:
+  schemas: {} # Add any shared schemas here if needed

@@ -1,0 +1,29 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090 # 'prometheus' is the service name in docker-compose
+    access: proxy
+    isDefault: true
+    version: 1
+    editable: true
+    # You can add basic auth or other security settings here if Prometheus requires it
+    # basicAuth: false
+    # basicAuthUser:
+    # basicAuthPassword:
+    # tlsAuth: false
+    # tlsAuthWithCACert: false
+    # tlsCACert:
+    # tlsClientCert:
+    # tlsClientKey:
+    # secureJsonData:
+    #   tlsCACert:
+    #   tlsClientCert:
+    #   tlsClientKey:
+    # jsonData:
+    #   httpMethod: POST
+    #   manageAlerts: true
+    #   prometheusType: Prometheus
+    #   prometheusVersion: 2.x
+    #   timeSeriesFormat: short

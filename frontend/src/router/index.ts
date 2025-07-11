@@ -27,6 +27,18 @@ const router = createRouter({
           component: () => import("../views/WorkflowMonitorView.vue"),
           props: true,
         },
+        {
+          path: '/workflow-demo',
+          name: 'workflow-demo',
+          component: () => import('../views/WorkflowView.vue')
+        },
+        {
+          path: '/monitor',
+          name: 'monitor',
+          // Lazy-loaded route
+          component: () => import("../views/WorkflowMonitorView.vue"),
+          props: true,
+        },
       ],
     },
     // You can add other routes outside the layout here (e.g., a login page)

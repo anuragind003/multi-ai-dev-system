@@ -17,7 +17,7 @@ from fastapi.openapi.utils import get_openapi
 
 from config import get_system_config, initialize_system_config, AdvancedWorkflowConfig
 from enhanced_memory_manager_with_recovery import get_enhanced_memory_manager
-from async_graph import get_async_workflow
+from unified_workflow import get_unified_workflow  # CHANGED: Use unified workflow
 from rag_manager import ProjectRAGManager, set_rag_manager
 from utils.shared_memory_hub import get_shared_memory_hub
 from utils.windows_logging_fix import setup_windows_compatible_logging
@@ -169,25 +169,28 @@ async def setup_startup_tasks(app: FastAPI):
     set_rag_manager(rag_manager)
     logging.info("RAG manager initialized successfully.")
 
-    # Initialize enhanced ASYNC workflow configuration
-    logger.info("Initializing enhanced ASYNC workflow with improved interrupt handling")
-    graph_builder = await get_async_workflow("phased")
+    # Initialize UNIFIED workflow configuration
+    logger.info("Initializing UNIFIED workflow - clean pipeline with no sync/async issues")
+    graph_builder = await get_unified_workflow()
     
-    # Compile the ASYNC graph with explicit interrupt configuration
+    # Compile the UNIFIED graph with explicit interrupt configuration
+    # Clean interrupt list for the unified workflow
+    interrupt_nodes = [
+        "human_approval_brd_node",
+        "human_approval_tech_stack_node",
+        "human_approval_system_design_node",
+        "human_approval_plan_node"
+    ]
+
+    # Compile the graph with the checkpointer and interrupt points
     workflow = graph_builder.compile(
         checkpointer=enhanced_memory,
-        interrupt_before=[
-            "human_approval_brd_node", 
-            "human_approval_tech_stack_node", 
-            "human_approval_system_design_node", 
-            "human_approval_plan_node", 
-            "human_approval_code_node"
-        ]
+        interrupt_before=interrupt_nodes
     )
     
-    # Add the ASYNC runnable to the app state
+    # Add the unified runnable to the app state
     app.state.workflow_runnable = workflow
-    logger.info("Enhanced ASYNC workflow initialized with improved interrupt handling")
+    logger.info("UNIFIED workflow initialized successfully - no sync/async issues")
     
     # Initialize enhanced memory system on startup
     try:

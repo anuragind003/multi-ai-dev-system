@@ -50,7 +50,7 @@
               :is="currentReviewComponent"
               :data="humanApprovalRequest.data"
               @proceed="handleDecision('proceed', undefined, $event)"
-              @revise="handleDecision('revise', $event[0], $event[1])"
+              @revise="handleReviseDecision"
               @end="handleDecision('end')"
             />
           </template>
@@ -175,6 +175,11 @@ const currentReviewComponent = computed(() => {
 // Generic handler for all decisions
 const handleDecision = (decision: "proceed" | "revise" | "end", feedback?: string, selectedStack?: { [key: string]: string }) => {
   workflowStore.submitHumanDecision(decision, feedback, selectedStack);
+};
+
+// Specific handler for revise decisions with multiple parameters
+const handleReviseDecision = (feedback: string, selectedStack: { [key: string]: string }) => {
+  handleDecision('revise', feedback, selectedStack);
 };
 
 // Handle file selection from FileTree component

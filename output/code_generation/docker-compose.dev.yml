@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend # Mount for hot-reloading
+    env_file:
+      - ./backend/.env.example # Use .env.example for dev, replace with .env in real dev
+    environment:
+      # Override specific variables for development
+      DATABASE_URL: postgresql://user:password@db:5432/dev_db
+      DEBUG: "True"
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app/frontend # Mount for hot-reloading
+      - /app/frontend/node_modules # Exclude node_modules from host mount
+    env_file:
+      - ./frontend/.env.example # Use .env.example for dev, replace with .env in real dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000 # Point to backend service
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    command: yarn dev # Run Next.js dev server
+
+  db:
+    image: postgres:13-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persistent data volume
+    environment:
+      POSTGRES_DB: dev_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db_data:

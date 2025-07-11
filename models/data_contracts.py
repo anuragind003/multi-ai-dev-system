@@ -54,10 +54,6 @@ class DevelopmentPlanOutput(BaseModel):
     tasks: List[Task] = Field(..., description="List of development tasks")
     timeline: str = Field(..., description="Proposed project timeline")
 
-class CodeFile(BaseModel):
-    file_path: str = Field(..., description="The full path to the file, including the filename and extension.")
-    code: str = Field(..., description="The complete source code for the file.")
-
 class GeneratedFile(BaseModel):
     """Model for a generated code file with additional metadata."""
     file_path: str = Field(..., description="The full path to the file, including the filename and extension.")
@@ -67,7 +63,7 @@ class GeneratedFile(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata about the file.")
 
 class CodeGenerationOutput(BaseModel):
-    files: List[CodeFile] = Field(..., description="A list of generated code files.")
+    generated_files: List[GeneratedFile] = Field(..., description="A list of generated code files.")
     summary: str = Field(..., description="A summary of the generated code and its structure.")
     status: str = Field(default="success", description="Status of the code generation (success, error, partial).")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata about the generation process.")

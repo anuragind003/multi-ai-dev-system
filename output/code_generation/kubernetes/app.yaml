@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-app-deployment
+  labels:
+    app: fastapi-app
+spec:
+  replicas: 2 # Scale as needed for production
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+    spec:
+      containers:
+      - name: fastapi-app
+        image: ghcr.io/your-github-username/fastapi-app:latest # Replace with your actual image and tag
+        ports:
+        - containerPort: 8000
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fastapi-app-secrets # Kubernetes Secret name
+              key: SECRET_KEY # Key within the secret
+        # Health and Liveness Probes
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      # Optional: ImagePullSecrets if using a private registry other than GHCR with GITHUB_TOKEN
+      # imagePullSecrets:
+      # - name: regcred # Name of your image pull secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-app-service
+  labels:
+    app: fastapi-app
+spec:
+  selector:
+    app: fastapi-app
+  ports:
+    - protocol: TCP
+      port: 80 # Service port
+      targetPort: 8000 # Container port
+  type: ClusterIP # Use ClusterIP for internal access, NodePort or LoadBalancer for external
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fastapi-app-ingress
+  annotations:
+    # Example for Nginx Ingress Controller
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true" # Enforce HTTPS
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod" # Example for cert-manager
+  labels:
+    app: fastapi-app
+spec:
+  ingressClassName: nginx # Or your specific ingress controller class
+  rules:
+  - host: your-domain.com # Replace with your actual domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fastapi-app-service
+            port:
+              number: 80
+  # Optional: TLS configuration for HTTPS
+  # tls:
+  # - hosts:
+  #   - your-domain.com
+  #   secretName: your-domain-tls # Kubernetes Secret containing TLS cert and key

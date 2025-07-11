@@ -1,22 +1,19 @@
 """
 Code Generation Package for Multi-AI Development System
 
-This package contains specialized code generation agents following LLM-powered architecture:
+This package contains SIMPLIFIED code generation agents following streamlined architecture:
 
-ARCHITECTURE PARADIGM:
-- LLM-Powered: Agents use reasoning and dynamic tool selection
-- General Purpose: Adapt to ANY domain, framework, and scale without hardcoding  
-- Tool-Based: Specialized tools that LLMs call intelligently based on context
-- Context-Aware: Each generation informed by project requirements and previous results
+SIMPLIFIED ARCHITECTURE (Post-Migration):
+- 4 Simple Agents: SimpleBackendAgent, SimpleFrontendAgent, SimpleDatabaseAgent, SimpleOpsAgent
+- 75% reduction in code complexity (~400KB to ~60KB)
+- Unified approach using modern LLM capabilities
+- Legacy agents moved to legacy/ folder for reference
 
-BACKEND GENERATION APPROACHES:
-1. GeneralizedBackendGenerator (RECOMMENDED): LLM-powered, framework-agnostic, domain-intelligent
-2. BackendOrchestratorAgent (LEGACY): Industrial but with some hardcoded components
-
-CONSISTENCY WITH SYSTEM:
-- BRD Analyst, Tech Stack Advisor, System Designer: All use LLM-powered ReAct framework
-- Plan Compiler: Uses dynamic reasoning and tool-based execution  
-- Backend Generation: Should follow same paradigm for consistency
+AGENT RESPONSIBILITIES:
+- SimpleBackendAgent: API development, business logic, integrations
+- SimpleFrontendAgent: UI components, state management, routing
+- SimpleDatabaseAgent: Schema design, migrations, queries
+- SimpleOpsAgent: DevOps, testing, documentation, security
 """
 
 # Ensure correct import paths
@@ -24,49 +21,43 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# Primary LLM-powered generators (aligned with system architecture)
-from .backend_orchestrator import BackendOrchestratorAgent
-from .architecture_generator import ArchitectureGeneratorAgent
-from .frontend_generator import FrontendGeneratorAgent  
-from .database_generator import DatabaseGeneratorAgent
-from .integration_generator import IntegrationGeneratorAgent
+# NEW SIMPLIFIED AGENTS (Primary)
+from .simple_backend_agent import SimpleBackendAgent
+from .simple_frontend_agent import SimpleFrontendAgent
+from .simple_database_agent import SimpleDatabaseAgent
+from .simple_ops_agent import SimpleOpsAgent
 
-# Legacy/Specialized generators
-from .backend_orchestrator import BackendOrchestratorAgent
-
-# Base classes
-from .base_code_generator import BaseCodeGeneratorAgent
+# Legacy agents (in legacy folder - for reference only)
+# from .legacy.backend_orchestrator import BackendOrchestratorAgent
+# from .legacy.architecture_generator import ArchitectureGeneratorAgent
+# from .legacy.frontend_generator import FrontendGeneratorAgent  
+# from .legacy.database_generator import DatabaseGeneratorAgent
+# from .legacy.integration_generator import IntegrationGeneratorAgent
+# from .legacy.base_code_generator import BaseCodeGeneratorAgent
 
 __all__ = [
-    # LLM-Powered Generators (Primary)
-    "GeneralizedBackendGenerator",
-    "ArchitectureGeneratorAgent", 
-    "FrontendGeneratorAgent",
-    "DatabaseGeneratorAgent",
-    "IntegrationGeneratorAgent",
-    
-    # Legacy/Specialized
-    "BackendOrchestratorAgent",
-    
-    # Base
-    "BaseCodeGeneratorAgent"
+    # Simplified Agents (New Architecture)
+    "SimpleBackendAgent",
+    "SimpleFrontendAgent", 
+    "SimpleDatabaseAgent",
+    "SimpleOpsAgent"
 ]
 
-# Recommended generator mapping for new projects
-RECOMMENDED_GENERATORS = {
-    "backend": BackendOrchestratorAgent,
-    "architecture": ArchitectureGeneratorAgent,
-    "frontend": FrontendGeneratorAgent, 
-    "database": DatabaseGeneratorAgent,
-    "integration": IntegrationGeneratorAgent
+# SIMPLIFIED GENERATOR MAPPING (New Standard)
+SIMPLIFIED_GENERATORS = {
+    "backend": SimpleBackendAgent,
+    "frontend": SimpleFrontendAgent,
+    "database": SimpleDatabaseAgent,
+    "ops": SimpleOpsAgent,
+    "devops": SimpleOpsAgent,
+    "testing": SimpleOpsAgent,
+    "documentation": SimpleOpsAgent,
+    "security": SimpleOpsAgent,
+    "monitoring": SimpleOpsAgent,
+    "architecture": SimpleBackendAgent,  # Route to backend
+    "integration": SimpleBackendAgent    # Route to backend
 }
 
-# Legacy mapping for existing integrations
-LEGACY_GENERATORS = {
-    "backend": BackendOrchestratorAgent,
-    "architecture": ArchitectureGeneratorAgent,
-    "frontend": FrontendGeneratorAgent,
-    "database": DatabaseGeneratorAgent, 
-    "integration": IntegrationGeneratorAgent
-}
+# Default mapping (points to simplified agents)
+DEFAULT_GENERATORS = SIMPLIFIED_GENERATORS
 

@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: your-registry/fastapi-app:latest # Replace with your actual image name and tag
+    deploy:
+      replicas: 3 # Example: Run 3 instances for high availability
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    env_file:
+      - .env
+    environment:
+      # Use Docker secrets for sensitive production variables
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Add other production-specific environment variables here
+    secrets:
+      - db_password
+      - app_secret_key
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "80:80"
+      - "443:443" # For HTTPS
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./nginx/certs:/etc/nginx/certs:ro # Uncomment for SSL certificates
+    depends_on:
+      app:
+        condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+
+  db:
+    image: postgres:14-alpine
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    secrets:
+      - db_password
+    deploy:
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2048M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.47.1
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    depends_on:
+      app:
+        condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  grafana:
+    image: grafana/grafana:10.1.5
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # You can provision dashboards and datasources here if needed
+      # - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      # - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    env_file:
+      - .env # For GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  db_data:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt # Create this file with your DB password
+  app_secret_key:
+    file: ./secrets/app_secret_key.txt # Create this file with a strong secret key

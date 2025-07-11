@@ -208,6 +208,11 @@ class BaseAgent(ABC, EnhancedMemoryMixin):
         self.code_execution_tool = kwargs.get("code_execution_tool")
         self.rag_retriever = kwargs.get("rag_retriever")
 
+    @property
+    def temperature(self) -> float:
+        """Alias for default_temperature to maintain backward compatibility."""
+        return self.default_temperature
+
     def log_start(self, message: str):
         """Log start of agent execution."""
         monitoring.log_agent_activity(self.agent_name, message, "START")

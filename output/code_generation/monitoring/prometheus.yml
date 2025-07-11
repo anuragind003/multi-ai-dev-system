@@ -1,0 +1,72 @@
+# This is a basic Prometheus configuration for local development/testing.
+# For production, consider AWS Managed Prometheus (AMP) or a dedicated monitoring cluster.
+
+global:
+  scrape_interval: 15s # How frequently to scrape targets by default.
+  evaluation_interval: 15s # How frequently to evaluate rules.
+
+scrape_configs:
+  - job_name: 'fastapi-app'
+    # Replace 'localhost' with the actual hostname/IP of your FastAPI app
+    # if running in a different container or VM.
+    # Ensure your FastAPI app exposes /metrics endpoint (e.g., using fastapi-prometheus)
+    static_configs:
+      - targets: ['localhost:8000'] # Assuming FastAPI app runs on port 8000
+        labels:
+          application: 'fastapi-app'
+          environment: 'development'
+
+# Example for a node exporter if you were monitoring the host machine
+# - job_name: 'node_exporter'
+#   static_configs:
+#     - targets: ['localhost:9100']
+
+# Alerting rules (example)
+# For production, integrate with Alertmanager and notification channels (PagerDuty, Slack, Email)
+# rule_files:
+#   - "alert.rules"
+
+# Example alert.rules file content:
+# groups:
+# - name: fastapi_alerts
+#   rules:
+#   - alert: HighRequestLatency
+#     expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+#     for: 5m
+#     labels:
+#       severity: critical
+#     annotations:
+#       summary: "High request latency detected on FastAPI app"
+#       description: "The 99th percentile request latency for {{ $labels.application }} is above 0.5 seconds for 5 minutes."
+
+# To run Prometheus locally with Docker:
+# 1. Save this file as prometheus.yml in a 'monitoring' directory.
+# 2. Create a docker-compose.yml in the same directory:
+#    version: '3.8'
+#    services:
+#      prometheus:
+#        image: prom/prometheus:latest
+#        container_name: prometheus
+#        ports:
+#          - "9090:9090"
+#        volumes:
+#          - ./prometheus.yml:/etc/prometheus/prometheus.yml
+#        command:
+#          - '--config.file=/etc/prometheus/prometheus.yml'
+#          - '--storage.tsdb.path=/prometheus'
+#      grafana:
+#        image: grafana/grafana:latest
+#        container_name: grafana
+#        ports:
+#          - "3000:3000"
+#        volumes:
+#          - grafana-data:/var/lib/grafana
+#        environment:
+#          - GF_SECURITY_ADMIN_USER=admin
+#          - GF_SECURITY_ADMIN_PASSWORD=admin # Change for production!
+#        depends_on:
+#          - prometheus
+#    volumes:
+#      grafana-data:
+# 3. Run: docker compose -f monitoring/docker-compose.yml up
+# 4. Access Prometheus at http://localhost:9090 and Grafana at http://localhost:3000

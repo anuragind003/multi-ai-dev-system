@@ -1,0 +1,99 @@
+# Kubernetes Deployment for the FastAPI Backend Application
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-backend-deployment
+  labels:
+    app: fastapi-backend
+    tier: backend
+spec:
+  replicas: 2 # Number of desired pods. Adjust based on load and resource availability.
+  selector:
+    matchLabels:
+      app: fastapi-backend
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: fastapi-backend
+        tier: backend
+    spec:
+      containers:
+        - name: fastapi-backend
+          image: ghcr.io/YOUR_GITHUB_USERNAME/fastapi-backend:latest # Replace with your actual image path and tag
+          imagePullPolicy: Always # Always pull the latest image
+          ports:
+            - containerPort: 8000 # The port your FastAPI app listens on
+          env:
+            # Environment variables loaded from a Kubernetes Secret
+            - name: APP_ENV
+              value: "production"
+            - name: APP_PORT
+              value: "8000"
+            - name: APP_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets # Name of the Kubernetes Secret
+                  key: APP_NAME
+            - name: APP_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: APP_VERSION
+            - name: DEBUG
+              value: "False"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SECRET_KEY
+            - name: CORS_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: CORS_ORIGINS
+            - name: PROMETHEUS_METRICS_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: PROMETHEUS_METRICS_PATH
+          resources:
+            requests:
+              memory: "128Mi" # Request 128 MiB of memory
+              cpu: "100m"    # Request 0.1 CPU core
+            limits:
+              memory: "256Mi" # Limit to 256 MiB of memory
+              cpu: "250m"    # Limit to 0.25 CPU core
+          livenessProbe: # Checks if the container is still running
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe: # Checks if the container is ready to serve traffic
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false # Prevent privilege escalation
+            readOnlyRootFilesystem: true # Make root filesystem read-only
+            runAsNonRoot: true # Run as non-root user
+            runAsUser: 10001 # Specify a non-root user ID (must match Dockerfile's appuser UID if known, or pick a high number)
+            capabilities:
+              drop:
+                - ALL # Drop all capabilities
+      # Optional: ImagePullSecrets if using a private registry other than GHCR with default token
+      # imagePullSecrets:
+      #   - name: regcred # Name of your image pull secret

@@ -1,0 +1,29 @@
+# Use the official Node.js image
+FROM node:18-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json (or yarn.lock)
+# to install dependencies first to leverage Docker cache
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install --production
+
+# Copy the rest of the application code
+COPY . .
+
+# Build the application if it's a TypeScript/compiled Node.js app (e.g., NestJS)
+# For a simple Express app, this might not be needed.
+# If using NestJS, uncomment:
+# RUN npm run build
+
+# Expose the port the Node.js application listens on
+EXPOSE 3001 # Common port for Node.js backends
+
+# Command to run the application
+# For Express:
+CMD ["node", "src/index.js"]
+# For NestJS (after build):
+# CMD ["node", "dist/main.js"]

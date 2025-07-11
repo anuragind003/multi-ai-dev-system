@@ -1,0 +1,58 @@
+groups:
+  - name: fastapi_alerts
+    rules:
+      - alert: FastAPIHighErrorRate
+        expr: sum(rate(http_requests_total{job="fastapi_app", status_code=~"5xx|4xx"}[5m])) by (endpoint) > 0.5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI endpoint {{ $labels.endpoint }} has a high error rate"
+          description: "The endpoint {{ $labels.endpoint }} is experiencing an elevated rate of 4xx or 5xx errors (current rate: {{ $value }} req/s)."
+
+      - alert: FastAPIHighLatency
+        expr: histogram_quantile(0.99, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket{job="fastapi_app"}[5m]))) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI endpoint {{ $labels.endpoint }} has high latency"
+          description: "The 99th percentile latency for endpoint {{ $labels.endpoint }} is above 0.5 seconds (current value: {{ $value }}s)."
+
+      - alert: FastAPIInstanceDown
+        expr: up{job="fastapi_app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI instance is down"
+          description: "The FastAPI application instance is not reachable by Prometheus."
+
+  - name: infrastructure_alerts
+    rules:
+      - alert: HostHighCPUUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host {{ $labels.instance }} CPU usage is high"
+          description: "CPU usage on {{ $labels.instance }} is at {{ $value }}% for 5 minutes."
+
+      - alert: HostLowDiskSpace
+        expr: (node_filesystem_avail_bytes{fstype="ext4", mountpoint="/"} / node_filesystem_size_bytes{fstype="ext4", mountpoint="/"}) * 100 < 10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host {{ $labels.instance }} disk space is low"
+          description: "Disk space on {{ $labels.instance }} is less than 10% available (current: {{ $value }}%)."
+
+      - alert: PrometheusInstanceDown
+        expr: up{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus instance is down"
+          description: "The Prometheus server itself is not reachable."

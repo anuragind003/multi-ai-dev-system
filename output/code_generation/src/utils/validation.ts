@@ -1,0 +1,64 @@
+import { z, ZodSchema, ZodError } from 'zod';
+import { LoginCredentials, Customer } from '@utils/types'; // Import types for clarity
+
+/**
+ * Zod schema for login credentials validation.
+ */
+export const LoginSchema = z.object({
+  username: z.string().min(1, { message: 'Username is required.' }),
+  password: z.string().min(1, { message: 'Password is required.' }),
+});
+
+/**
+ * Zod schema for LAN ID search input validation.
+ */
+export const LanIdSearchSchema = z.object({
+  lanId: z.string()
+    .min(1, { message: 'LAN ID is required.' })
+    .regex(/^[A-Za-z0-9]+$/, { message: 'LAN ID must be alphanumeric.' })
+    .max(20, { message: 'LAN ID cannot exceed 20 characters.' }),
+});
+
+/**
+ * Generic function to validate form data against a Zod schema.
+ * @param schema - The Zod schema to validate against.
+ * @param data - The data object to validate.
+ * @returns An object with field-specific error messages if validation fails, otherwise null.
+ */
+export const validateForm = <T extends object>(
+  schema: ZodSchema<T>,
+  data: T
+): { [key: string]: string } | null => {
+  try {
+    schema.parse(data);
+    return null; // No errors
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const errors: { [key: string]: string } = {};
+      error.errors.forEach(err => {
+        if (err.path.length > 0) {
+          errors[err.path[0]] = err.message;
+        }
+      });
+      return errors;
+    }
+    // Fallback for unexpected errors
+    console.error("Unexpected validation error:", error);
+    return { general: "An unexpected validation error occurred." };
+  }
+};
+
+// --- Type Definitions (Moved here for file count, typically in a separate types.ts) ---
+// These types are used across the application for data consistency.
+
+export type Customer = {
+  id: string;
+  lanId: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: 'Active' | 'Inactive';
+};
+
+export type LoginCredentials = z.infer<typeof LoginSchema>;
+export type LanIdSearchInput = z.infer<typeof LanIdSearchSchema>;

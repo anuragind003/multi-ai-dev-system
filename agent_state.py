@@ -34,6 +34,10 @@ class AgentState(TypedDict, total=False):
     # Holds the final TestValidationOutput
     test_validation_result: Dict[str, Any]
 
+    # === Work Items and Completion Tracking ===
+    current_work_item: Optional[Dict[str, Any]]
+    completed_work_items: List[Dict[str, Any]]
+
     # --- Human-in-the-loop and Resumption Flags ---
     human_decision: Optional[str]               # The decision from the user (e.g., "proceed")
     revision_feedback: Optional[Dict[str, Any]] # Detailed feedback if the user requests revision
@@ -41,6 +45,11 @@ class AgentState(TypedDict, total=False):
     current_approval_stage: Optional[str]       # Name of the stage being approved (e.g., "brd_analysis")
     completed_stages: List[str]                 # List of stages that have been successfully approved
     human_approval_request: Optional[Dict[str, Any]]  # Standardized human approval request payload
+
+    # === Internal routing and state fields for unified workflow ===
+    _unified_decision: Optional[str]
+    _work_item_id: Optional[str]
+    circuit_breaker_triggered: bool
 
     # === Phase Iteration Control ===
     current_phase_name: Optional[str]
@@ -90,6 +99,10 @@ def create_initial_agent_state(
         code_generation_result={"generated_files": []},
         code_review_feedback=None,
         test_validation_result={},
+        
+        # Work items
+        current_work_item=None,
+        completed_work_items=[],
         
         # Human-in-the-loop state
         human_decision=None,
@@ -204,6 +217,10 @@ class StateFields(str, Enum):
     SYSTEM_DESIGN = "system_design"
     IMPLEMENTATION_PLAN = "implementation_plan"
     CODE_GENERATION_OUTPUT = "code_generation_output"
+
+    # Work Items and Completion Tracking
+    COMPLETED_WORK_ITEMS = "completed_work_items"
+    CURRENT_WORK_ITEM = "current_work_item"
 
     # Consolidated Loop Results
     CODE_GENERATION_RESULT = "code_generation_result"

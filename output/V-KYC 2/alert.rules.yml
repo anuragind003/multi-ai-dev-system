@@ -1,0 +1,49 @@
+# alert.rules.yml
+# Prometheus Alerting Rules for FastAPI Application
+
+groups:
+  - name: fastapi_app_alerts
+    rules:
+      - alert: FastAPIInstanceDown
+        expr: up{job="fastapi_app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI instance {{ $labels.instance }} is down"
+          description: "The FastAPI application instance at {{ $labels.instance }} is not reachable for more than 1 minute. This indicates a service outage."
+
+      - alert: FastAPIHighErrorRate
+        # This rule requires a custom metric from your FastAPI app, e.g., `http_requests_total{status_code=~"5.."} / http_requests_total`
+        # For demonstration, we'll use a placeholder.
+        # If you implement Prometheus client in FastAPI, you'd have metrics like `http_requests_total`.
+        # Example: rate(http_requests_total{job="fastapi_app", status_code=~"5.."}[5m]) / rate(http_requests_total{job="fastapi_app"}[5m]) > 0.05
+        expr: vector(0) # Placeholder: Replace with actual metric expression
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FastAPI instance {{ $labels.instance }} has high error rate"
+          description: "The FastAPI application at {{ $labels.instance }} is experiencing more than 5% 5xx errors over the last 5 minutes."
+
+      - alert: EC2InstanceCPUUtilizationHigh
+        # Requires Node Exporter or CloudWatch exporter
+        # Example for Node Exporter: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle", job="node_exporter"}[5m])) * 100) > 80
+        expr: vector(0) # Placeholder: Replace with actual metric expression
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "EC2 instance {{ $labels.instance }} CPU utilization is high"
+          description: "The EC2 instance {{ $labels.instance }} CPU utilization is above 80% for 5 minutes."
+
+      - alert: EC2InstanceDiskSpaceLow
+        # Requires Node Exporter
+        # Example: node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs",job="node_exporter"} / node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs",job="node_exporter"} * 100 < 10
+        expr: vector(0) # Placeholder: Replace with actual metric expression
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "EC2 instance {{ $labels.instance }} disk space is low"
+          description: "The disk space on EC2 instance {{ $labels.instance }} is less than 10% available."

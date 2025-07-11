@@ -1,0 +1,179 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  AWS_REGION: us-east-1 # Replace with your desired AWS region
+  ECR_REPOSITORY: fastapi-production-service
+  ECS_CLUSTER_NAME: fastapi-production-cluster
+  ECS_SERVICE_NAME: fastapi-production-service
+  ECS_TASK_DEFINITION: .github/workflows/task-definition.json # Path to your task definition template
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # Required for OIDC authentication with AWS
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Run Linting (Pylint, Black, Isort)
+        run: |
+          poetry run pylint app/
+          poetry run black --check app/ tests/
+          poetry run isort --check-only app/ tests/
+
+      - name: Run Unit Tests
+        run: poetry run pytest tests/unit/
+
+      - name: Build Docker image for Integration Tests
+        run: docker build -t fastapi-integration-test .
+
+      - name: Run Integration Tests
+        run: |
+          docker run -d --name fastapi-app -p 8000:8000 fastapi-integration-test
+          sleep 10 # Give the container time to start
+          poetry run pytest tests/integration/
+        # Ensure the container is stopped even if tests fail
+        always:
+          run: docker stop fastapi-app && docker rm fastapi-app
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role # Replace with your OIDC role ARN
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.build-image.outputs.image_uri }}
+          format: 'table'
+          exit-code: '1' # Fail if vulnerabilities are found
+          severity: 'CRITICAL,HIGH'
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} --query taskDefinition > task-definition.json || true
+          # If task definition doesn't exist yet, create a dummy one for the first run
+          if [ ! -f task-definition.json ]; then
+            echo '{
+              "family": "${{ env.ECS_SERVICE_NAME }}",
+              "containerDefinitions": [
+                {
+                  "name": "${{ env.ECS_SERVICE_NAME }}",
+                  "image": "nginx:latest", # Placeholder, will be replaced
+                  "portMappings": [
+                    {
+                      "containerPort": 8000,
+                      "hostPort": 8000,
+                      "protocol": "tcp"
+                    }
+                  ],
+                  "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                      "awslogs-group": "/ecs/${{ env.ECS_SERVICE_NAME }}",
+                      "awslogs-region": "${{ env.AWS_REGION }}",
+                      "awslogs-stream-prefix": "ecs"
+                    }
+                  }
+                }
+              ],
+              "requiresCompatibilities": ["FARGATE"],
+              "networkMode": "awsvpc",
+              "cpu": "256",
+              "memory": "512"
+            }' > task-definition.json
+          fi
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.ECS_SERVICE_NAME }}
+          image: ${{ steps.build-image.outputs.image_uri }}
+
+      - name: Deploy Amazon ECS task definition
+        if: github.ref == 'refs/heads/main' # Only deploy to main branch
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_NAME }}
+          cluster: ${{ env.ECS_CLUSTER_NAME }}
+          wait-for-service-stability: true
+
+      - name: Run Performance Tests (Optional - on successful deployment to main)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # In a real scenario, you'd get the ALB DNS from Terraform outputs
+          # For this example, assume you know the ALB DNS or fetch it
+          ALB_DNS=$(aws elbv2 describe-load-balancers --names fastapi-production-alb --query "LoadBalancers[0].DNSName" --output text)
+          echo "Running performance tests against: http://$ALB_DNS"
+          # locust -f locustfile.py --host http://$ALB_DNS --users 10 --spawn-rate 2 --run-time 60s --headless --csv=locust_results
+          echo "Performance tests would run here. See locustfile.py for details."
+
+      - name: Terraform Plan (for main branch)
+        if: github.ref == 'refs/heads/main'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.x
+        env:
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: fastapi-production-service
+          TF_VAR_environment: production
+        run: |
+          cd terraform
+          terraform init
+          terraform plan -out=tfplan.out
+
+      - name: Terraform Apply (for main branch)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.x
+        env:
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: fastapi-production-service
+          TF_VAR_environment: production
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan.out

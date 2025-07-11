@@ -1,0 +1,157 @@
+python
+### FILE: README.md
+# Task List API
+
+## Overview
+
+This is a simple REST API for managing a task list, built with FastAPI and Python.
+
+## Features
+
+-   Create, read, update, and delete tasks.
+-   Input validation using Pydantic.
+-   Basic API key authentication.
+-   CORS enabled for cross-origin requests.
+-   Uses SQLite for data storage (default).  Can be configured to use PostgreSQL.
+-   Includes basic unit tests.
+
+## Prerequisites
+
+-   Python 3.9 or higher
+-   Docker (optional, for containerization)
+
+## Installation
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone <repository_url>
+    cd <repository_name>
+    ```
+
+2.  **Create a virtual environment (recommended):**
+
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Linux/macOS
+    # .\.venv\Scripts\activate  # On Windows
+    ```
+
+3.  **Install dependencies:**
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  **Create a `.env` file** in the root directory and set the following environment variables:
+
+    ```
+    DATABASE_URL=sqlite:///./test.db  # Or your PostgreSQL connection string
+    API_KEY=your_api_key
+    ```
+
+## Running the API
+
+1.  **Using Uvicorn (for development):**
+
+    ```bash
+    uvicorn main:app --reload
+    ```
+
+    This will start the API server on `http://127.0.0.1:8000`.
+
+2.  **Using Docker (recommended for production):**
+
+    -   Build the Docker image:
+
+        ```bash
+        docker build -t task-list-api .
+        ```
+
+    -   Run the Docker container:
+
+        ```bash
+        docker run -d -p 8000:8000 --env-file .env task-list-api
+        ```
+
+        This will start the API server in a container, accessible on `http://localhost:8000`.
+
+## Testing
+
+1.  **Run the tests:**
+
+    ```bash
+    pytest
+    ```
+
+    This will execute the unit tests located in the `tests` directory.
+
+## API Endpoints
+
+-   `GET /tasks`: Retrieve all tasks.  Requires `X-API-Key` header.
+-   `POST /tasks`: Create a new task. Requires `X-API-Key` header.
+    -   Request body:
+        ```json
+        {
+            "title": "Task title",
+            "description": "Task description"
+        }
+        ```
+-   `GET /tasks/{task_id}`: Retrieve a task by ID. Requires `X-API-Key` header.
+-   `PUT /tasks/{task_id}`: Update a task by ID. Requires `X-API-Key` header.
+    -   Request body (optional fields):
+        ```json
+        {
+            "title": "Updated title",
+            "description": "Updated description",
+            "is_completed": true
+        }
+        ```
+-   `DELETE /tasks/{task_id}`: Delete a task by ID. Requires `X-API-Key` header.
+
+## Example Usage (using `curl`)
+
+-   **Get all tasks:**
+
+    ```bash
+    curl -H "X-API-Key: your_api_key" http://localhost:8000/tasks
+    ```
+
+-   **Create a task:**
+
+    ```bash
+    curl -X POST -H "X-API-Key: your_api_key" -H "Content-Type: application/json" -d '{"title": "Example Task", "description": "This is an example task."}' http://localhost:8000/tasks
+    ```
+
+-   **Get a task by ID:**
+
+    ```bash
+    curl -H "X-API-Key: your_api_key" http://localhost:8000/tasks/1
+    ```
+
+-   **Update a task:**
+
+    ```bash
+    curl -X PUT -H "X-API-Key: your_api_key" -H "Content-Type: application/json" -d '{"is_completed": true}' http://localhost:8000/tasks/1
+    ```
+
+-   **Delete a task:**
+
+    ```bash
+    curl -X DELETE -H "X-API-Key: your_api_key" http://localhost:8000/tasks/1
+    ```
+
+## Security Considerations
+
+-   **API Key:** The current implementation uses a simple API key for authentication.  **In a production environment, you should replace this with a more robust authentication mechanism**, such as JWT (JSON Web Tokens) or OAuth 2.0.  Store the API key securely (e.g., environment variables, secrets management).
+-   **Input Validation:**  The API uses Pydantic models for input validation, which helps prevent common vulnerabilities.
+-   **CORS:**  CORS is configured to allow requests from specific origins.  Adjust the `origins` list in `main.py` to match your frontend's domain.
+-   **Database:**  Use a secure database connection string and follow best practices for database security.
+
+## Future Improvements
+
+-   Implement user authentication and authorization.
+-   Add pagination for large task lists.
+-   Implement more sophisticated error handling and logging.
+-   Add support for different database backends (e.g., PostgreSQL, MySQL).
+-   Implement a CI/CD pipeline for automated testing and deployment.

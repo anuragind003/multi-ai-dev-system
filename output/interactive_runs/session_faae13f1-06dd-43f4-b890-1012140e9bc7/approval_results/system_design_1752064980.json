@@ -1,0 +1,557 @@
+{
+  "session_id": "session_faae13f1-06dd-43f4-b890-1012140e9bc7",
+  "approval_type": "system_design",
+  "timestamp": 1752064980,
+  "approval_data": {
+    "architecture": {
+      "pattern": "Monolithic Architecture",
+      "justification": "The project has a well-defined, limited scope focused on a single business function (retrieving V-KYC recordings). A monolithic approach is simpler to develop, test, and deploy compared to a microservices architecture. It avoids the overhead of inter-service communication and distributed system management, which is unnecessary for this application's scale. This allows for faster delivery and easier maintenance by a small team.",
+      "key_benefits": [
+        "Simplified development and debugging process.",
+        "Easier and more straightforward deployment.",
+        "Reduced operational complexity.",
+        "Lower initial infrastructure costs."
+      ],
+      "potential_drawbacks": [
+        "Tightly coupled components can make future changes more difficult if the scope expands significantly.",
+        "Scaling must be done for the entire application, not individual components.",
+        "A single point of failure could impact the entire system's availability."
+      ]
+    },
+    "components": [
+      {
+        "name": "Frontend Web Portal",
+        "description": "A single-page application (SPA) that provides the user interface for authorized personnel to search, view, and download V-KYC recordings.",
+        "category": "frontend",
+        "technologies": [
+          "React",
+          "TypeScript",
+          "Axios"
+        ],
+        "dependencies": [
+          "Backend API"
+        ],
+        "responsibilities": [
+          "Render user interface for login, search, and results display.",
+          "Handle user authentication state.",
+          "Manage file uploads for bulk search.",
+          "Make API calls to the backend for data and file downloads.",
+          "Display search results in a paginated table.",
+          "Provide user-friendly error messages."
+        ],
+        "design_patterns": [
+          "Component-Based Architecture",
+          "Container/Presentational Pattern"
+        ]
+      },
+      {
+        "name": "Backend API",
+        "description": "A RESTful API server that handles all business logic, data access, and file system operations.",
+        "category": "backend",
+        "technologies": [
+          "Python",
+          "FastAPI",
+          "SQLAlchemy (ORM)"
+        ],
+        "dependencies": [
+          "Database",
+          "NFS Video Storage"
+        ],
+        "responsibilities": [
+          "Provide secure REST endpoints for the frontend.",
+          "Implement user authentication (JWT) and role-based authorization.",
+          "Process search queries (single and bulk).",
+          "Interact with the PostgreSQL database to fetch recording metadata.",
+          "Access the NFS to retrieve and stream video files.",
+          "Log all significant user actions to the audit log table.",
+          "Validate input data and file uploads."
+        ],
+        "design_patterns": [
+          "RESTful API",
+          "Repository Pattern (for data access)"
+        ]
+      },
+      {
+        "name": "Database",
+        "description": "A relational database to store metadata about recordings, user credentials, and audit trail information.",
+        "category": "database",
+        "technologies": [
+          "PostgreSQL"
+        ],
+        "dependencies": [],
+        "responsibilities": [
+          "Persist user account information and roles.",
+          "Store metadata for each V-KYC recording, including LAN and file path.",
+          "Maintain an audit log of user activities for security and compliance.",
+          "Ensure data integrity through constraints and relationships."
+        ],
+        "design_patterns": []
+      },
+      {
+        "name": "NFS Video Storage",
+        "description": "The existing Network File System (NFS) server where the raw V-KYC video recordings are stored.",
+        "category": "storage",
+        "technologies": [
+          "NFS"
+        ],
+        "dependencies": [],
+        "responsibilities": [
+          "Store and provide access to V-KYC video files.",
+          "Ensure high availability and sufficient read performance for file access."
+        ],
+        "design_patterns": []
+      }
+    ],
+    "data_model": {
+      "schema_type": "Relational",
+      "justification": "A relational model is ideal for this project due to the structured nature of the data (users, recordings, logs) and the clear relationships between them. It provides strong data consistency and integrity through schemas and constraints, which is crucial for audit-related data. PostgreSQL is a robust, feature-rich choice for this model.",
+      "tables": [
+        {
+          "name": "users",
+          "purpose": "To store information about authorized users who can access the portal.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ],
+              "description": "Unique identifier for the user."
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL",
+                "UNIQUE"
+              ],
+              "description": "Login username for the user."
+            },
+            {
+              "name": "hashed_password",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ],
+              "description": "Hashed password for security."
+            },
+            {
+              "name": "role",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL"
+              ],
+              "description": "User role (e.g., 'team_lead', 'process_manager')."
+            },
+            {
+              "name": "is_active",
+              "type": "BOOLEAN",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT TRUE"
+              ],
+              "description": "Flag to enable or disable user access."
+            }
+          ],
+          "relationships": []
+        },
+        {
+          "name": "recordings",
+          "purpose": "To store metadata about each V-KYC recording, linking it to its file on the NFS.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ],
+              "description": "Unique identifier for the recording record."
+            },
+            {
+              "name": "lan_number",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL",
+                "UNIQUE",
+                "INDEX"
+              ],
+              "description": "Loan Application Number (LAN)."
+            },
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "constraints": [
+                "NOT NULL"
+              ],
+              "description": "Full path to the video file on the NFS server."
+            },
+            {
+              "name": "recording_date",
+              "type": "DATE",
+              "constraints": [
+                "NOT NULL",
+                "INDEX"
+              ],
+              "description": "The date the V-KYC was recorded."
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT NOW()"
+              ],
+              "description": "Timestamp when the record was created."
+            }
+          ],
+          "relationships": []
+        },
+        {
+          "name": "audit_logs",
+          "purpose": "To log all significant user actions for security, compliance, and auditing purposes.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ],
+              "description": "Unique identifier for the log entry."
+            },
+            {
+              "name": "user_id",
+              "type": "INTEGER",
+              "constraints": [
+                "NOT NULL",
+                "FOREIGN KEY (users.id)"
+              ],
+              "description": "The user who performed the action."
+            },
+            {
+              "name": "action",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ],
+              "description": "The action performed (e.g., 'LOGIN', 'SEARCH', 'DOWNLOAD_SINGLE', 'DOWNLOAD_BULK')."
+            },
+            {
+              "name": "details",
+              "type": "JSONB",
+              "constraints": [],
+              "description": "JSON object containing details of the action (e.g., searched LAN, downloaded file)."
+            },
+            {
+              "name": "timestamp",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT NOW()"
+              ],
+              "description": "When the action occurred."
+            }
+          ],
+          "relationships": [
+            {
+              "type": "many-to-one",
+              "target_table": "users",
+              "on": "user_id"
+            }
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "audit_logs",
+          "to": "users",
+          "type": "Many-to-One",
+          "description": "Each audit log entry is created by one user."
+        }
+      ]
+    },
+    "api_endpoints": {
+      "style": "REST",
+      "base_url": "/api/v1",
+      "authentication": "JWT (JSON Web Tokens) sent in Authorization header (Bearer scheme).",
+      "error_handling": "Uses standard HTTP status codes. Error responses are in JSON format: `{\"detail\": \"Error message\"}`. 400 for bad requests, 401 for unauthenticated, 403 for forbidden, 404 for not found, 422 for validation errors, and 500 for internal server errors.",
+      "rate_limiting_strategy": "A simple rate limit (e.g., 100 requests per minute per user) will be applied to all authenticated endpoints to prevent abuse.",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/token",
+          "purpose": "Authenticate a user and receive a JWT access token.",
+          "parameters": [
+            {
+              "name": "username",
+              "type": "string",
+              "description": "User's login username."
+            },
+            {
+              "name": "password",
+              "type": "string",
+              "description": "User's password."
+            }
+          ],
+          "response": {
+            "access_token": "string (jwt)",
+            "token_type": "bearer"
+          },
+          "authentication_required": false,
+          "rate_limiting_applied": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings",
+          "purpose": "Search for recordings by LAN, date, or month. Supports pagination.",
+          "parameters": [
+            {
+              "name": "lan_number",
+              "type": "string",
+              "description": "Search by a single Loan Application Number."
+            },
+            {
+              "name": "start_date",
+              "type": "string (YYYY-MM-DD)",
+              "description": "Filter recordings from this date."
+            },
+            {
+              "name": "end_date",
+              "type": "string (YYYY-MM-DD)",
+              "description": "Filter recordings up to this date."
+            },
+            {
+              "name": "page",
+              "type": "integer",
+              "description": "Page number for pagination (default: 1)."
+            },
+            {
+              "name": "size",
+              "type": "integer",
+              "description": "Number of items per page (default: 10)."
+            }
+          ],
+          "response": {
+            "items": [
+              {
+                "lan_number": "string",
+                "recording_date": "string (YYYY-MM-DD)"
+              }
+            ],
+            "total": "integer",
+            "page": "integer",
+            "size": "integer"
+          },
+          "authentication_required": true,
+          "rate_limiting_applied": true
+        },
+        {
+          "method": "POST",
+          "path": "/recordings/bulk-search",
+          "purpose": "Search for multiple recordings by uploading a .csv or .txt file of LANs.",
+          "parameters": [
+            {
+              "name": "file",
+              "type": "file",
+              "description": "A .csv or .txt file containing 2 to 50 LANs, one per line."
+            }
+          ],
+          "response": {
+            "items": [
+              {
+                "lan_number": "string",
+                "recording_date": "string (YYYY-MM-DD)",
+                "status": "string (e.g., 'Found', 'Not Found')"
+              }
+            ],
+            "total": "integer"
+          },
+          "authentication_required": true,
+          "rate_limiting_applied": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings/download/{lan_number}",
+          "purpose": "Download the video file for a specific LAN.",
+          "parameters": [
+            {
+              "name": "lan_number",
+              "type": "string",
+              "description": "The LAN of the recording to download."
+            }
+          ],
+          "response": {
+            "description": "Returns the video file as a stream (e.g., 'video/mp4')."
+          },
+          "authentication_required": true,
+          "rate_limiting_applied": true
+        },
+        {
+          "method": "POST",
+          "path": "/recordings/bulk-download",
+          "purpose": "Download multiple recordings as a single zip archive.",
+          "parameters": [
+            {
+              "name": "lan_numbers",
+              "type": "array of strings",
+              "description": "A JSON array of up to 10 LANs to download."
+            }
+          ],
+          "response": {
+            "description": "Returns a zip file as a stream ('application/zip')."
+          },
+          "authentication_required": true,
+          "rate_limiting_applied": true
+        }
+      ]
+    },
+    "security": {
+      "authentication_method": "JWT (JSON Web Tokens)",
+      "authorization_strategy": "Role-Based Access Control (RBAC). API endpoints will be protected and require a valid JWT. The user's role (e.g., 'team_lead', 'process_manager') will be checked from the token payload to authorize actions.",
+      "data_encryption": {
+        "in_transit": "All communication between the client, backend, and other services will be encrypted using TLS 1.2+.",
+        "at_rest": "Database-level encryption (e.g., PostgreSQL TDE) and filesystem-level encryption for the NFS server will be enabled to protect sensitive data."
+      },
+      "security_measures": [
+        {
+          "category": "Authentication",
+          "implementation": "Users will authenticate with a username and strong password. The backend will issue a short-lived JWT upon successful login.",
+          "mitigation": "Unauthorized access.",
+          "priority": "High"
+        },
+        {
+          "category": "Authorization",
+          "implementation": "Backend API endpoints will be decorated to check for specific roles ('team_lead', 'process_manager') contained within the JWT claims before processing a request.",
+          "mitigation": "Privilege escalation and unauthorized data access.",
+          "priority": "High"
+        },
+        {
+          "category": "Input Validation",
+          "implementation": "All user input (search parameters, file uploads) will be strictly validated on the backend. This includes checking file types (.csv, .txt), file size, and format of LANs.",
+          "mitigation": "Injection attacks, denial of service, and processing errors.",
+          "priority": "High"
+        },
+        {
+          "category": "Audit Logging",
+          "implementation": "All critical actions (login, search, download) will be logged to the `audit_logs` table with user ID, action details, and timestamp.",
+          "mitigation": "Lack of accountability and difficulty in forensic analysis after a security incident.",
+          "priority": "High"
+        },
+        {
+          "category": "Secure Headers",
+          "implementation": "The web server will be configured to send security headers like Content-Security-Policy (CSP), Strict-Transport-Security (HSTS), and X-Content-Type-Options.",
+          "mitigation": "Cross-Site Scripting (XSS) and other client-side attacks.",
+          "priority": "Medium"
+        }
+      ],
+      "vulnerability_mitigation_strategies": [
+        "SQL Injection: Use of a parameterized query library (ORM like SQLAlchemy) to prevent SQL injection attacks.",
+        "Cross-Site Scripting (XSS): React inherently escapes content rendered in JSX. A strict Content Security Policy (CSP) will be implemented as a second layer of defense.",
+        "Cross-Site Request Forgery (CSRF): As a stateless API using JWT in Authorization headers, the application is not vulnerable to traditional CSRF attacks.",
+        "Insecure Direct Object References (IDOR): All data access requests will be checked to ensure the authenticated user has the permission to access the requested resource."
+      ],
+      "compliance_standards": [
+        "Internal Audit Requirements",
+        "Data Privacy Best Practices"
+      ]
+    },
+    "scalability_and_performance": {
+      "database": "Key columns in the `recordings` table (`lan_number`, `recording_date`) will be indexed to ensure fast query performance. Connection pooling will be used by the backend to manage database connections efficiently.",
+      "backend_api": "The FastAPI application is stateless and can be scaled horizontally by running multiple instances behind a load balancer if user load increases.",
+      "file_downloads": "Video files will be sent using a streaming response to avoid loading the entire file into the backend's memory, reducing memory consumption and allowing for concurrent downloads. For bulk downloads, files will be zipped on-the-fly into a streaming archive.",
+      "caching": "Frequently accessed, non-sensitive data could be cached using an in-memory store like Redis to reduce database load, though this is a future optimization.",
+      "nfs_bottleneck": "The NFS server is a potential performance bottleneck. Its performance will be monitored. If it becomes an issue, options include optimizing NFS settings or migrating files to an object storage solution like AWS S3 for better scalability."
+    },
+    "deployment_strategy": {
+      "containerization": "The Frontend (React) and Backend (FastAPI) applications will be containerized using Docker to ensure consistency across development, staging, and production environments.",
+      "orchestration": "Docker Compose will be used for managing the multi-container application (frontend, backend, database) in development and simple production environments.",
+      "ci_cd_pipeline": "A CI/CD pipeline (e.g., using GitHub Actions or Jenkins) will be set up to automate testing, building Docker images, and deploying to the server upon commits to the main branch.",
+      "environment": "The application will be deployed on a Linux server (e.g., Ubuntu on-premise VM or AWS EC2). An Nginx server will act as a reverse proxy to route traffic to the appropriate container and handle SSL termination.",
+      "nfs_access": "The host server will have the LTF NFS share mounted, and this mount point will be passed as a volume to the backend Docker container to provide file access."
+    },
+    "monitoring_and_logging": {
+      "application_logging": "The FastAPI backend will generate structured logs (JSON format) for all incoming requests, errors, and key business events. Logs will be written to standard output to be collected by the container runtime.",
+      "audit_logging": "Business-critical actions (logins, searches, downloads) are logged to the `audit_logs` table in the PostgreSQL database for compliance and security reviews.",
+      "performance_monitoring": "A monitoring stack like Prometheus and Grafana will be implemented. The backend will expose a `/metrics` endpoint for Prometheus to scrape key performance indicators (KPIs) like request latency, error rates, and active connections.",
+      "alerting": "Alerts will be configured in Prometheus/Alertmanager to notify the IT team of critical issues, such as high error rates, application downtime, or high resource utilization."
+    },
+    "error_handling_strategy": "The system will employ a layered error handling strategy. The backend API will use standard HTTP status codes and consistent JSON error payloads to communicate issues to the frontend. The frontend will translate these API errors into user-friendly notifications (e.g., 'LAN not found', 'Invalid file format'). All unexpected server-side errors will be caught, logged with a full stack trace for debugging, and will result in a generic '500 Internal Server Error' response to the client to avoid exposing internal implementation details.",
+    "development_phases_overview": [
+      {
+        "name": "Phase 1: Foundation & Core Backend",
+        "description": "Setup project structure, CI/CD pipeline, database schema, and implement core backend functionality including user authentication, single LAN search, and single file download.",
+        "priority": "High",
+        "dependencies": [],
+        "tasks": [
+          "Initialize Git repository and project structure.",
+          "Define and create database schema (users, recordings, audit_logs).",
+          "Implement user registration (for initial setup) and login endpoint (JWT).",
+          "Create API endpoint for searching a single LAN.",
+          "Create API endpoint for downloading a single recording.",
+          "Implement basic audit logging for core actions."
+        ],
+        "estimated_duration": "2 weeks"
+      },
+      {
+        "name": "Phase 2: Frontend Development",
+        "description": "Develop the React frontend for user login, the main dashboard, search functionality, and displaying paginated results.",
+        "priority": "High",
+        "dependencies": [
+          "Phase 1: Foundation & Core Backend"
+        ],
+        "tasks": [
+          "Create login page and authentication flow.",
+          "Build the main dashboard layout.",
+          "Implement the search form (by LAN, date).",
+          "Develop the results table with pagination.",
+          "Integrate with backend APIs for search and download."
+        ],
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 3: Bulk Operations",
+        "description": "Implement the bulk search via file upload and the 'Download All' functionality for the current page.",
+        "priority": "High",
+        "dependencies": [
+          "Phase 1: Foundation & Core Backend",
+          "Phase 2: Frontend Development"
+        ],
+        "tasks": [
+          "Create backend API endpoint to handle file upload and parse LANs.",
+          "Create backend API endpoint for bulk downloading (zipping files).",
+          "Update frontend to include file upload component.",
+          "Implement 'Download All' button functionality on the frontend.",
+          "Add validation for file type and number of LANs."
+        ],
+        "estimated_duration": "2 weeks"
+      },
+      {
+        "name": "Phase 4: Testing, Security & Deployment",
+        "description": "Conduct comprehensive testing, perform security hardening, and deploy the application to the production environment.",
+        "priority": "High",
+        "dependencies": [
+          "Phase 1: Foundation & Core Backend",
+          "Phase 2: Frontend Development",
+          "Phase 3: Bulk Operations"
+        ],
+        "tasks": [
+          "Write unit and integration tests.",
+          "Conduct User Acceptance Testing (UAT) with VKYC Team Leads.",
+          "Perform security audit and penetration testing.",
+          "Configure production environment (server, Nginx, NFS mount).",
+          "Deploy application to production.",
+          "Provide user training and documentation."
+        ],
+        "estimated_duration": "2 weeks"
+      }
+    ],
+    "key_risks": [
+      "NFS Performance: The NFS server could become a performance bottleneck during peak usage or bulk downloads. Mitigation: Performance monitoring and potential infrastructure upgrades.",
+      "Unauthorized Access: Improper implementation of authentication or authorization could expose sensitive customer data. Mitigation: Strict RBAC, regular security audits, and comprehensive logging.",
+      "Data Integrity: The metadata in the database must accurately map to the files on the NFS. An incorrect or out-of-sync mapping process could lead to wrong files being served. Mitigation: Implement a robust and auditable data ingestion/synchronization script.",
+      "Scalability of Bulk Downloads: Zipping and streaming many large files on-the-fly can be CPU and I/O intensive. Mitigation: Enforce limits on bulk download size (as per BRD) and monitor server performance."
+    ],
+    "design_justification": "This system design directly addresses the business need for a self-service V-KYC recording portal by proposing a pragmatic and secure solution. The choice of a Monolithic architecture with a React/FastAPI/PostgreSQL stack is cost-effective and allows for rapid development, which is suitable for the project's limited scope. The design explicitly incorporates solutions for the gaps identified in the BRD analysis, such as a dedicated audit log table, a clear error handling strategy, and robust security measures (RBAC, JWT). By containerizing the application and defining a clear deployment and monitoring strategy, the design ensures maintainability and reliability, meeting all stated requirements and success criteria.",
+    "data_flow": "1. An authorized user (VKYC Team Lead) navigates to the web portal and is presented with a login screen. 2. The user enters their credentials into the React Frontend, which sends them to the FastAPI Backend's `/auth/token` endpoint. 3. The Backend validates the credentials against the `users` table in the PostgreSQL database and returns a JWT. 4. The Frontend stores this JWT and includes it in the `Authorization` header of all subsequent requests. 5. The user initiates a search, either by entering a single LAN or by uploading a CSV/TXT file for a bulk search. 6. The Frontend sends the request to the appropriate Backend API endpoint (`/recordings` or `/recordings/bulk-search`). 7. The Backend validates the JWT, authorizes the user's role, and queries the `recordings` table in PostgreSQL to find metadata matching the requested LAN(s). 8. The Backend logs this search action in the `audit_logs` table. 9. A paginated list of found recordings is returned to the Frontend and displayed in a table. 10. The user clicks a download link for a single recording. 11. The Frontend calls the `/recordings/download/{lan_number}` endpoint. 12. The Backend validates the request, retrieves the file path from the `recordings` table, reads the corresponding video file from the mounted NFS share, and streams the file content back to the user's browser, triggering a download. 13. The download action is logged in the `audit_logs` table."
+  },
+  "workflow_state_snapshot": {}
+}

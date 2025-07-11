@@ -379,11 +379,18 @@ async def get_session_history(session_id: str):
 
 @app.get("/api/session-files/{session_id}")
 async def get_session_files(session_id: str):
-    """Get the file tree for a specific session's generated output."""
-    session_output_dir = os.path.join("output", "interactive_runs", session_id, "generated_code")
+    """
+    Get the file tree for a specific session's generated output.
+    This now checks the centralized output directory.
+    """
+    # The primary, centralized output directory for all code generation
+    session_output_dir = os.path.join("output", "code_generation")
     
     if not os.path.exists(session_output_dir):
-        raise HTTPException(status_code=404, detail=f"Session output directory not found for {session_id}")
+        # Fallback for older, session-specific directories if needed
+        session_output_dir = os.path.join("output", "interactive_runs", session_id, "generated_code")
+        if not os.path.exists(session_output_dir):
+            raise HTTPException(status_code=404, detail=f"No generated code output directory found for session {session_id}")
 
     def _get_file_tree(base_path: str, current_path: str):
         tree = []
@@ -415,17 +422,39 @@ async def get_session_files(session_id: str):
 
 @app.get("/api/session-file-content/{session_id}/{file_path:path}")
 async def get_session_file_content(session_id: str, file_path: str):
-    """Get the content of a specific file within a session's generated output."""
-    base_dir = os.path.join("output", "interactive_runs", session_id, "generated_code")
+    """
+    Get the content of a specific file within a session's generated output.
+    This now checks the centralized output directory.
+    """
+    import urllib.parse
+    
+    # Decode the file path in case it was URL encoded
+    file_path = urllib.parse.unquote(file_path)
+    logger.info(f"Fetching file content for session {session_id}, file: {file_path}")
+    
+    # Centralized directory
+    base_dir = os.path.join("output", "code_generation")
     
     # Sanitize file_path to prevent directory traversal
     abs_file_path = os.path.abspath(os.path.join(base_dir, file_path))
     
+    # Fallback to session-specific directory
+    if not os.path.exists(abs_file_path):
+        base_dir = os.path.join("output", "interactive_runs", session_id, "generated_code")
+        abs_file_path = os.path.abspath(os.path.join(base_dir, file_path))
+        logger.info(f"Fallback to session-specific directory: {abs_file_path}")
+
     if not abs_file_path.startswith(os.path.abspath(base_dir)):
+        logger.error(f"Security violation: Path traversal attempt for {file_path}")
         raise HTTPException(status_code=403, detail="Access denied: Invalid file path.")
 
-    if not os.path.exists(abs_file_path) or not os.path.isfile(abs_file_path):
-        raise HTTPException(status_code=404, detail="File not found.")
+    if not os.path.exists(abs_file_path):
+        logger.error(f"File not found: {abs_file_path}")
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        
+    if not os.path.isfile(abs_file_path):
+        logger.error(f"Path is not a file: {abs_file_path}")
+        raise HTTPException(status_code=404, detail=f"Path is not a file: {file_path}")
 
     try:
         with open(abs_file_path, "r", encoding="utf-8") as f:
@@ -434,12 +463,17 @@ async def get_session_file_content(session_id: str, file_path: str):
         # Determine mimetype for frontend
         mime_type, _ = mimetypes.guess_type(abs_file_path)
         
+        logger.info(f"Successfully read file {file_path}, content length: {len(content)}")
+        
         return {
             "session_id": session_id,
             "file_path": file_path,
             "content": content,
             "mime_type": mime_type or "text/plain"
         }
+    except UnicodeDecodeError as e:
+        logger.error(f"Unicode decode error reading file {file_path}: {e}")
+        raise HTTPException(status_code=422, detail=f"Cannot decode file as text: {str(e)}")
     except Exception as e:
         logger.error(f"Error reading file {file_path} for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")

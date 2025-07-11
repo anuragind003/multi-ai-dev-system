@@ -198,39 +198,101 @@ const sessionId = computed(() => props.sessionId);
 
 const techStackSummary = computed(() => {
   const techStackData = results.value.tech_stack_recommendation || results.value.tech_stack;
-  if (!techStackData?.data) return null;
-
-  const data = techStackData.data;
   
-  // Handle new format with selected_stack
+  if (!techStackData) return null;
+
+  // Helper function to extract tech component name
+  const getTechName = (component: any): string => {
+    if (!component) return "N/A";
+    if (typeof component === 'string') return component;
+    if (component.name) return component.name;
+    if (component.framework) return component.framework;
+    return "N/A";
+  };
+
+  // Handle user selected stack (correct field names: frontend, backend, database, etc.)
+  if (techStackData.selected_stack) {
+    const selectedStack = techStackData.selected_stack;
+    return {
+      frontend: getTechName(selectedStack.frontend),
+      backend: getTechName(selectedStack.backend),
+      database: getTechName(selectedStack.database),
+      architecture: selectedStack.architecture?.pattern || selectedStack.architecture?.name || null,
+      cloud: getTechName(selectedStack.cloud),
+      optionsCounts: "User selected stack"
+    };
+  }
+
+  // Check for nested data structure
+  const data = techStackData.data || techStackData;
+  
+  // Handle user selected stack in nested data
   if (data.selected_stack) {
-    const selected = data.selected_stack;
-    const optionsCounts = [];
+    const selectedStack = data.selected_stack;
+    return {
+      frontend: getTechName(selectedStack.frontend),
+      backend: getTechName(selectedStack.backend),
+      database: getTechName(selectedStack.database),
+      architecture: selectedStack.architecture?.pattern || selectedStack.architecture?.name || null,
+      cloud: getTechName(selectedStack.cloud),
+      optionsCounts: "User selected (nested)"
+    };
+  }
+
+  // Handle synthesis format (most common for current system)
+  if (data.synthesis) {
+    const synthesis = data.synthesis;
+    return {
+      frontend: synthesis.frontend?.framework || synthesis.frontend?.name || "N/A",
+      backend: synthesis.backend?.framework || synthesis.backend?.name || "N/A",
+      database: synthesis.database?.type || synthesis.database?.name || "N/A",
+      architecture: synthesis.architecture_pattern || null,
+      cloud: synthesis.deployment_environment?.cloud_platform || synthesis.cloud?.name || null,
+      optionsCounts: "AI recommendation"
+    };
+  }
+
+  // Handle options arrays (fallback for when no user selection made yet)
+  if (data.frontend_options || data.backend_options || data.database_options) {
+    const options = {
+      frontend_options: data.frontend_options || [],
+      backend_options: data.backend_options || [],
+      database_options: data.database_options || [],
+      architecture_options: data.architecture_options || [],
+      cloud_options: data.cloud_options || []
+    };
     
-    // Count available options
-    if (data.frontend_options?.length) optionsCounts.push(`${data.frontend_options.length} frontend`);
-    if (data.backend_options?.length) optionsCounts.push(`${data.backend_options.length} backend`);
-    if (data.database_options?.length) optionsCounts.push(`${data.database_options.length} database`);
-    if (data.architecture_options?.length) optionsCounts.push(`${data.architecture_options.length} architecture`);
-    if (data.cloud_options?.length) optionsCounts.push(`${data.cloud_options.length} cloud`);
+         // Find selected options or use first option as default display
+     const selectedFrontend = options.frontend_options.find((opt: any) => opt.selected) || options.frontend_options[0];
+     const selectedBackend = options.backend_options.find((opt: any) => opt.selected) || options.backend_options[0];
+     const selectedDatabase = options.database_options.find((opt: any) => opt.selected) || options.database_options[0];
+     const selectedArchitecture = options.architecture_options.find((opt: any) => opt.selected) || options.architecture_options[0];
+     const selectedCloud = options.cloud_options.find((opt: any) => opt.selected) || options.cloud_options[0];
+    
+    const optionsCounts = [];
+    if (options.frontend_options?.length) optionsCounts.push(`${options.frontend_options.length} frontend`);
+    if (options.backend_options?.length) optionsCounts.push(`${options.backend_options.length} backend`);
+    if (options.database_options?.length) optionsCounts.push(`${options.database_options.length} database`);
+    if (options.architecture_options?.length) optionsCounts.push(`${options.architecture_options.length} architecture`);
+    if (options.cloud_options?.length) optionsCounts.push(`${options.cloud_options.length} cloud`);
     
     return {
-      frontend: selected.frontend_selection || "N/A",
-      backend: selected.backend_selection || "N/A", 
-      database: selected.database_selection || "N/A",
-      architecture: selected.architecture_selection || null,
-      cloud: selected.cloud_selection || null,
-      optionsCounts: optionsCounts.join(', ') || "No options data"
+      frontend: getTechName(selectedFrontend),
+      backend: getTechName(selectedBackend),
+      database: getTechName(selectedDatabase),
+      architecture: selectedArchitecture?.pattern || selectedArchitecture?.name || null,
+      cloud: getTechName(selectedCloud),
+      optionsCounts: optionsCounts.join(', ') || "Available options"
     };
   }
   
-  // Handle old format
+  // Fallback: Handle legacy format or direct tech stack values
   return {
-    frontend: data.frontend_framework || "N/A",
-    backend: data.backend_framework || "N/A",
-    database: data.database || "N/A",
-    architecture: null,
-    cloud: null,
+    frontend: data.frontend_framework || data.frontend || "N/A",
+    backend: data.backend_framework || data.backend || "N/A",
+    database: data.database_framework || data.database || "N/A",
+    architecture: data.architecture || null,
+    cloud: data.cloud || null,
     optionsCounts: "Legacy format"
   };
 });

@@ -1,0 +1,151 @@
+openapi: 3.0.0
+info:
+  title: FastAPI Monolith API
+  description: A comprehensive API for the monolithic application.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+  - url: https://api.yourdomain.com
+    description: Production Server
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Items
+    description: Operations about items
+paths:
+  /health:
+    get:
+      summary: Check application health
+      operationId: get_health
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Application is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+        '500':
+          description: Application is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "error"
+  /items/:
+    get:
+      summary: Retrieve a list of items
+      operationId: get_items
+      tags:
+        - Items
+      parameters:
+        - name: skip
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: A list of items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+    post:
+      summary: Create a new item
+      operationId: create_item
+      tags:
+        - Items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemCreate'
+      responses:
+        '201':
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+  /items/{item_id}:
+    get:
+      summary: Retrieve a single item by ID
+      operationId: get_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: ID of the item to retrieve
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Item not found
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+          example: 1
+        name:
+          type: string
+          example: "My Awesome Item"
+        description:
+          type: string
+          nullable: true
+          example: "This is a description of the item."
+        price:
+          type: number
+          format: float
+          example: 29.99
+      required:
+        - name
+        - price
+    ItemCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "New Item"
+        description:
+          type: string
+          nullable: true
+          example: "Description for the new item."
+        price:
+          type: number
+          format: float
+          example: 19.99
+      required:
+        - name
+        - price

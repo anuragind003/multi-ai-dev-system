@@ -1,6 +1,6 @@
 // /src/navigation.ts
 import type { Component } from "vue";
-import { HomeIcon, PlusCircleIcon, ChartBarIcon } from "@heroicons/vue/24/outline";
+import { HomeIcon, PlusCircleIcon, ChartBarIcon, BeakerIcon } from "@heroicons/vue/24/outline";
 
 export interface NavItem {
   name: string;
@@ -13,7 +13,8 @@ export interface NavItem {
 export const navigation: NavItem[] = [
   { name: "Dashboard", to: "/", icon: HomeIcon },
   { name: "New Project", to: "/new-project", icon: PlusCircleIcon },
+  { name: "Workflow", to: "/workflow-demo", icon: BeakerIcon },
   // Note: The Monitor link needs a sessionId to work correctly
   // Users should navigate to workflow monitor from the dashboard or after starting a new project
-  { name: "Monitor", to: "/workflow", icon: ChartBarIcon, hidden: true },
+  { name: "Monitor", to: "/monitor", icon: ChartBarIcon },
 ];

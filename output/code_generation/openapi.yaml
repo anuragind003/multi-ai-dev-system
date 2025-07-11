@@ -1,0 +1,256 @@
+openapi: 3.0.0
+info:
+  title: FastAPI Operational Infrastructure Demo API
+  description: A demo FastAPI application showcasing enterprise-grade operational infrastructure.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+  - url: https://api.staging.example.com # Placeholder for staging URL
+    description: Staging Environment
+tags:
+  - name: Health
+    description: Application health checks
+  - name: Items
+    description: Operations related to items
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Application is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  message:
+                    type: string
+                    example: FastAPI application is up and running!
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: Internal Server Error
+
+  /items/:
+    post:
+      summary: Create an Item
+      operationId: create_item
+      tags:
+        - Items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Item'
+      responses:
+        '201':
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemInDB'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /items/{item_id}:
+    get:
+      summary: Get Item by ID
+      operationId: read_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+          description: The ID of the item to retrieve.
+      responses:
+        '200':
+          description: Item retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemInDB'
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPNotFoundError'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+    put:
+      summary: Update an Item
+      operationId: update_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+          description: The ID of the item to update.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Item'
+      responses:
+        '200':
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemInDB'
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPNotFoundError'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+    delete:
+      summary: Delete an Item
+      operationId: delete_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+          description: The ID of the item to delete.
+      responses:
+        '204':
+          description: Item deleted successfully (No Content)
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPNotFoundError'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+components:
+  schemas:
+    Item:
+      title: Item
+      type: object
+      properties:
+        name:
+          title: Name
+          type: string
+          example: My Awesome Item
+        description:
+          title: Description
+          type: string
+          nullable: true
+          example: A very descriptive text about the item.
+        price:
+          title: Price
+          type: number
+          format: float
+          example: 29.99
+        tax:
+          title: Tax
+          type: number
+          format: float
+          nullable: true
+          example: 2.50
+      required:
+        - name
+        - price
+
+    ItemInDB:
+      title: ItemInDB
+      allOf:
+        - $ref: '#/components/schemas/Item'
+        - type: object
+          properties:
+            id:
+              title: ID
+              type: integer
+              format: int32
+              example: 1
+          required:
+            - id
+
+    HTTPValidationError:
+      title: HTTPValidationError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    ValidationError:
+      title: ValidationError
+      type: object
+      properties:
+        loc:
+          title: Location
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+
+    HTTPNotFoundError:
+      title: HTTPNotFoundError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: string
+          example: Item not found

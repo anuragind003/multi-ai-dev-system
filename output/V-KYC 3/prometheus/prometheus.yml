@@ -1,0 +1,77 @@
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+
+# Alertmanager configuration (if you have one)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Rule files (for defining alerts)
+# rule_files:
+#   - "alert.rules"
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape FastAPI application
+  # Requires FastAPI app to expose /metrics endpoint (e.g., using fastapi-prometheus)
+  - job_name: 'fastapi_app'
+    metrics_path: '/metrics' # Path where FastAPI app exposes metrics
+    static_configs:
+      - targets: ['app:8000'] # 'app' is the service name in docker-compose.prod.yml
+
+  # Scrape cAdvisor for container metrics
+  # cAdvisor needs to be running as a separate service or on the host
+  # Example: Add cAdvisor service to docker-compose.prod.yml
+  # cAdvisor:
+  #   image: gcr.io/cadvisor/cadvisor:v0.47.0
+  #   container_name: cadvisor
+  #   ports:
+  #     - 8080:8080
+  #   volumes:
+  #     - /:/rootfs:ro
+  #     - /var/run:/var/run:rw
+  #     - /sys:/sys:ro
+  #     - /var/lib/docker/:/var/lib/docker:ro
+  #   depends_on:
+  #     - app # Or other services you want to monitor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080'] # Assuming cAdvisor service is named 'cadvisor'
+
+  # Scrape Node Exporter for host metrics
+  # Node Exporter needs to be running on the host machine or as a separate container
+  # Example: Add Node Exporter service to docker-compose.prod.yml
+  # node_exporter:
+  #   image: prom/node-exporter:v1.6.1
+  #   container_name: node_exporter
+  #   ports:
+  #     - 9100:9100
+  #   command:
+  #     - '--path.rootfs=/host'
+  #   volumes:
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #     - /:/host:ro,rslave
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node_exporter:9100'] # Assuming node_exporter service is named 'node_exporter'
+
+  # Scrape PostgreSQL metrics (if using a pg_exporter)
+  # Example: Add pg_exporter service to docker-compose.prod.yml
+  # pg_exporter:
+  #   image: prometheuscommunity/postgres_exporter:v0.12.0
+  #   environment:
+  #     DATA_SOURCE_NAME: "postgresql://user:password@db:5432/mydatabase?sslmode=disable"
+  #   ports:
+  #     - 9187:9187
+  #   depends_on:
+  #     - db
+  # - job_name: 'postgresql'
+  #   static_configs:
+  #     - targets: ['pg_exporter:9187']

@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus # Unique identifier for the datasource
+    access: proxy
+    url: http://prometheus:9090 # Prometheus service name in Docker Compose
+    isDefault: true
+    version: 1
+    editable: true
+    # Optional: Basic auth for Prometheus if secured
+    # basicAuth: false
+    # basicAuthUser:
+    # basicAuthPassword:
+    # tlsAuth: false
+    # tlsAuthWithCACert: false
+    # tlsSkipVerify: false

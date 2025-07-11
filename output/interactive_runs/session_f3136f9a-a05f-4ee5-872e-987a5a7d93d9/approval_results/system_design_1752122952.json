@@ -1,0 +1,369 @@
+{
+  "session_id": "session_f3136f9a-a05f-4ee5-872e-987a5a7d93d9",
+  "approval_type": "system_design",
+  "timestamp": 1752122952,
+  "approval_data": {
+    "architecture": {
+      "pattern": "Layered (N-Tier) Architecture",
+      "justification": "This pattern provides clear separation of concerns (presentation, business logic, data access), enhancing maintainability, scalability, and security. Each layer can be developed, tested, and scaled independently, promoting modularity and easier management of complex systems."
+    },
+    "components": [
+      {
+        "name": "VKYC Dashboard Frontend",
+        "description": "User interface for VKYC team members to search, view metadata, and initiate downloads of V-KYC recordings.",
+        "category": "frontend",
+        "technologies": [
+          "React"
+        ],
+        "responsibilities": [
+          "Render user interface and interactive elements",
+          "Communicate with the Backend API for data retrieval and actions",
+          "Handle user input and display search results",
+          "Manage client-side routing and state"
+        ]
+      },
+      {
+        "name": "Backend API Service",
+        "description": "Provides RESTful APIs for the frontend, handles business logic, interacts with the database and object storage, and manages authentication/authorization.",
+        "category": "backend",
+        "technologies": [
+          "Node.js"
+        ],
+        "responsibilities": [
+          "Expose RESTful API endpoints for VKYC data",
+          "Implement business logic for searching, filtering, and accessing recordings",
+          "Manage user authentication (login, JWT issuance) and authorization (RBAC)",
+          "Interact with PostgreSQL for metadata and audit logs",
+          "Generate secure, time-limited download links (e.g., pre-signed URLs) for recordings from Object Storage",
+          "Log user actions for audit purposes"
+        ]
+      },
+      {
+        "name": "PostgreSQL Database",
+        "description": "Relational database storing structured data such as VKYC recording metadata, user information, roles, and audit logs.",
+        "category": "database",
+        "technologies": [
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "Persist VKYC recording metadata (e.g., customer ID, timestamp, status, storage path)",
+          "Store user accounts and their assigned roles",
+          "Maintain a comprehensive audit log of all access and download activities",
+          "Ensure data integrity and transactional consistency"
+        ]
+      },
+      {
+        "name": "Object Storage",
+        "description": "Scalable and durable storage for the actual V-KYC recording files (video/audio).",
+        "category": "storage",
+        "technologies": [
+          "S3 Compatible Storage (e.g., AWS S3, MinIO)"
+        ],
+        "responsibilities": [
+          "Store large V-KYC media files securely and durably",
+          "Provide high availability and scalability for media retrieval",
+          "Support pre-signed URLs for secure, temporary access to files"
+        ]
+      }
+    ],
+    "data_model": {
+      "schema_type": "relational",
+      "tables": [
+        {
+          "name": "users",
+          "purpose": "Stores user accounts for the VKYC team with their roles.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "password_hash",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "role",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL",
+                "ENUM('admin', 'auditor', 'viewer')"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "vkyc_recordings",
+          "purpose": "Stores metadata about each V-KYC recording.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "customer_id",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL",
+                "INDEX"
+              ]
+            },
+            {
+              "name": "recording_name",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "recording_path",
+              "type": "TEXT",
+              "constraints": [
+                "NOT NULL",
+                "UNIQUE",
+                "Description: Path/key in object storage"
+              ]
+            },
+            {
+              "name": "duration_seconds",
+              "type": "INTEGER",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "recording_timestamp",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "INDEX"
+              ]
+            },
+            {
+              "name": "status",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT 'completed'"
+              ]
+            },
+            {
+              "name": "uploaded_by",
+              "type": "UUID",
+              "constraints": [
+                "FOREIGN KEY REFERENCES users(id)"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "audit_logs",
+          "purpose": "Records all significant user actions, especially access and download of recordings.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "user_id",
+              "type": "UUID",
+              "constraints": [
+                "NOT NULL",
+                "FOREIGN KEY REFERENCES users(id)"
+              ]
+            },
+            {
+              "name": "action",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL",
+                "ENUM('login', 'view_recording_metadata', 'download_recording')"
+              ]
+            },
+            {
+              "name": "resource_id",
+              "type": "UUID",
+              "constraints": [
+                "NULLABLE",
+                "FOREIGN KEY REFERENCES vkyc_recordings(id)"
+              ]
+            },
+            {
+              "name": "timestamp",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "ip_address",
+              "type": "VARCHAR(45)",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "details",
+              "type": "JSONB",
+              "constraints": [
+                "NULLABLE",
+                "Description: Additional context for the action"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "api_endpoints": {
+      "style": "REST",
+      "base_url": "/api",
+      "authentication": "JWT",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "purpose": "Authenticate user and issue JWT token.",
+          "authentication_required": false
+        },
+        {
+          "method": "GET",
+          "path": "/users",
+          "purpose": "Retrieve a list of users (Admin only).",
+          "authentication_required": true
+        },
+        {
+          "method": "POST",
+          "path": "/users",
+          "purpose": "Create a new user (Admin only).",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings",
+          "purpose": "Retrieve a paginated and filterable list of V-KYC recording metadata.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings/{id}",
+          "purpose": "Retrieve detailed metadata for a specific V-KYC recording.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings/{id}/download-url",
+          "purpose": "Generate a secure, time-limited pre-signed URL for downloading a specific V-KYC recording.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/audit-logs",
+          "purpose": "Retrieve audit logs (Admin/Auditor only).",
+          "authentication_required": true
+        }
+      ]
+    },
+    "security": {
+      "authentication_method": "JWT",
+      "authorization_strategy": "RBAC",
+      "data_encryption": {
+        "at_rest": "Database encryption (e.g., PostgreSQL TDE or filesystem encryption), Object Storage server-side encryption (SSE-S3/SSE-KMS)",
+        "in_transit": "TLS 1.3"
+      }
+    },
+    "scalability_and_performance": {
+      "caching_strategy": "Redis (for session management, frequently accessed metadata, and rate limiting)",
+      "load_balancing": "Application Load Balancer (distributes incoming API requests across multiple Node.js backend instances)",
+      "database_scaling": "Read replicas (for scaling read-heavy operations on PostgreSQL), Connection pooling (to efficiently manage database connections from Node.js), Indexing on frequently queried columns (e.g., customer_id, recording_timestamp)"
+    },
+    "deployment_strategy": {
+      "containerization": "Docker",
+      "orchestration": "Kubernetes (for production deployment, managing containerized applications, scaling, and self-healing), Docker Compose (for local development and testing)",
+      "ci_cd": "GitLab CI/GitHub Actions (Automated build, test, and deployment pipelines for frontend and backend)"
+    },
+    "monitoring_and_logging": {
+      "application_monitoring": "Prometheus + Grafana (for collecting and visualizing metrics like API response times, error rates, resource utilization)",
+      "logging": "ELK Stack (Elasticsearch for centralized log storage and indexing, Logstash for log parsing and ingestion, Kibana for log visualization and analysis)",
+      "alerting": "PagerDuty/Slack (Integrated with Prometheus Alertmanager for critical alerts, Slack for informational notifications)"
+    },
+    "error_handling_strategy": "Standardized API error responses in JSON format, including HTTP status codes (e.g., 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 500 Internal Server Error), a clear error message, and an optional error code for programmatic handling. Backend logs detailed errors for debugging, while frontend displays user-friendly messages.",
+    "development_phases_overview": [
+      {
+        "name": "Phase 1: Foundation & Core Setup",
+        "description": "Set up development environment, basic project structure, database schema, user authentication (login/logout), and initial API endpoints for user management.",
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 2: Recording Metadata & Search",
+        "description": "Implement API endpoints and frontend components for displaying V-KYC recording metadata, including search, filtering (by customer ID, date range), and pagination.",
+        "estimated_duration": "4 weeks"
+      },
+      {
+        "name": "Phase 3: Secure Recording Access & Audit",
+        "description": "Develop functionality for generating secure, time-limited download URLs for recordings from object storage. Implement comprehensive audit logging for all recording access and download events.",
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 4: Admin & Reporting Features",
+        "description": "Build an admin panel for user role management. Implement basic reporting features based on audit logs (e.g., top accessed recordings, user activity). Refine UI/UX.",
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 5: Testing, Security & Deployment",
+        "description": "Conduct thorough unit, integration, and end-to-end testing. Perform security audits (penetration testing, vulnerability scanning). Set up CI/CD pipelines and deploy to production environment.",
+        "estimated_duration": "4 weeks"
+      }
+    ],
+    "key_risks": [
+      "Security of V-KYC recordings: Ensuring only authorized personnel can access sensitive data and preventing data breaches.",
+      "Performance bottlenecks: Potential issues with large volumes of recording metadata or concurrent download requests.",
+      "Integration with existing V-KYC recording ingestion: Ensuring a smooth and automated process for new recordings to be added to object storage and their metadata to PostgreSQL.",
+      "Compliance and regulatory requirements: Adhering to data privacy laws (e.g., GDPR, local financial regulations) for V-KYC data.",
+      "Scalability of object storage access: Managing costs and performance as the volume of recordings grows."
+    ],
+    "design_justification": "The chosen Layered (N-Tier) Architecture with React, Node.js, and PostgreSQL provides a robust, scalable, and maintainable solution. React offers a rich, interactive user experience. Node.js provides a high-performance, non-blocking I/O backend suitable for API services. PostgreSQL is a reliable and feature-rich relational database for structured data and audit trails. The inclusion of Object Storage is critical for efficiently handling large media files, separating them from the database. This design ensures clear separation of concerns, allows independent scaling of components, leverages well-established technologies for rapid development, and incorporates strong security and monitoring practices to meet the audit and internal requirements of the VKYC team.",
+    "data_flow": "1. **User Login**: VKYC team member accesses the React Frontend and enters credentials. Frontend sends credentials to the Node.js Backend API via a POST request to `/api/auth/login`. 2. **Authentication**: Backend authenticates the user against the `users` table in PostgreSQL. If successful, it generates a JWT and sends it back to the Frontend. 3. **Browse Recordings**: Frontend stores the JWT and uses it for subsequent authenticated requests. User navigates to the recordings dashboard. Frontend sends a GET request to `/api/recordings` (with JWT in header) to the Backend. 4. **Metadata Retrieval**: Backend validates the JWT, queries the `vkyc_recordings` table in PostgreSQL based on search/filter criteria, and returns the recording metadata to the Frontend. 5. **Display & Search**: Frontend displays the list of recordings. User can search/filter, triggering new requests to the Backend. 6. **Download Request**: User selects a specific recording and clicks 'Download'. Frontend sends a GET request to `/api/recordings/{id}/download-url` (with JWT) to the Backend. 7. **Generate Signed URL**: Backend validates the JWT and user's authorization (RBAC). It then generates a time-limited, pre-signed URL for the specific recording file from the Object Storage. 8. **Direct Download**: Backend returns the pre-signed URL to the Frontend. Frontend then uses this URL to directly download the recording file from the Object Storage. 9. **Audit Logging**: Throughout this process, the Backend logs relevant actions (login, metadata view, download request) to the `audit_logs` table in PostgreSQL."
+  },
+  "workflow_state_snapshot": {}
+}

@@ -1,0 +1,122 @@
+{
+  "apiVersion": 1,
+  "providers": [
+    {
+      "name": "default",
+      "orgId": 1,
+      "folder": "",
+      "type": "file",
+      "disableDeletion": false,
+      "editable": true,
+      "options": {
+        "path": "/etc/grafana/provisioning/dashboards"
+      }
+    }
+  ],
+  "dashboards": [
+    {
+      "uid": "fastapi-nextjs-app",
+      "title": "FastAPI Next.js Application Overview",
+      "description": "Dashboard for monitoring FastAPI Backend and Next.js Frontend",
+      "tags": ["application", "fastapi", "nextjs", "backend", "frontend"],
+      "timezone": "browser",
+      "schemaVersion": 16,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Total Backend Requests",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "targets": [
+            {
+              "expr": "sum(http_requests_total)",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "limit": 80,
+              "noRedsample": false,
+              "values": false
+            },
+            "textMode": "value"
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Backend Error Rate (5xx)",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "limit": 80,
+              "noRedsample": false,
+              "values": false
+            },
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "type": "graph",
+          "title": "Backend Request Latency (P90)",
+          "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.90, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m])))",
+              "refId": "A",
+              "legendFormat": "{{endpoint}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            }
+          }
+        },
+        {
+          "id": 4,
+          "type": "table",
+          "title": "Backend Request Counts by Endpoint",
+          "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+          "targets": [
+            {
+              "expr": "sum by (endpoint, method, status_code) (http_requests_total)",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              { "displayName": "Value", "desc": true }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

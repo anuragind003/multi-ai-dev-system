@@ -1,0 +1,629 @@
+{
+  "session_id": "session_4e8973d5-3093-451e-afcf-e206339d157f",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752042847,
+  "approval_data": {
+    "plan": {
+      "project_summary": {
+        "title": "Generated Project Plan",
+        "description": "Develop a full-stack web application for managing a list of tasks, including frontend UI, backend API, database, and deployment.",
+        "overall_complexity": "Medium",
+        "estimated_duration": "TBD",
+        "key_challenges": [],
+        "success_criteria": []
+      },
+      "phases": [
+        {
+          "name": "Frontend Phase",
+          "description": "Tasks related to frontend phase",
+          "deliverables": [
+            "Completed FE-001",
+            "Completed FE-002",
+            "Completed FE-003",
+            "Completed FE-004",
+            "Completed FE-005",
+            "Completed FE-006",
+            "Completed FE-007",
+            "Completed FE-008",
+            "Completed FE-009",
+            "Completed FE-010",
+            "Completed FE-011",
+            "Completed FE-012"
+          ],
+          "estimated_duration_hours": 72.0,
+          "work_items": [
+            {
+              "id": "FE-001",
+              "description": "Set up React project with necessary dependencies (e.g., create-react-app, or Vite).",
+              "dependencies": [],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Project initializes successfully.",
+                "Required dependencies are installed.",
+                "Project builds without errors."
+              ],
+              "status": "pending",
+              "code_files": [
+                "package.json",
+                "src/App.js",
+                "src/index.js"
+              ]
+            },
+            {
+              "id": "FE-002",
+              "description": "Create basic UI layout with a title and a container for the task list.",
+              "dependencies": [
+                "FE-001"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "UI displays a title (e.g., 'Hello World Task List').",
+                "A container element exists for displaying tasks.",
+                "UI is responsive."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-003",
+              "description": "Implement a form with an input field and a button to add a new task.",
+              "dependencies": [
+                "FE-002"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Form renders correctly.",
+                "Input field accepts text input.",
+                "Button triggers an action (e.g., console.log).",
+                "Form is styled."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-004",
+              "description": "Create a state variable to store the list of tasks.",
+              "dependencies": [
+                "FE-001"
+              ],
+              "estimated_time": "2 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "State variable initialized as an empty array.",
+                "State variable updates correctly when a new task is added (placeholder).",
+                "UI re-renders when state changes."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-005",
+              "description": "Implement the logic to add a new task to the task list state.",
+              "dependencies": [
+                "FE-003",
+                "FE-004"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "New task is added to the state when the form is submitted.",
+                "Task description is retrieved from the input field.",
+                "UI updates to reflect the new task (placeholder).",
+                "Input field is cleared after submission."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-006",
+              "description": "Display the list of tasks in the UI.",
+              "dependencies": [
+                "FE-004",
+                "FE-005"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tasks are displayed in a list format.",
+                "Each task displays its description.",
+                "UI updates dynamically when tasks are added or removed."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js",
+                "src/App.css"
+              ]
+            },
+            {
+              "id": "FE-007",
+              "description": "Make API calls to the backend to create a new task.",
+              "dependencies": [
+                "FE-005",
+                "BE-003"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Uses Axios (or Fetch) to make a POST request to /tasks.",
+                "Sends the task description in the request body.",
+                "Handles successful response (201) by updating the task list state.",
+                "Handles error responses (e.g., 400, 500) and displays an error message."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-008",
+              "description": "Make API calls to the backend to retrieve the list of tasks.",
+              "dependencies": [
+                "FE-006",
+                "BE-004"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Uses Axios (or Fetch) to make a GET request to /tasks.",
+                "Fetches the task list on component mount (e.g., using useEffect).",
+                "Updates the task list state with the retrieved tasks.",
+                "Handles error responses and displays an error message."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-009",
+              "description": "Add basic styling to the UI.",
+              "dependencies": [
+                "FE-006"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "UI is visually appealing.",
+                "Tasks are displayed with clear formatting.",
+                "Form elements are styled.",
+                "UI is responsive."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.css",
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-010",
+              "description": "Implement the ability to mark a task as complete/incomplete.",
+              "dependencies": [
+                "FE-008",
+                "BE-007"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Adds a checkbox or button to toggle task completion status.",
+                "Makes a PUT request to /tasks/:id to update the task's 'completed' status.",
+                "Updates the UI to reflect the change immediately.",
+                "Handles success and error responses."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-011",
+              "description": "Implement the ability to delete a task.",
+              "dependencies": [
+                "FE-008",
+                "BE-008"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Adds a delete button to each task.",
+                "Makes a DELETE request to /tasks/:id when the button is clicked.",
+                "Removes the task from the UI after successful deletion.",
+                "Handles success and error responses."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.js"
+              ]
+            },
+            {
+              "id": "FE-012",
+              "description": "Implement basic unit tests for frontend components.",
+              "dependencies": [
+                "FE-001",
+                "FE-002",
+                "FE-003",
+                "FE-004",
+                "FE-005",
+                "FE-006",
+                "FE-007",
+                "FE-008",
+                "FE-009",
+                "FE-010",
+                "FE-011"
+              ],
+              "estimated_time": "12 hours",
+              "agent_role": "frontend_developer",
+              "acceptance_criteria": [
+                "Tests are written for key components (e.g., App.js).",
+                "Tests cover adding tasks, displaying tasks, and API interactions.",
+                "Tests use a testing library (e.g., Jest, React Testing Library).",
+                "Tests pass successfully."
+              ],
+              "status": "pending",
+              "code_files": [
+                "src/App.test.js"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Backend Phase",
+          "description": "Tasks related to backend phase",
+          "deliverables": [
+            "Completed BE-001",
+            "Completed BE-002",
+            "Completed BE-003",
+            "Completed BE-004",
+            "Completed BE-005",
+            "Completed BE-006",
+            "Completed BE-007",
+            "Completed BE-008",
+            "Completed BE-009"
+          ],
+          "estimated_duration_hours": 58.0,
+          "work_items": [
+            {
+              "id": "BE-001",
+              "description": "Set up Node.js project with Express and necessary dependencies (e.g., npm init, express).",
+              "dependencies": [],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Project initializes successfully.",
+                "Express is installed and configured.",
+                "Server starts and listens on a port (e.g., 3001).",
+                "Basic route returns a 'Hello World' message."
+              ],
+              "status": "pending",
+              "code_files": [
+                "package.json",
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-002",
+              "description": "Install and configure MongoDB and Mongoose.",
+              "dependencies": [
+                "BE-001"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "MongoDB is installed and running (locally or cloud).",
+                "Mongoose is installed.",
+                "Connection to MongoDB is established successfully.",
+                "Schema for tasks is defined (id, description, createdAt, completed)."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js",
+                "models/Task.js"
+              ]
+            },
+            {
+              "id": "BE-003",
+              "description": "Create an API endpoint to create a new task (POST /tasks).",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint handles POST requests to /tasks.",
+                "Request body is parsed correctly (e.g., using body-parser).",
+                "Task data is validated.",
+                "Task is saved to the database using Mongoose.",
+                "Returns 201 Created status with the created task in the response."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js",
+                "models/Task.js"
+              ]
+            },
+            {
+              "id": "BE-004",
+              "description": "Create an API endpoint to get all tasks (GET /tasks).",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint handles GET requests to /tasks.",
+                "Retrieves all tasks from the database using Mongoose.",
+                "Returns 200 OK status with the list of tasks in the response."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-005",
+              "description": "Implement input validation on the backend.",
+              "dependencies": [
+                "BE-003"
+              ],
+              "estimated_time": "4 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Validates the task description (e.g., not empty, length).",
+                "Returns 400 Bad Request if validation fails with an appropriate error message.",
+                "Uses a validation library (e.g., express-validator) or custom validation."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-006",
+              "description": "Implement error handling in the backend.",
+              "dependencies": [
+                "BE-003",
+                "BE-004"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Centralized error handling middleware is implemented.",
+                "Returns consistent error responses with appropriate status codes and messages.",
+                "Logs errors to the console or a logging service.",
+                "Handles database connection errors."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js"
+              ]
+            },
+            {
+              "id": "BE-007",
+              "description": "Create an API endpoint to update a task (PUT /tasks/:id).",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint handles PUT requests to /tasks/:id.",
+                "Extracts task ID from the URL parameters.",
+                "Retrieves the task from the database.",
+                "Updates the task with the provided data.",
+                "Returns 200 OK status with the updated task or 404 if not found."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js",
+                "models/Task.js"
+              ]
+            },
+            {
+              "id": "BE-008",
+              "description": "Create an API endpoint to delete a task (DELETE /tasks/:id).",
+              "dependencies": [
+                "BE-002"
+              ],
+              "estimated_time": "6 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Endpoint handles DELETE requests to /tasks/:id.",
+                "Extracts task ID from the URL parameters.",
+                "Deletes the task from the database.",
+                "Returns 200 OK status or 404 if not found."
+              ],
+              "status": "pending",
+              "code_files": [
+                "index.js",
+                "models/Task.js"
+              ]
+            },
+            {
+              "id": "BE-009",
+              "description": "Implement basic unit tests for backend API endpoints.",
+              "dependencies": [
+                "BE-001",
+                "BE-002",
+                "BE-003",
+                "BE-004",
+                "BE-005",
+                "BE-006",
+                "BE-007",
+                "BE-008"
+              ],
+              "estimated_time": "12 hours",
+              "agent_role": "backend_developer",
+              "acceptance_criteria": [
+                "Tests are written for API endpoints (e.g., POST /tasks, GET /tasks).",
+                "Tests cover request validation, database interactions, and error handling.",
+                "Tests use a testing library (e.g., Jest, Mocha, Chai).",
+                "Tests pass successfully."
+              ],
+              "status": "pending",
+              "code_files": [
+                "tests/index.test.js"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Infrastructure Phase",
+          "description": "Tasks related to infrastructure phase",
+          "deliverables": [
+            "Completed INF-001",
+            "Completed INF-002",
+            "Completed INF-003",
+            "Completed SEC-001"
+          ],
+          "estimated_duration_hours": 44.0,
+          "work_items": [
+            {
+              "id": "INF-001",
+              "description": "Containerize the frontend and backend applications using Docker.",
+              "dependencies": [
+                "FE-012",
+                "BE-009"
+              ],
+              "estimated_time": "12 hours",
+              "agent_role": "infrastructure_specialist",
+              "acceptance_criteria": [
+                "Dockerfiles are created for both frontend and backend.",
+                "Frontend and backend applications build successfully into Docker images.",
+                "Docker Compose file is created to define the services (frontend, backend, MongoDB).",
+                "Applications can be run locally using Docker Compose."
+              ],
+              "status": "pending",
+              "code_files": [
+                "Dockerfile.frontend",
+                "Dockerfile.backend",
+                "docker-compose.yml"
+              ]
+            },
+            {
+              "id": "INF-002",
+              "description": "Deploy the application to a cloud provider (e.g., AWS, Google Cloud, DigitalOcean).",
+              "dependencies": [
+                "INF-001"
+              ],
+              "estimated_time": "16 hours",
+              "agent_role": "infrastructure_specialist",
+              "acceptance_criteria": [
+                "Choose a cloud provider and set up an account.",
+                "Configure the cloud provider to run the Docker containers.",
+                "Application is accessible via a public URL.",
+                "Database is deployed and accessible."
+              ],
+              "status": "pending",
+              "code_files": [
+                "Cloud Provider Configuration Files (e.g., Terraform, CloudFormation, etc.)"
+              ]
+            },
+            {
+              "id": "INF-003",
+              "description": "Implement basic monitoring and logging.",
+              "dependencies": [
+                "INF-002"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "infrastructure_specialist",
+              "acceptance_criteria": [
+                "Set up logging for both frontend and backend (e.g., using a logging library).",
+                "Implement basic monitoring of application performance (e.g., using a monitoring service).",
+                "Logs are collected and accessible.",
+                "Basic metrics are collected and displayed."
+              ],
+              "status": "pending",
+              "code_files": [
+                "Logging configuration files",
+                "Monitoring configuration files"
+              ]
+            },
+            {
+              "id": "SEC-001",
+              "description": "Implement HTTPS for secure communication.",
+              "dependencies": [
+                "INF-002"
+              ],
+              "estimated_time": "8 hours",
+              "agent_role": "infrastructure_specialist",
+              "acceptance_criteria": [
+                "Obtain an SSL/TLS certificate (e.g., Let's Encrypt).",
+                "Configure the cloud provider to use HTTPS.",
+                "Application is accessible via HTTPS.",
+                "All communication between frontend and backend is encrypted."
+              ],
+              "status": "pending",
+              "code_files": [
+                "Cloud Provider Configuration Files (e.g., Terraform, CloudFormation, etc.)"
+              ]
+            }
+          ]
+        }
+      ],
+      "resource_allocation": [
+        {
+          "role": "Frontend Developer",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Frontend Phase"
+          ],
+          "skills_required": []
+        },
+        {
+          "role": "Infrastructure Specialist",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Infrastructure Phase"
+          ],
+          "skills_required": []
+        },
+        {
+          "role": "Backend Developer",
+          "count": 1,
+          "estimated_time_allocation": "100%",
+          "phases": [
+            "Backend Phase"
+          ],
+          "skills_required": []
+        }
+      ],
+      "risks_and_mitigations": [],
+      "timeline": {
+        "start_date": "2025-07-09T12:04:06.404500",
+        "end_date": "TBD",
+        "milestones": []
+      },
+      "tech_stack": {},
+      "metadata": {
+        "generated_at": "2025-07-09T12:04:06.404500",
+        "version": "1.0",
+        "author": "Multi-AI Dev System",
+        "tags": [],
+        "notes": "Converted from WorkItemBacklog. Original summary: Develop a full-stack web application for managing a list of tasks, including frontend UI, backend API, database, and deployment."
+      }
+    },
+    "summary": "Develop a full-stack web application for managing a list of tasks, including frontend UI, backend API, database, and deployment.",
+    "metadata": {
+      "generated_at": "2025-07-09T12:04:06.404500",
+      "version": "1.0",
+      "author": "Multi-AI Dev System",
+      "tags": [],
+      "notes": "Converted from WorkItemBacklog. Original summary: Develop a full-stack web application for managing a list of tasks, including frontend UI, backend API, database, and deployment."
+    }
+  },
+  "workflow_state_snapshot": {}
+}

@@ -1,0 +1,108 @@
+openapi: 3.0.0
+info:
+  title: FastAPI ELK Logging Demo API
+  description: A simple FastAPI application demonstrating centralized logging with ELK.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://api.yourdomain.com
+    description: Production server
+tags:
+  - name: Health
+    description: Health check operations
+  - name: Items
+    description: Operations related to items
+  - name: Root
+    description: Basic application endpoints
+paths:
+  /:
+    get:
+      summary: Get welcome message
+      description: Root endpoint that returns a welcome message and logs an info message.
+      operationId: read_root
+      tags:
+        - Root
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Welcome to FastAPI ELK Logging Demo!
+  /items/{item_id}:
+    get:
+      summary: Get item by ID
+      description: Endpoint to retrieve an item by ID. Logs a debug message if no query parameter is provided, otherwise info.
+      operationId: read_item
+      tags:
+        - Items
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+            example: 123
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            example: example_query
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item_id:
+                    type: integer
+                    example: 123
+                  q:
+                    type: string
+                    nullable: true
+                    example: example_query
+  /error:
+    get:
+      summary: Trigger an error
+      description: Endpoint to simulate an internal server error and log an error message.
+      operationId: trigger_error
+      tags:
+        - Root
+      responses:
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: An internal server error occurred.
+  /health:
+    get:
+      summary: Health check
+      description: Health check endpoint to verify application status.
+      operationId: health_check
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok

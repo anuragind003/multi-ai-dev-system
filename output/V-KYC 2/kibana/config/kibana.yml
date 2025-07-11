@@ -1,0 +1,14 @@
+# Basic Kibana configuration for Docker Compose
+server.host: "0.0.0.0"
+server.name: "kibana"
+
+# Connect to Elasticsearch service
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+# Disable security for development/demo purposes.
+# IMPORTANT: Enable and configure X-Pack security for production environments!
+xpack.security.enabled: false
+
+# Logging configuration
+logging.dest: stdout
+logging.json: true

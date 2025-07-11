@@ -125,16 +125,21 @@ export const useWorkflowStore = defineStore("workflow", {
         console.log("Payload type:", payload.type);
         console.log("Payload event:", payload.event);
         console.log("Payload status:", payload.status);
-        
+
         if (payload.data) {
           console.log("Payload data keys:", Object.keys(payload.data));
           if (payload.data.payload) {
-            console.log("Nested payload found in data.payload with keys:", Object.keys(payload.data.payload));
+            console.log(
+              "Nested payload found in data.payload with keys:",
+              Object.keys(payload.data.payload)
+            );
           }
         }
 
         if (payload.data?.session_id && payload.data.session_id !== this.sessionId) {
-          console.log(`Ignoring message for different session: ${payload.data.session_id} !== ${this.sessionId}`);
+          console.log(
+            `Ignoring message for different session: ${payload.data.session_id} !== ${this.sessionId}`
+          );
           return;
         }
 
@@ -173,31 +178,55 @@ export const useWorkflowStore = defineStore("workflow", {
           console.log("Processing general workflow_event");
           // General workflow events (node completions, progress updates, etc.)
           this.status = "running";
-          
+
           // Mark stages as completed when nodes finish
           if (payload.data) {
-            // Check for node completion events and mark corresponding stages as complete
+            // Enhanced node completion mapping with multiple possible keys
             const nodeCompletionMap = {
-              'brd_analysis_node': 'brd_analysis',
-              'tech_stack_recommendation_node': 'tech_stack_recommendation', 
-              'system_design_node': 'system_design',
-              'planning_node': 'implementation_plan',
-              'code_generation_node': 'code_generation'
+              brd_analysis_node: "brd_analysis",
+              tech_stack_recommendation_node: "tech_stack_recommendation",
+              system_design_node: "system_design",
+              planning_node: "implementation_plan",
+              unified_planning_node: "implementation_plan",
+              code_generation_node: "code_generation",
+              unified_code_generation_dispatcher_node: "code_generation",
             };
-            
+
+            // Also check for state field completions
+            const stateFieldCompletionMap = {
+              requirements_analysis: "brd_analysis",
+              tech_stack_recommendation: "tech_stack_recommendation",
+              system_design: "system_design",
+              implementation_plan: "implementation_plan",
+              code_generation_result: "code_generation",
+            };
+
             // Find completed nodes in the event data keys
             for (const eventKey of Object.keys(payload.data)) {
               if (eventKey in nodeCompletionMap) {
                 const stageId = nodeCompletionMap[eventKey as keyof typeof nodeCompletionMap];
                 this.completedStages[stageId] = true;
-                console.log(`Stage marked as complete: ${stageId}`);
+                console.log(`Stage marked as complete via node: ${stageId}`);
+              } else if (eventKey in stateFieldCompletionMap) {
+                const stageId =
+                  stateFieldCompletionMap[eventKey as keyof typeof stateFieldCompletionMap];
+                this.completedStages[stageId] = true;
+                console.log(`Stage marked as complete via state field: ${stageId}`);
               }
+            }
+
+            // Also check for explicit stage completion messages
+            if (payload.data.completed_stages && Array.isArray(payload.data.completed_stages)) {
+              payload.data.completed_stages.forEach((stage: string) => {
+                this.completedStages[stage] = true;
+                console.log(`Stage marked as complete via completed_stages: ${stage}`);
+              });
             }
           }
         } else {
           console.log("Unhandled message type:", payload);
         }
-        
+
         console.log("Current workflow status after processing:", this.status);
         console.log("=== End WebSocket Message Processing ===");
       } catch (error) {
@@ -210,29 +239,30 @@ export const useWorkflowStore = defineStore("workflow", {
       console.log("Raw pause data structure:", data);
       console.log("DEBUG: approval_type from backend:", data.approval_type);
       console.log("DEBUG: session_id from backend:", data.session_id);
-      
+
       // Handle the new nested payload format from the refactored backend
       if (data.payload) {
         console.log("Found nested payload structure, extracting approval data");
         const approvalPayload = data.payload;
-        
+
         const approvalData: ApprovalData = {
           session_id: data.session_id,
           approval_type: data.approval_type,
           step_name: approvalPayload.step_name,
           display_name: approvalPayload.display_name || data.approval_type,
           approval_data: approvalPayload.data,
-          message: approvalPayload.instructions || `Please review the ${data.approval_type} results`,
+          message:
+            approvalPayload.instructions || `Please review the ${data.approval_type} results`,
           project_name: approvalPayload.data?.project_name || "",
           data: approvalPayload.data, // Keep the raw data as well
         };
-        
+
         this.status = "paused";
         this.humanApprovalRequest = approvalData;
         if (approvalData.project_name) {
           this.projectName = approvalData.project_name;
         }
-        
+
         console.log("Set human approval request:", this.humanApprovalRequest);
       } else {
         // Fallback for legacy format (direct approval data)
@@ -243,9 +273,32 @@ export const useWorkflowStore = defineStore("workflow", {
           this.projectName = data.project_name;
         }
       }
-      
-      // Mark the stage as completed when the workflow pauses for the next approval
-      // This assumes that the workflow paused because the *previous* stage completed successfully.
+
+      // Mark the PREVIOUS stage as completed when the workflow pauses for the NEXT approval
+      // Determine which stage was just completed based on the current approval type
+      const previousStageMap = {
+        tech_stack_recommendation: "brd_analysis",
+        tech_stack: "brd_analysis",
+        system_design: "tech_stack_recommendation",
+        implementation_plan: "system_design",
+        plan: "system_design",
+        code_generation: "implementation_plan",
+      };
+
+      const currentApprovalType = data.approval_type || data.humanApprovalRequest?.approval_type;
+      if (
+        currentApprovalType &&
+        previousStageMap[currentApprovalType as keyof typeof previousStageMap]
+      ) {
+        const previousStage =
+          previousStageMap[currentApprovalType as keyof typeof previousStageMap];
+        this.completedStages[previousStage] = true;
+        console.log(
+          `Marked previous stage ${previousStage} as completed (pausing for ${currentApprovalType})`
+        );
+      }
+
+      // Also mark from explicit stage tracking if available
       if (data?.current_approved_stage) {
         this.completedStages[data.current_approved_stage] = true;
         console.log(`Marked stage ${data.current_approved_stage} as completed.`);
@@ -286,7 +339,11 @@ export const useWorkflowStore = defineStore("workflow", {
       return "unknown";
     },
 
-    async submitHumanDecision(decision: "proceed" | "revise" | "end", feedback?: string, selectedStack?: { [key: string]: string }) {
+    async submitHumanDecision(
+      decision: "proceed" | "revise" | "end",
+      feedback?: string,
+      selectedStack?: { [key: string]: string }
+    ) {
       if (!this.sessionId || !this.humanApprovalRequest) {
         console.error("Cannot submit decision: No active session or approval request.");
         this.error = "No active session or approval request to submit decision.";
@@ -319,7 +376,8 @@ export const useWorkflowStore = defineStore("workflow", {
         // The WebSocket will handle status updates as the workflow progresses
       } catch (err: any) {
         this.status = "error";
-        this.error = err.response?.data?.detail || err.message || "Failed to submit human decision.";
+        this.error =
+          err.response?.data?.detail || err.message || "Failed to submit human decision.";
         console.error("Error submitting human decision:", err);
       }
     },

@@ -1,0 +1,44 @@
+# Trivy configuration file
+# This file specifies global settings for Trivy scans.
+
+# Severity levels to report.
+# Options: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM
+
+# Vulnerability types to scan.
+# Options: os, library, config, secret, license
+vuln-type:
+  - os
+  - library
+
+# Ignore unfixed vulnerabilities.
+# Set to true to only report vulnerabilities for which a fix is available.
+ignore-unfixed: true
+
+# Ignore vulnerabilities by ID.
+# You can list specific CVE IDs or other vulnerability IDs to ignore.
+# ignore-vulnerabilities:
+#   - CVE-2023-1234
+#   - GHSA-abcd-efgh-ijkl
+
+# Ignore policies (for misconfigurations or secrets)
+# You can specify paths to policy files (e.g., Rego policies for misconfigurations)
+# policy:
+#   - /path/to/my/custom/policy.rego
+
+# Timeout for the scan.
+# timeout: 5m
+
+# Cache directory for Trivy.
+# cache-dir: /tmp/trivycache
+
+# Output format.
+# Options: table, json, template, cyclonedx, spdx, spdx-json
+# format: table # Overridden by GitHub Actions workflow for specific steps
+
+# Exit code for Trivy.
+# Default is 0 for success, 1 for failure if vulnerabilities are found.
+# exit-code: 1 # Overridden by GitHub Actions workflow for specific steps
