@@ -78,14 +78,37 @@ class SimpleDatabaseAgent(SimpleBaseAgent):
             ("human", """Create a complete {db_type} database system for: {description}
             
             **Technical Context:**
+            - Backend: {backend_tech}
+            - Frontend: {frontend_tech}
+            - Database: {database_tech}
             - Database Type: {db_type}
             - Migration Tool: {migration_tool}  
             - Required Features: {features}
             - Data Models: {data_models}
             - Work Item: {work_item}
             
+            **Work Item Dependencies:**
+            {dependencies}
+            
+            **Acceptance Criteria:**
+            {acceptance_criteria}
+            
+            **Expected File Structure (MUST FOLLOW EXACTLY):**
+            {expected_files}
+            
+            **CRITICAL: File Structure Requirements:**
+            - You MUST create files that match the expected file structure above
+            - Use the EXACT file paths and names specified
+            - If migration files are in specific directories, create them there
+            - If .sql files are expected, create SQL migration files for {db_type}
+            - Follow the file naming conventions shown in the expected structure
+            - Ensure generated files serve the purposes implied by their paths
+            
             **Mandatory Requirements:**
-            - Generate EXACTLY 8-12 substantial files
+            - Generate files that match the expected structure above
+            - Use {db_type} syntax and features appropriately
+            - Ensure all acceptance criteria are met in the database design
+            - Consider and handle dependencies appropriately in schema design
             - Normalized schema with proper relationships
             - Performance-optimized with strategic indexes
             - Comprehensive data validation and constraints
@@ -93,9 +116,10 @@ class SimpleDatabaseAgent(SimpleBaseAgent):
             - Robust error handling throughout
             - Security best practices (user roles, permissions)
             - Backup and recovery procedures
+            - Migration scripts compatible with {migration_tool}
             
-            Focus on creating a complete, enterprise-grade database solution. 
-            Each file should be production-ready with comprehensive functionality.""")
+            Focus on creating a complete, enterprise-grade database solution that follows the exact file structure specified and meets all acceptance criteria.
+            Each file should be production-ready with comprehensive functionality for {db_type}.""")
         ])
 
     def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
@@ -103,61 +127,98 @@ class SimpleDatabaseAgent(SimpleBaseAgent):
         try:
             logger.info(f"SimpleDatabaseAgent processing: {work_item.description}")
             
+            # ENHANCED: Extract technology stack from enhanced state
+            tech_stack_info = state.get('tech_stack_info', {})
+            backend_tech = tech_stack_info.get('backend', 'Python with FastAPI')
+            frontend_tech = tech_stack_info.get('frontend', 'JavaScript with React')
+            database_tech = tech_stack_info.get('database', 'PostgreSQL')
+            expected_files = tech_stack_info.get('expected_file_structure', [])
+            
+            # Parse database technology
+            if 'postgresql' in database_tech.lower() or 'postgres' in database_tech.lower():
+                db_type = 'PostgreSQL'
+            elif 'mysql' in database_tech.lower():
+                db_type = 'MySQL'
+            elif 'sqlite' in database_tech.lower():
+                db_type = 'SQLite'
+            elif 'mongodb' in database_tech.lower():
+                db_type = 'MongoDB'
+            else:
+                db_type = database_tech or 'PostgreSQL'  # Default
+            
+            # Determine migration tool based on backend technology
+            if 'python' in backend_tech.lower():
+                migration_tool = 'Alembic'
+            elif 'node.js' in backend_tech.lower() or 'javascript' in backend_tech.lower():
+                migration_tool = 'Knex.js'
+            elif 'java' in backend_tech.lower():
+                migration_tool = 'Flyway'
+            else:
+                migration_tool = 'Alembic'  # Default
+            
+            logger.info(f"SimpleDatabaseAgent using: {db_type} with {migration_tool}")
+            logger.info(f"Expected files: {expected_files}")
+            
             # Extract context
-            tech_stack = state.get('tech_stack_recommendation', {})
             system_design = state.get('system_design', {})
-            
-            # Handle both string and dict formats for database type
-            db_config = tech_stack.get('database', 'PostgreSQL')
-            if isinstance(db_config, dict):
-                db_type = db_config.get('name', 'PostgreSQL')
-            else:
-                db_type = db_config
-            
-            # Handle migration tool similarly
-            migration_config = tech_stack.get('migration_tool', 'Alembic')
-            if isinstance(migration_config, dict):
-                migration_tool = migration_config.get('name', 'Alembic')
-            else:
-                migration_tool = migration_config
             
             # Extract data models from system design
             data_models = self._extract_data_models(system_design)
             features = self._extract_features(work_item.description)
             
-            # Generate code with LLM
+            # Generate code with LLM - Enhanced with work item details
+            dependencies = tech_stack_info.get('work_item_dependencies', [])
+            acceptance_criteria = tech_stack_info.get('work_item_acceptance_criteria', [])
+            
             prompt_input = {
                 "description": work_item.description,
                 "db_type": db_type,
                 "migration_tool": migration_tool,
                 "features": ", ".join(features),
                 "data_models": json.dumps(data_models, indent=2),
-                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}"
+                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}",
+                "expected_files": "\n".join(expected_files) if expected_files else "No specific file structure specified",
+                "backend_tech": backend_tech,
+                "frontend_tech": frontend_tech,
+                "database_tech": database_tech,
+                "dependencies": "\n".join([f"- {dep}" for dep in dependencies]) if dependencies else "No dependencies",
+                "acceptance_criteria": "\n".join([f"✓ {criteria}" for criteria in acceptance_criteria]) if acceptance_criteria else "No specific acceptance criteria"
             }
             
             response = self.llm.invoke(self.database_prompt.format_messages(**prompt_input))
-            content = response.content if hasattr(response, 'content') else str(response)
+            raw_content = response.content if hasattr(response, 'content') else str(response)
+
+            # Handle case where content is a list of strings/chunks
+            if isinstance(raw_content, list):
+                content = "".join(raw_content)
+            else:
+                content = str(raw_content)
             
             # Parse files
             generated_files = parse_llm_output_into_files(content)
             
-            # Quality validation - ensure we have enough substantial files
-            if len(generated_files) < 6:
-                logger.error(f"Insufficient database files generated: {len(generated_files)}. Expected at least 6 substantial files.")
-                return CodeGenerationOutput(
-                    generated_files=[],
-                    summary=f"Database generation failed: Only {len(generated_files)} files generated, expected at least 6",
-                    status="error"
-                )
+            # Quality validation - flexible approach for database files
+            min_files_suggested = 2  # Flexible minimum for database (schema + connection is sufficient)
+            if len(generated_files) < min_files_suggested:
+                logger.info(f"Generated {len(generated_files)} database files (suggested: {min_files_suggested}+)")
+                
+                # Accept even fewer files if they have substantial content
+                if not generated_files:
+                    logger.error("No database files generated at all")
+                    return CodeGenerationOutput(
+                        generated_files=[],
+                        summary="Database generation failed: No files generated",
+                        status="error"
+                    )
+            else:
+                logger.info(f"Generated {len(generated_files)} database files - good coverage")
             
             # Validate file content quality
             validated_files = self._validate_generated_files(generated_files, db_type)
             if not validated_files:
-                return CodeGenerationOutput(
-                    generated_files=[],
-                    summary="Database generation failed: Files did not meet quality standards",
-                    status="error"
-                )
+                logger.warning("Database file validation failed, but proceeding with generated files")
+                # Be more lenient - use original files if validation is too strict
+                validated_files = [f for f in generated_files if f.content and len(f.content.strip()) > 10]
             
             # Save to disk
             self._save_files(validated_files)

@@ -31,7 +31,7 @@
             <span
               class="text-xl font-bold bg-gradient-to-r from-slate-800 to-purple-800 bg-clip-text text-transparent tracking-tight whitespace-nowrap sm:text-2xl"
             >
-              Multi-AI Dev
+              Agentic SDLC
             </span>
           </router-link>
         </div>

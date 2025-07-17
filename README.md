@@ -14,6 +14,8 @@ A modern, production-ready Python system that automates the entire software deve
 - **Real-time monitoring:** API call tracking, performance metrics, and error recovery
 - **RAG integration:** Vector store for context-aware code generation
 - **Extensible architecture:** Modular agents, tools, and workflows
+- **Modern Web UI:** Vue.js frontend with real-time monitoring and approval workflows
+- **Unified Workflow:** Single, clean async pipeline eliminating sync/async confusion
 
 ---
 
@@ -38,147 +40,168 @@ A modern, production-ready Python system that automates the entire software deve
 
 ## ⚡ Quickstart
 
-1. **Clone the repository:**
+### Prerequisites
 
-   ```bash
-   git clone https://github.com/anuragind003/multi-ai-dev-system.git
-   cd multi-ai-dev-system
-   ```
+- **Python 3.9+** (3.11+ recommended)
+- **Node.js 18+** (for frontend)
+- **Git**
 
-2. **Create a virtual environment:**
-
-   ```bash
-   python -m venv venv
-   # On Windows:
-   venv\Scripts\activate
-   # On Unix/Mac:
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies:**
-
-   ```bash
-   pip install -r requirements.txt
-   # Or minimally:
-   pip install google-generativeai python-dotenv
-   ```
-
-4. **Configure environment variables:**
-   Create a `.env` file in the project root:
-
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key
-   GEMINI_MODEL_NAME=gemini-2.5-flash-preview-05-20
-   LANGCHAIN_API_KEY=your_langsmith_api_key  # Optional
-   LANGCHAIN_PROJECT=multi-ai-dev-system     # Optional
-   ```
-
-   > **Do NOT commit your `.env` file!**
-
-5. **Run the system:**
-   ```bash
-   python main.py --workflow phased brds/sample.txt
-   # With options:
-   python main.py --workflow phased --output-dir custom_output brds/sample.txt
-   ```
-
----
-
-## 🏗️ Project Structure
-
-```
-multi_ai_dev_system/
-├── agents/                 # Specialized AI agents
-├── tools/                  # Utility tools (code execution, parsing, RAG)
-├── brds/                   # Sample BRD documents
-├── output/                 # Generated artifacts
-├── app/                    # API server components
-├── archive/                # Archived implementations and references
-│   └── custom_a2a_protocols/  # Custom A2A protocol reference implementations
-├── config.py               # LLM configuration and temperature settings
-├── monitoring.py           # Real-time API monitoring
-├── graph.py                # LangGraph workflow definition
-├── langgraph_enhanced_a2a.py      # Enhanced A2A communication manager
-├── enhanced_workflow_integration.py # Enhanced workflow builder
-├── main.py                 # System entry point
-└── ...
-```
-
----
-
-## 🔗 Enhanced Agent-to-Agent Communication
-
-The system includes **LangGraph-native enhanced A2A communication** for improved agent coordination:
-
-### 🎯 **Quick Start: Enhanced A2A**
-
-Replace your workflow creation with enhanced version:
-
-```python
-# Standard workflow
-from graph import get_workflow
-workflow = get_workflow("phased")
-
-# Enhanced workflow with A2A communication
-from enhanced_workflow_integration import create_enhanced_workflow, get_conservative_enhancement_config
-config = get_conservative_enhancement_config()
-workflow = create_enhanced_workflow("phased", config)
-```
-
-### ✨ **A2A Features**
-
-- **Cross-validation:** Automatic validation between related agents
-- **Error recovery:** Intelligent retry using context from related agents
-- **Context sharing:** Enhanced requirement and design propagation
-- **Smart routing:** Dynamic workflow paths based on validation results
-- **Communication analytics:** Real-time tracking of agent interactions
-
-### 📖 **A2A Documentation**
-
-- `ENHANCED_A2A_INTEGRATION_GUIDE.md` - Complete integration guide
-- `LANGGRAPH_A2A_ENHANCEMENT_SUMMARY.md` - Technical summary
-- `archive/custom_a2a_protocols/README.md` - Custom protocol reference
-
-### 🚀 **Command-Line A2A Usage**
-
-The enhanced A2A features are now integrated into the main CLI:
+### 1. Clone and Setup
 
 ```bash
-# Basic enhanced A2A with conservative settings
-python main.py --brd requirements.pdf --enhanced-a2a
-
-# Aggressive A2A configuration for development
-python main.py --brd requirements.pdf --enhanced-a2a --a2a-config aggressive
-
-# Enable specific A2A features
-python main.py --brd requirements.pdf --enhanced-a2a \
-  --enable-cross-validation --enable-error-recovery --a2a-analytics
-
-# Custom configuration with phased workflow
-python main.py --brd requirements.pdf --workflow phased \
-  --enhanced-a2a --a2a-config conservative
+git clone https://github.com/anuragind003/multi-ai-dev-system.git
+cd multi-ai-dev-system
 ```
 
-**A2A Configuration Options:**
+### 2. Backend Setup
 
-- `conservative`: Production-safe, minimal features
-- `default`: Balanced feature set for general use
-- `aggressive`: Full feature set for development/testing
+#### Create Virtual Environment
+
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate on Windows:
+venv\Scripts\activate
+
+# Activate on Unix/Mac:
+source venv/bin/activate
+```
+
+#### Install Dependencies
+
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Or install minimally:
+pip install google-generativeai python-dotenv fastapi uvicorn langchain langgraph
+```
+
+#### Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+# Required: Gemini API Key
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL_NAME=gemini-2.5-flash-preview-05-20
+
+# Optional: LangSmith for tracing
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_PROJECT=multi-ai-dev-system
+LANGCHAIN_TRACING_V2=true
+
+# Optional: Rate limiting
+LLM_RATE_LIMIT_DELAY=4.0
+LLM_MAX_CALLS_PER_MINUTE=15
+
+# Optional: Debug settings
+DEBUG_JSON_PARSING=true
+```
+
+> **⚠️ Important:** Do NOT commit your `.env` file! Add it to `.gitignore`.
+
+### 3. Frontend Setup
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Return to project root
+cd ..
+```
 
 ---
 
-## 📥 Input & 📤 Output
+## 🏃‍♂️ Running the System
 
-- **Input:** BRD in `.txt`, `.md`, `.pdf`, `.docx`, or `.doc`
-- **Output:**
-  - Extracted requirements
-  - Technology recommendations
-  - System architecture diagrams
-  - Database schema
-  - API endpoint definitions
-  - Implementation code
-  - Test cases & validation reports
-  - Documentation & deployment configs
+### Option 1: Full Stack (Recommended)
+
+#### Start Backend API Server
+
+```bash
+# From project root
+python -m app.server_refactored
+```
+
+The API server will start at `http://localhost:8001`
+
+#### Start Frontend Development Server
+
+```bash
+# In a new terminal, from project root
+cd frontend
+npm run dev
+```
+
+The frontend will start at `http://localhost:5173`
+
+#### Access the System
+
+- **Frontend UI:** http://localhost:5173
+- **API Documentation:** http://localhost:8001/docs
+- **API Health Check:** http://localhost:8001/health
+- **Examples:** http://localhost:8001/static/examples.html
+
+### Option 2: Command Line Interface
+
+```bash
+# Run with unified workflow (recommended)
+python main.py --workflow unified brds/sample.txt
+
+# Run with specific output directory
+python main.py --workflow unified --output-dir custom_output brds/sample.txt
+
+# Run with enhanced A2A communication
+python main.py --workflow unified --enhanced-a2a brds/sample.txt
+```
+
+### Option 3: Development Mode
+
+#### Backend Development
+
+```bash
+# Run with auto-reload
+uvicorn app.server_refactored:app --reload --host 0.0.0.0 --port 8001
+
+# Run with debug logging
+DEBUG=true python -m app.server_refactored
+```
+
+#### Frontend Development
+
+```bash
+cd frontend
+npm run dev
+```
+
+---
+
+## 🌐 API Endpoints
+
+### Core Workflow Endpoints
+
+- `POST /api/workflow` - Start new workflow
+- `POST /api/workflow-with-monitoring` - Start workflow with real-time monitoring
+- `GET /api/agent-sessions` - Get active sessions
+- `GET /api/agent-sessions/{session_id}/history` - Get session history
+- `GET /api/session-files/{session_id}` - Get generated files
+
+### WebSocket Endpoints
+
+- `WS /ws/agent-monitor` - Real-time agent monitoring
+- `WS /ws/workflow-status` - Workflow status updates
+
+### Health & Monitoring
+
+- `GET /health` - Health check
+- `GET /api/health` - API health with version info
+- `GET /api/temperature-strategy` - Get temperature strategy
+- `GET /api/agent-sessions` - Active sessions
 
 ---
 
@@ -186,6 +209,7 @@ python main.py --brd requirements.pdf --workflow phased \
 
 | Workflow  | Best For                       | Features                                    |
 | --------- | ------------------------------ | ------------------------------------------- |
+| unified   | **Production (Recommended)**   | Single async pipeline, clean architecture   |
 | basic     | Prototyping, debugging         | Linear, fast, minimal overhead              |
 | phased    | Production, real-world dev     | Phase-based, quality checks, error recovery |
 | iterative | Complex, high-quality projects | Retry logic, quality threshold, validation  |
@@ -195,41 +219,242 @@ python main.py --brd requirements.pdf --workflow phased \
 **Example:**
 
 ```bash
-python main.py --brd brds/sample.txt --workflow phased --quality-threshold 7.0
+# Unified workflow (recommended)
+python main.py --workflow unified brds/sample.txt
+
+# With quality threshold
+python main.py --workflow unified --quality-threshold 7.0 brds/sample.txt
 ```
 
 ---
 
-## 🌐 API & Dev Server
+## 🔗 Enhanced Agent-to-Agent Communication
 
-- **Production API:**
-  ```bash
-  python serve.py
-  # API at http://localhost:8001
-  ```
-- **LangGraph Dev UI:**
-  ```bash
-  langgraph dev
-  # UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
-  ```
+The system includes **LangGraph-native enhanced A2A communication** for improved agent coordination:
+
+### Quick Start: Enhanced A2A
+
+```bash
+# Basic enhanced A2A with conservative settings
+python main.py --workflow unified --enhanced-a2a brds/requirements.pdf
+
+# Aggressive A2A configuration for development
+python main.py --workflow unified --enhanced-a2a --a2a-config aggressive brds/requirements.pdf
+
+# Enable specific A2A features
+python main.py --workflow unified --enhanced-a2a \
+  --enable-cross-validation --enable-error-recovery --a2a-analytics brds/requirements.pdf
+```
+
+### A2A Configuration Options
+
+- `conservative`: Production-safe, minimal features
+- `default`: Balanced feature set for general use
+- `aggressive`: Full feature set for development/testing
 
 ---
 
-## 🛠️ Troubleshooting
+## 📥 Input & 📤 Output
 
-- **Port conflicts:** Change port in `serve.py` if 8001 is in use
-- **Memory errors:** Increase RAM for large projects
-- **RAG errors:** Ensure output directory exists
-- **API docs:** Access `/api/workflow` endpoint
-- **LangGraph errors:** Ensure all node names use `_node` suffix; check for missing function imports
+### Input Formats
+- **BRD Documents:** `.txt`, `.md`, `.pdf`, `.docx`, `.doc`
+- **API Requests:** JSON payloads via REST API
+- **Web Interface:** File upload via Vue.js frontend
+
+### Output Artifacts
+- **Requirements Analysis:** Structured requirements extraction
+- **Technology Recommendations:** Stack suggestions with reasoning
+- **System Architecture:** Design diagrams and specifications
+- **Database Schema:** SQL schemas and migration files
+- **API Definitions:** OpenAPI specs and endpoint documentation
+- **Implementation Code:** Complete application codebase
+- **Test Cases:** Unit, integration, and e2e tests
+- **Documentation:** README, API docs, deployment guides
+- **Deployment Configs:** Docker, CI/CD, infrastructure as code
+
+---
+
+## 🛠️ Development & Debugging
+
+### Backend Development
+
+```bash
+# Run with detailed logging
+DEBUG=true python -m app.server_refactored
+
+# Run specific workflow test
+python -m pytest tests/test_unified_workflow.py -v
+
+# Check API endpoints
+curl http://localhost:8001/health
+```
+
+### Frontend Development
+
+```bash
+cd frontend
+
+# Development with hot reload
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+```
+
+### Debugging Tools
+
+- **LangGraph Dev UI:** `langgraph dev` (if installed)
+- **API Documentation:** http://localhost:8001/docs
+- **WebSocket Monitor:** Connect to `ws://localhost:8001/ws/agent-monitor`
+- **Session Files:** Check `output/` directory for generated artifacts
+
+---
+
+## 🏗️ Project Structure
+
+```
+multi-ai-dev-system/
+├── app/                    # FastAPI application
+│   ├── core/              # Core setup and configuration
+│   ├── endpoints/         # API route handlers
+│   ├── services/          # Business logic services
+│   ├── static/            # Static files (HTML, examples)
+│   ├── server_refactored.py  # Main API server
+│   └── websocket_manager.py  # WebSocket handling
+├── frontend/              # Vue.js frontend application
+│   ├── src/               # Source code
+│   │   ├── components/    # Vue components
+│   │   ├── views/         # Page views
+│   │   ├── stores/        # Pinia state management
+│   │   └── router/        # Vue Router configuration
+│   ├── package.json       # Node.js dependencies
+│   └── vite.config.ts     # Vite configuration
+├── agents/                # Specialized AI agents
+├── tools/                 # Utility tools (code execution, parsing, RAG)
+├── workflows/             # Workflow definitions
+├── unified_workflow.py    # Unified workflow implementation
+├── main.py                # CLI entry point
+├── requirements.txt       # Python dependencies
+└── brds/                  # Sample BRD documents
+```
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GEMINI_API_KEY` | Google Gemini API key | Required |
+| `GEMINI_MODEL_NAME` | Gemini model to use | `gemini-2.5-flash-preview-05-20` |
+| `LANGCHAIN_API_KEY` | LangSmith API key | Optional |
+| `LANGCHAIN_PROJECT` | LangSmith project name | `multi-ai-dev-system` |
+| `LLM_RATE_LIMIT_DELAY` | Rate limiting delay (seconds) | `4.0` |
+| `LLM_MAX_CALLS_PER_MINUTE` | Max API calls per minute | `15` |
+| `DEBUG_JSON_PARSING` | Enable JSON parsing debug | `true` |
+
+### Temperature Strategy
+
+The system uses temperature-optimized agents for different tasks:
+
+```python
+# Analytical tasks (0.1-0.2)
+BRD_ANALYST_TEMPERATURE = 0.3
+TECH_STACK_ADVISOR_TEMPERATURE = 0.2
+SYSTEM_DESIGNER_TEMPERATURE = 0.2
+
+# Creative tasks (0.3-0.4)
+PLANNING_AGENT_TEMPERATURE = 0.4
+
+# Code generation (0.1)
+CODE_GENERATION_TEMPERATURE = 0.1
+TEST_GENERATION_TEMPERATURE = 0.2
+```
+
+---
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### Port Conflicts
+```bash
+# Change backend port
+python -m app.server_refactored --port 8002
+
+# Change frontend port
+cd frontend && npm run dev -- --port 3000
+```
+
+#### Memory Errors
+- Increase system RAM for large projects
+- Use smaller BRD documents for testing
+- Enable caching: `set_llm_cache(SQLiteCache())`
+
+#### API Key Issues
+```bash
+# Verify API key is set
+echo $GEMINI_API_KEY
+
+# Test API connection
+curl -H "Authorization: Bearer $GEMINI_API_KEY" \
+  https://generativelanguage.googleapis.com/v1beta/models
+```
+
+#### Frontend Connection Issues
+- Ensure backend is running on port 8001
+- Check proxy configuration in `frontend/vite.config.ts`
+- Verify WebSocket connection at `ws://localhost:8001/ws/agent-monitor`
+
+#### Workflow Errors
+```bash
+# Run with debug logging
+DEBUG=true python main.py --workflow unified brds/sample.txt
+
+# Check generated files
+ls -la output/
+
+# View session history
+curl http://localhost:8001/api/agent-sessions
+```
+
+### Performance Optimization
+
+- **Enable caching:** LLM responses are cached by default
+- **Rate limiting:** Configure `LLM_RATE_LIMIT_DELAY` for your API limits
+- **Parallel processing:** Use `--parallel` flag for independent work items
+- **Memory management:** Monitor memory usage for large projects
 
 ---
 
 ## 🤝 Contributing
 
-- Follow the agent temperature strategy
-- Use type hints, error handling, and logging
-- See `CONTRIBUTING.md` for details (or open an issue)
+### Development Setup
+
+1. **Fork the repository**
+2. **Create feature branch:** `git checkout -b feature/amazing-feature`
+3. **Follow coding standards:**
+   - Use type hints
+   - Add error handling
+   - Follow temperature strategy
+   - Add tests for new features
+4. **Commit changes:** `git commit -m 'Add amazing feature'`
+5. **Push to branch:** `git push origin feature/amazing-feature`
+6. **Open Pull Request**
+
+### Code Standards
+
+- **Python:** Follow PEP 8, use type hints, add docstrings
+- **Vue.js:** Follow Vue 3 Composition API patterns
+- **Testing:** Add unit tests for new agents and tools
+- **Documentation:** Update README for new features
 
 ---
 
@@ -238,16 +463,23 @@ python main.py --brd brds/sample.txt --workflow phased --quality-threshold 7.0
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [LangChain Documentation](https://python.langchain.com/)
 - [Gemini API](https://ai.google.dev/)
+- [Vue.js Documentation](https://vuejs.org/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
 
 ---
 
-## License
+## 📄 License
 
-MIT
-graph TD
-A[Agent Receives Input] --> B[RAG: Retrieve Context]
-B --> C[Agent Processes with Context]
-C --> D[Enhanced Memory: Store Results]
-D --> E[Message Bus: Publish Events]
-E --> F[Other Agents Subscribe & React]
-F --> G[Cross-Tool Data Access via Enhanced Memory]
+MIT License - see LICENSE file for details
+
+---
+
+## 🆘 Support
+
+- **Issues:** [GitHub Issues](https://github.com/anuragind003/multi-ai-dev-system/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/anuragind003/multi-ai-dev-system/discussions)
+- **Documentation:** Check `/docs` directory for detailed guides
+
+---
+
+*Built with ❤️ using LangGraph, FastAPI, and Vue.js*

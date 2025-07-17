@@ -42,47 +42,92 @@ class ComprehensiveTechStackInput(BaseModel):
 @tool(args_schema=ComprehensiveTechStackInput)
 def generate_comprehensive_tech_stack(brd_analysis: dict, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
     """
-    Analyzes the BRD analysis output and generates a comprehensive, structured tech stack recommendation.
-
-    This tool provides recommendations for frontend, backend, database, cloud services,
-    and architectural patterns with MULTIPLE OPTIONS for user selection.
-    The output is a structured JSON object conforming to the ComprehensiveTechStackOutput model.
+    Analyzes the BRD analysis output and generates a single, best-fit tech stack recommendation.
+    
+    MODIFIED: Returns a single recommended stack instead of multiple options.
     """
-    operation_name = "Tech stack comprehensive analysis"
+    operation_name = "Tech stack single recommendation analysis"
     log_tool_start(operation_name, "Starting analysis")
     
     try:
-        # Use the provided LLM or get a default one
         llm_instance = llm or get_llm(temperature=0.2)
 
-        # Get the schema and escape curly braces to avoid LangChain template variable conflicts
-        schema_json = json.dumps(ComprehensiveTechStackOutput.model_json_schema(), indent=2)
-        escaped_schema = schema_json.replace("{", "{{").replace("}", "}}")
-        
+        # UPDATED: Improved prompt template to match the expected data contract
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", f"""You are a world-class CTO AI. Your task is to analyze the provided BRD analysis and recommend a complete technology stack with MULTIPLE OPTIONS for user selection.
+            ("system", """You are a world-class CTO AI. Your task is to analyze the provided BRD analysis and recommend the SINGLE BEST technology stack for this project.
 
-IMPORTANT: You must provide EXACTLY 3 options for each technology category:
-- frontend_options: 3 different frontend frameworks/technologies
-- backend_options: 3 different backend frameworks/technologies  
-- database_options: 3 different database technologies
-- cloud_options: 3 different cloud platforms
-- architecture_options: 3 different architecture patterns
-- tool_options: 3-6 different development/deployment tools
+IMPORTANT: You must provide ONE recommended technology for each category:
+- frontend: One best frontend framework/technology
+- backend: One best backend framework/technology  
+- database: One best database technology
+- cloud: One best cloud platform
+- architecture: One best architecture pattern
+- tools: 3-5 essential development/deployment tools
 
-Each option should have detailed reasoning for why it fits the project requirements. The user will select one option from each category.
+Each recommendation should have detailed reasoning for why it's the optimal choice for this specific project.
 
-You must also provide a "synthesis" object that contains an overall technology stack recommendation, summarizing the first/recommended option from each category with justification for the overall architecture approach.
+You must also provide a "synthesis" object that contains the overall technology stack recommendation with justification for the overall architecture approach.
 
-You MUST return ONLY a valid JSON object that follows the schema provided below. No explanations, no markdown, no additional text - just the JSON object.
+You MUST return ONLY a valid JSON object. No explanations, no markdown, no additional text - just the JSON object.
 
-**Schema:**
-```json
-{escaped_schema}
-```
+**Expected JSON structure:**
+{{
+    "frontend": {{
+        "name": "React",
+        "reasoning": "Detailed explanation why React is best for this project"
+    }},
+    "backend": {{
+        "name": "Node.js with Express.js", 
+        "reasoning": "Detailed explanation why Node.js is best for this project"
+    }},
+    "database": {{
+        "name": "PostgreSQL",
+        "reasoning": "Detailed explanation why PostgreSQL is best for this project"
+    }},
+    "cloud": {{
+        "name": "AWS (Amazon Web Services)",
+        "reasoning": "Detailed explanation why AWS is best for this project"
+    }},
+    "architecture": {{
+        "name": "Microservices Architecture",
+        "reasoning": "Detailed explanation why this architecture is best for this project"
+    }},
+    "tools": [
+        {{"name": "Docker", "reasoning": "Containerization for consistent deployments"}},
+        {{"name": "Git", "reasoning": "Version control system"}},
+        {{"name": "CI/CD Pipeline", "reasoning": "Automated testing and deployment"}}
+    ],
+    "synthesis": {{
+        "frontend": {{
+            "language": "JavaScript/TypeScript",
+            "framework": "React",
+            "reasoning": "React provides excellent developer experience and ecosystem"
+        }},
+        "backend": {{
+            "language": "JavaScript",
+            "framework": "Node.js with Express.js",
+            "reasoning": "Node.js enables full-stack JavaScript development"
+        }},
+        "database": {{
+            "type": "PostgreSQL",
+            "reasoning": "PostgreSQL offers robust ACID compliance and rich feature set"
+        }},
+        "architecture_pattern": "Microservices Architecture",
+        "deployment_environment": {{
+            "hosting": "AWS Cloud",
+            "ci_cd": "GitHub Actions"
+        }},
+        "key_libraries_tools": [
+            {{"name": "Docker", "purpose": "Containerization"}},
+            {{"name": "Git", "purpose": "Version control"}}
+        ],
+        "estimated_complexity": "Medium"
+    }},
+    "design_justification": "Overall explanation of why this complete stack works well together for this project"
+}}
 
-CRITICAL: Your response must be ONLY this JSON object. Start with {{{{ and end with }}}}. No other text."""),
-            ("human", "Analyze this BRD analysis and recommend a technology stack with 3 options for each category:\n\n{brd_analysis_str}")
+ CRITICAL: Your response must be ONLY this JSON object. Start with {{ and end with }}. No other text."""),
+            ("human", "Analyze this BRD analysis and recommend the SINGLE BEST technology stack:\n\n{brd_analysis_str}")
         ])
         
         # Convert the brd_analysis dict to a string for the prompt
@@ -134,4 +179,4 @@ def fix_field_mappings(data: Dict[str, Any]) -> Dict[str, Any]:
     Use utils.analysis_tool_utils.fix_tech_stack_field_mappings instead.
     """
     from utils.analysis_tool_utils import fix_tech_stack_field_mappings
-    return fix_tech_stack_field_mappings(data) 
+    return fix_tech_stack_field_mappings(data)

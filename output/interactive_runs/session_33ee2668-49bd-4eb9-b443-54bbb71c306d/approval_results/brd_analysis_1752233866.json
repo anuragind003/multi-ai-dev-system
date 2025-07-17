@@ -1,0 +1,197 @@
+{
+  "session_id": "session_33ee2668-49bd-4eb9-b443-54bbb71c306d",
+  "approval_type": "brd_analysis",
+  "timestamp": 1752233866,
+  "approval_data": {
+    "project_name": "V-KYC recordings to be fetched for Audit requirements",
+    "project_summary": "To develop a self-service portal/dashboard for authorized V-KYC team leads to search, find, and download V-KYC video recordings for internal and external audit purposes, replacing the current manual process of requesting files from the IT data server team.",
+    "project_goals": [
+      "Eliminate the manual dependency on the IT data server team for retrieving V-KYC recordings.",
+      "Provide a secure, access-controlled portal for V-KYC leads to fetch recordings.",
+      "Enable efficient retrieval of recordings through individual search and bulk download functionalities.",
+      "Streamline the process for fulfilling audit requirements for V-KYC recordings."
+    ],
+    "target_audience": [
+      "V-KYC Team Leaders (TL)",
+      "V-KYC Process Manager"
+    ],
+    "business_context": "Currently, the V-KYC team must submit a manual request to the IT data server team to obtain V-KYC recordings for audit purposes. These recordings are stored on an LTF 'NFS (Network File System)' server. This project aims to replace this manual, request-based process with an on-demand, self-service portal.",
+    "requirements": [
+      {
+        "id": "REQ-001",
+        "description": "A portal/Dashboard shall be created to access V-KYC recordings.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-002",
+        "description": "Access to the portal shall be restricted to the leads of the V-KYC process (Team Leaders & Process Manager).",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-003",
+        "description": "All recordings of approved PL-VKYC cases shall be made available on the portal.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-004",
+        "description": "Recordings shall be searchable by LAN (Loan Application Number).",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-005",
+        "description": "The portal shall allow users to filter or sort recordings by date and month.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-006",
+        "description": "The portal shall provide an option for users to upload a CSV or TXT file to request video recordings in bulk.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-007",
+        "description": "The uploaded file for bulk requests must contain a minimum of 2 and a maximum of 50 LAN IDs.",
+        "category": "functional",
+        "priority": 2
+      },
+      {
+        "id": "REQ-008",
+        "description": "After a bulk file upload, the system will call a backend API to process the request.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-009",
+        "description": "The results of a search or bulk request shall be displayed in a tabular format.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-010",
+        "description": "The results table shall be paginated, displaying 10 records at a time.",
+        "category": "functional",
+        "priority": 2
+      },
+      {
+        "id": "REQ-011",
+        "description": "The portal shall provide a 'Download All' option for bulk search results.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-012",
+        "description": "The 'Download All' function will download a maximum of 10 records at a time, corresponding to the current page view.",
+        "category": "functional",
+        "priority": 2
+      },
+      {
+        "id": "REQ-013",
+        "description": "Clicking on an individual LAN in the results table shall initiate the download for that specific recording.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-014",
+        "description": "Access to the portal must be highly restricted.",
+        "category": "non_functional",
+        "priority": 1
+      }
+    ],
+    "functional_requirements": [
+      "A portal/Dashboard shall be created to access V-KYC recordings.",
+      "Access to the portal shall be restricted to the leads of the V-KYC process (Team Leaders & Process Manager).",
+      "All recordings of approved PL-VKYC cases shall be made available on the portal.",
+      "Recordings shall be searchable by LAN.",
+      "The portal shall allow users to filter or sort recordings by date and month.",
+      "The portal shall provide an option for users to upload a CSV or TXT file for bulk video requests.",
+      "The uploaded file for bulk requests must contain a minimum of 2 and a maximum of 50 LAN IDs.",
+      "After a bulk file upload, the system will call a backend API to process the request.",
+      "The results of a search or bulk request shall be displayed in a tabular format.",
+      "The results table shall be paginated, displaying 10 records at a time.",
+      "The portal shall provide a 'Download All' option for bulk search results.",
+      "The 'Download All' function will download a maximum of 10 records at a time (current page).",
+      "Clicking on an individual LAN in the results table shall initiate the download for that specific recording."
+    ],
+    "non_functional_requirements": [
+      "Access to the screen will be available to very limited users (only Team leaders and Process Managers)."
+    ],
+    "stakeholders": [
+      "Sankalp Shaswat (Prepared by)",
+      "Mayur Takale (Reviewed by)",
+      "Amir Khan (Reviewed by)",
+      "Atul Kantak (Authorized by)",
+      "Harsh Gangakhedkar (Authorized by)",
+      "B. Ops – V-KYC Team (Process Owner)",
+      "VKYC Team (Business Unit)",
+      "IT data server team"
+    ],
+    "success_criteria": [
+      "V-KYC Team Leads can independently search and download recordings without IT intervention.",
+      "Turnaround time for providing recordings for audit is significantly reduced.",
+      "The portal successfully prevents unauthorized users from accessing the recordings."
+    ],
+    "constraints": [
+      "The scope is limited to 'All Approved PL-VKYC cases'.",
+      "Bulk upload file must be in CSV or TXT format.",
+      "Bulk upload file must contain between 2 and 50 LAN IDs.",
+      "Table pagination is fixed to 10 records per page.",
+      "Bulk download is limited to 10 records at a time (one page)."
+    ],
+    "assumptions": [
+      "A backend API to fetch video recordings based on LAN IDs will be available.",
+      "The NFS server containing the video files will be accessible to the new system's backend.",
+      "The LAN IDs provided by users will be valid and correctly formatted.",
+      "The necessary security infrastructure for role-based access control is in place."
+    ],
+    "risks": [
+      "Unauthorized access to sensitive customer PII and video data.",
+      "Poor system performance when searching or downloading multiple large video files.",
+      "System downtime or unavailability of the backend API or NFS server, blocking access to recordings.",
+      "Incorrect data mapping between LAN IDs and video files, leading to wrong downloads."
+    ],
+    "domain_specific_details": {
+      "data_fields_for_recordings": [
+        "User ID (LAN)",
+        "Call Duration (In Minute)",
+        "Status",
+        "Time",
+        "Date",
+        "NFS VKYC Upload Time"
+      ]
+    },
+    "quality_assessment": {
+      "clarity_score": 8.0,
+      "completeness_score": 7.0,
+      "consistency_score": 8.0,
+      "recommendations": [
+        "Explicitly define Non-Functional Requirements (e.g., performance benchmarks, security standards for data in transit/rest, availability targets).",
+        "Add sections for Assumptions, Risks, and Constraints to the document.",
+        "Define clear, measurable success criteria.",
+        "Specify error handling procedures (e.g., LAN not found, file upload error, API failure).",
+        "Define requirements for logging and auditing user actions on the portal."
+      ]
+    },
+    "gap_analysis": {
+      "identified_gaps": [
+        "Absence of specific Non-Functional Requirements (NFRs) such as system response time, availability (uptime), and specific security protocols.",
+        "Lack of defined error handling scenarios (e.g., what to display if a LAN ID is not found).",
+        "No mention of logging or audit trail requirements for user activities (who downloaded what and when).",
+        "The 'Reporting Requirements' section is marked 'NA', which could be a gap if management or operational reports are needed later.",
+        "No explicit, measurable success metrics are defined (e.g., target reduction in request fulfillment time)."
+      ],
+      "recommendations_for_completion": [
+        "Conduct a workshop with stakeholders to elicit and document key NFRs.",
+        "Define and document the expected system behavior for common error scenarios.",
+        "Confirm and document requirements for an audit trail to track access and downloads of sensitive data.",
+        "Re-evaluate the need for reporting with business owners.",
+        "Work with the process owner to define quantifiable success metrics for the project."
+      ]
+    }
+  },
+  "workflow_state_snapshot": {}
+}

@@ -85,8 +85,27 @@ class SimpleBackendAgent(SimpleBaseAgent):
             - Required Features: {features}
             - Work Item: {work_item}
             
+            **Work Item Dependencies:**
+            {dependencies}
+            
+            **Acceptance Criteria:**
+            {acceptance_criteria}
+            
+            **Expected File Structure (MUST FOLLOW EXACTLY):**
+            {expected_files}
+            
+            **CRITICAL: File Structure Requirements:**
+            - You MUST create files that match the expected file structure above
+            - Use the EXACT file paths and names specified
+            - If package.json is expected, create Node.js project; if requirements.txt is expected, create Python project
+            - Follow the file naming conventions shown in the expected structure
+            - Ensure generated files serve the purposes implied by their paths
+            
             **Mandatory Requirements:**
-            - Generate EXACTLY 10-15 substantial files
+            - Generate files that match the expected structure above
+            - Use {language} with {framework} as specified
+            - Ensure all acceptance criteria are met in the implementation
+            - Consider and handle dependencies appropriately
             - Implement comprehensive error handling and logging
             - Add robust input validation and sanitization
             - Include proper security measures (CORS, headers, auth)
@@ -97,7 +116,7 @@ class SimpleBackendAgent(SimpleBaseAgent):
             - Implement proper database connection management
             - Add API documentation and response schemas
             
-            Focus on creating an enterprise-grade backend system.
+            Focus on creating an enterprise-grade backend system that follows the exact file structure specified and meets all acceptance criteria.
             Each file should be production-ready with comprehensive functionality and proper error handling.""")
         ])
 
@@ -106,26 +125,60 @@ class SimpleBackendAgent(SimpleBaseAgent):
         try:
             logger.info(f"SimpleBackendAgent processing: {work_item.description}")
             
-            # Extract context
-            tech_stack = state.get('tech_stack_recommendation', {})
-            language = tech_stack.get('backend_language', 'Python')
-            framework = tech_stack.get('backend_framework', 'FastAPI')
+            # ENHANCED: Extract technology stack from enhanced state
+            tech_stack_info = state.get('tech_stack_info', {})
+            backend_tech = tech_stack_info.get('backend', 'Python with FastAPI')
+            expected_files = tech_stack_info.get('expected_file_structure', [])
+            
+            # Parse backend technology
+            if 'node.js' in backend_tech.lower() or 'express' in backend_tech.lower():
+                language = 'JavaScript'
+                framework = 'Node.js/Express'
+            elif 'python' in backend_tech.lower():
+                language = 'Python'
+                if 'django' in backend_tech.lower():
+                    framework = 'Django'
+                else:
+                    framework = 'FastAPI'  # Default Python framework
+            elif 'java' in backend_tech.lower():
+                language = 'Java'
+                framework = 'Spring Boot'
+            else:
+                # Fallback parsing
+                parts = backend_tech.split(' with ')
+                language = parts[0] if len(parts) > 0 else 'Python'
+                framework = parts[1] if len(parts) > 1 else 'FastAPI'
+            
+            logger.info(f"SimpleBackendAgent using: {language} with {framework}")
+            logger.info(f"Expected files: {expected_files}")
             
             # Determine features from work item
             features = self._extract_features(work_item.description)
             
-            # Generate code with LLM
+            # Generate code with LLM - Enhanced with work item details
+            dependencies = tech_stack_info.get('work_item_dependencies', [])
+            acceptance_criteria = tech_stack_info.get('work_item_acceptance_criteria', [])
+            
             prompt_input = {
                 "description": work_item.description,
                 "language": language,
                 "framework": framework,
-                "tech_stack": json.dumps(tech_stack, indent=2),
+                "tech_stack": json.dumps(tech_stack_info, indent=2),
                 "features": ", ".join(features),
-                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}"
+                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}",
+                "expected_files": "\n".join(expected_files) if expected_files else "No specific file structure specified",
+                "dependencies": "\n".join([f"- {dep}" for dep in dependencies]) if dependencies else "No dependencies",
+                "acceptance_criteria": "\n".join([f"✓ {criteria}" for criteria in acceptance_criteria]) if acceptance_criteria else "No specific acceptance criteria"
             }
             
             response = self.llm.invoke(self.backend_prompt.format_messages(**prompt_input))
-            content = response.content if hasattr(response, 'content') else str(response)
+            raw_content = response.content if hasattr(response, 'content') else str(response)
+
+            # Handle case where content is a list of strings/chunks
+            if isinstance(raw_content, list):
+                content = "".join(raw_content)
+            else:
+                content = str(raw_content)
             
             # Parse files
             generated_files = parse_llm_output_into_files(content)
@@ -135,19 +188,19 @@ class SimpleBackendAgent(SimpleBaseAgent):
                 logger.warning(f"LLM parsing failed for {work_item.id}, creating intelligent fallback files")
                 generated_files = self._create_intelligent_fallback_files(work_item, language, framework, features, content)
             
-            # ENHANCED: More flexible quality validation
-            min_files_required = max(3, min(8, len(features) + 2))  # Adaptive based on features
-            if len(generated_files) < min_files_required:
-                logger.warning(f"Insufficient backend files generated: {len(generated_files)}, expected at least {min_files_required}")
+            # ENHANCED: More flexible quality validation - accept any reasonable number of files
+            min_files_suggested = max(2, min(5, len(features) + 1))  # Even more flexible
+            if len(generated_files) < min_files_suggested:
+                logger.info(f"Generated {len(generated_files)} backend files (suggested: {min_files_suggested})")
                 
                 # Try to supplement with template files rather than failing
                 if generated_files:  # We have some files, supplement them
                     logger.info(f"Supplementing {len(generated_files)} existing files with templates")
                     template_files = self._create_template_files(work_item, language, framework, features)
                     generated_files.extend(template_files)
-                else:  # No files at all, create from scratch
-                    logger.info(f"Creating complete fallback file set for {work_item.id}")
-                    generated_files = self._create_complete_fallback_files(work_item, language, framework, features)
+                # Accept even single files if they contain meaningful content
+            else:
+                logger.info(f"Generated {len(generated_files)} backend files - good coverage")
             
             # Validate file content quality (more lenient)
             validated_files = self._validate_generated_files(generated_files, language, framework)

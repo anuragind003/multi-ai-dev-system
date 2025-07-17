@@ -1,0 +1,956 @@
+{
+  "session_id": "session_5e6c4ad6-4542-4ad4-85de-5fda80ba63a7",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752491546,
+  "approval_data": {
+    "summary": "This project implements a simple RESTful CRUD API for product management using Node.js with Express.js, PostgreSQL for persistent storage, and Redis for caching. The infrastructure is deployed on AWS using ECS for container orchestration, RDS for the database, ElastiCache for Redis, and ALB for load balancing. The development workflow includes Docker for containerization and GitHub Actions for CI/CD, automating testing, building, and deployment. The API includes basic error handling, logging, and metrics, along with JWT-based authentication and RBAC authorization as per the system design.",
+    "phases": [
+      {
+        "name": "General Development",
+        "description": "Tasks for general development development",
+        "work_items": [
+          {
+            "id": "INF-001",
+            "description": "Set up AWS Virtual Private Cloud (VPC) with public and private subnets.",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "VPC created with a /16 CIDR block.",
+              "Two public subnets created in different AZs.",
+              "Two private subnets created in different AZs.",
+              "Internet Gateway attached to VPC.",
+              "Route tables configured for public and private subnets."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-002",
+            "description": "Configure AWS Security Groups for database, Redis, and application instances.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Security Group for PostgreSQL allowing inbound from application SG.",
+              "Security Group for Redis allowing inbound from application SG.",
+              "Security Group for Application allowing inbound from ALB SG and outbound to DB/Redis SGs.",
+              "All SGs configured with least privilege principle."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-003",
+            "description": "Provision AWS RDS PostgreSQL instance.",
+            "dependencies": [
+              "INF-001",
+              "INF-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "PostgreSQL instance created in private subnets.",
+              "Instance accessible from within the VPC (e.g., via bastion host or EC2 instance).",
+              "Database name, username, and password configured.",
+              "Associated with the correct Security Group.",
+              "Automatic backups enabled."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-004",
+            "description": "Provision AWS ElastiCache Redis instance.",
+            "dependencies": [
+              "INF-001",
+              "INF-002"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Redis instance created in private subnets.",
+              "Instance accessible from within the VPC.",
+              "Associated with the correct Security Group."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-005",
+            "description": "Create AWS Elastic Container Registry (ECR) repository for backend application images.",
+            "dependencies": [],
+            "estimated_time": "2 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "ECR repository named 'product-api' created.",
+              "Repository policy configured to allow push/pull from CI/CD roles."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "BE-SETUP-004",
+            "description": "Create Dockerfile for Node.js Express application.",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Dockerfile created in the project root.",
+              "Node.js base image specified.",
+              "Application dependencies installed within the Docker image.",
+              "Application code copied into the image.",
+              "Exposed port matches Express server port.",
+              "Container runs the Express application successfully when built and run locally."
+            ],
+            "status": "pending",
+            "code_files": [
+              "Dockerfile",
+              ".dockerignore"
+            ]
+          },
+          {
+            "id": "CI-CD-001",
+            "description": "Create GitHub Actions workflow for linting and unit/integration tests.",
+            "dependencies": [
+              "BE-SETUP-004",
+              "TEST-001",
+              "TEST-002",
+              "TEST-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "`.github/workflows/ci.yml` file created.",
+              "Workflow triggers on push to `main` branch and pull requests.",
+              "Steps include installing dependencies, running linting, and executing all unit and integration tests.",
+              "Workflow passes successfully on code push."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/ci.yml"
+            ]
+          },
+          {
+            "id": "CI-CD-002",
+            "description": "Create GitHub Actions workflow for Docker build and push to ECR.",
+            "dependencies": [
+              "CI-CD-001",
+              "INF-005"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "`.github/workflows/build-and-push.yml` file created.",
+              "Workflow triggers on successful completion of CI workflow on `main` branch.",
+              "Steps include AWS authentication, Docker build, and push to ECR (INF-005).",
+              "ECR repository contains the latest Docker image after workflow run."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/build-and-push.yml"
+            ]
+          },
+          {
+            "id": "CI-CD-003",
+            "description": "Create AWS ECS Cluster and Task Definition for backend service.",
+            "dependencies": [
+              "INF-001",
+              "INF-002",
+              "INF-005",
+              "BE-SETUP-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "ECS Cluster created.",
+              "ECS Task Definition created referencing the ECR image (INF-005).",
+              "Task Definition configured with appropriate CPU/Memory, port mappings, and environment variables.",
+              "IAM Role for Task Execution and Task Role created with necessary permissions."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "CI-CD-004",
+            "description": "Create AWS ECS Service for backend deployment.",
+            "dependencies": [
+              "CI-CD-003",
+              "INF-001",
+              "INF-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "ECS Service created in private subnets.",
+              "Service configured to use the Task Definition (CI-CD-003).",
+              "Service linked to the Application Load Balancer (ALB) target group.",
+              "Desired count set to 1 or more.",
+              "Service successfully deploys and runs tasks."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "CI-CD-005",
+            "description": "Provision AWS Application Load Balancer (ALB) and configure listener/target group.",
+            "dependencies": [
+              "INF-001",
+              "INF-002",
+              "CI-CD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "ALB created in public subnets.",
+              "Listener configured for HTTP/HTTPS (e.g., port 80/443).",
+              "Target Group created for ECS service (CI-CD-004) with health checks configured.",
+              "ALB routes traffic to the ECS service.",
+              "DNS record (e.g., CNAME) created for ALB."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "CI-CD-006",
+            "description": "Configure GitHub Actions for automated deployment to ECS.",
+            "dependencies": [
+              "CI-CD-002",
+              "CI-CD-004",
+              "CI-CD-005"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "`.github/workflows/deploy.yml` file created.",
+              "Workflow triggers on successful Docker image push to ECR (CI-CD-002).",
+              "Steps include updating ECS Service (CI-CD-004) with the new Task Definition.",
+              "Deployment rolls out successfully to ECS after workflow run.",
+              "API is accessible via ALB DNS."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/deploy.yml"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Backend Development",
+        "description": "Tasks for backend development development",
+        "work_items": [
+          {
+            "id": "BE-SETUP-001",
+            "description": "Initialize Node.js project with Express.js and basic folder structure.",
+            "dependencies": [],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Node.js project initialized (`package.json` created).",
+              "Express.js installed as a dependency.",
+              "Basic `app.js` or `server.js` file created to start an Express server.",
+              "Project structure includes `src/`, `config/`, `routes/`, `controllers/`, `services/`, `models/`."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "package-lock.json",
+              "src/app.js",
+              "src/server.js"
+            ]
+          },
+          {
+            "id": "BE-SETUP-002",
+            "description": "Configure environment variable management using `dotenv`.",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "2 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "`dotenv` package installed.",
+              "`.env` file created for local development.",
+              "Environment variables loaded correctly into `process.env`.",
+              "Sensitive information (e.g., database credentials) is read from `.env`."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".env.example",
+              "config/env.js",
+              "src/app.js"
+            ]
+          },
+          {
+            "id": "BE-SETUP-003",
+            "description": "Implement centralized error handling middleware for Express.js.",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Custom error classes (e.g., `ApiError`, `NotFoundError`, `BadRequestError`) defined.",
+              "Middleware function created to catch errors and send standardized JSON responses.",
+              "Different HTTP status codes (400, 404, 500) are returned based on error type.",
+              "Error messages are consistent and informative."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/middleware/errorHandler.js",
+              "src/utils/apiError.js",
+              "src/app.js"
+            ]
+          },
+          {
+            "id": "DB-001",
+            "description": "Install PostgreSQL client library (`pg`) and create database connection utility.",
+            "dependencies": [
+              "BE-SETUP-002"
+            ],
+            "estimated_time": "3 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "`pg` package installed.",
+              "Database connection utility (`db.js`) created using environment variables.",
+              "Connection pool configured.",
+              "Successful connection to the PostgreSQL instance (INF-003) can be established."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "src/config/database.js"
+            ]
+          },
+          {
+            "id": "DB-003",
+            "description": "Implement database migration execution logic (e.g., using `node-pg-migrate` or custom script).",
+            "dependencies": [
+              "DB-001",
+              "DB-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Migration tool/script integrated into the project.",
+              "Database schema can be created/updated by running the migration script.",
+              "`products` table successfully created in the PostgreSQL database (INF-003) when migrations are run."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/database/migrate.js",
+              "package.json"
+            ]
+          },
+          {
+            "id": "BE-PROD-001",
+            "description": "Define Product data validation schema (e.g., using Joi or Zod).",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "3 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Validation schema for product creation and update defined.",
+              "Schema enforces `name` (string, required), `description` (string, optional), `price` (float, required, >=0), `stock_quantity` (integer, required, >=0).",
+              "Partial update schema for `PUT` requests is supported."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/validation/productValidation.js"
+            ]
+          },
+          {
+            "id": "BE-PROD-002",
+            "description": "Create `product.service.js` for all database interactions related to products.",
+            "dependencies": [
+              "DB-001",
+              "DB-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Service methods for `createProduct`, `getAllProducts`, `getProductById`, `updateProduct`, `deleteProduct` defined.",
+              "Methods interact directly with the database connection utility (DB-001).",
+              "SQL queries are parameterized to prevent SQL injection.",
+              "Returns appropriate data or throws specific errors (e.g., `NotFoundError`)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/services/productService.js"
+            ]
+          },
+          {
+            "id": "BE-PROD-003",
+            "description": "Create `product.controller.js` to handle request/response logic for products.",
+            "dependencies": [
+              "BE-PROD-001",
+              "BE-PROD-002",
+              "BE-SETUP-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Controller methods for `createProduct`, `getProducts`, `getProduct`, `updateProduct`, `deleteProduct` defined.",
+              "Methods call corresponding `productService` functions.",
+              "Request body/params validation performed using `productValidation` schema.",
+              "Sends appropriate JSON responses with correct HTTP status codes (200, 201, 400, 404, 500).",
+              "Catches errors from service layer and passes them to error handling middleware."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js"
+            ]
+          },
+          {
+            "id": "BE-PROD-004",
+            "description": "Define `product.routes.js` for API endpoints and integrate into main Express app.",
+            "dependencies": [
+              "BE-PROD-003",
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Router created for `/api/v1/products`.",
+              "Routes defined for POST, GET (all), GET (by ID), PUT, DELETE.",
+              "Each route maps to the correct `productController` method.",
+              "Router integrated into `src/app.js`."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/routes/productRoutes.js",
+              "src/app.js"
+            ]
+          },
+          {
+            "id": "BE-CRUD-001",
+            "description": "Implement `POST /api/v1/products` endpoint for creating a new product.",
+            "dependencies": [
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts JSON body with `name`, `price`, `stock_quantity`, and optional `description`.",
+              "Validates input data using `productValidation` schema.",
+              "Calls `productService.createProduct`.",
+              "Returns 201 Created status with the newly created product ID and details on success.",
+              "Returns 400 Bad Request for invalid input.",
+              "Returns 500 Internal Server Error for unexpected errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js",
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "BE-CRUD-002",
+            "description": "Implement `GET /api/v1/products` endpoint for retrieving all products.",
+            "dependencies": [
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint returns a JSON array of all products.",
+              "Each product object includes `id`, `name`, `description`, `price`, `stock_quantity`.",
+              "Returns 200 OK status.",
+              "Returns 500 Internal Server Error for unexpected errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js",
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "BE-CRUD-003",
+            "description": "Implement `GET /api/v1/products/{id}` endpoint for retrieving a single product by ID.",
+            "dependencies": [
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a product ID in the URL path.",
+              "Returns a JSON object of the product if found.",
+              "Returns 200 OK status on success.",
+              "Returns 404 Not Found if product ID does not exist.",
+              "Returns 400 Bad Request for invalid ID format (e.g., non-UUID if UUID is used).",
+              "Returns 500 Internal Server Error for unexpected errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js",
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "BE-CRUD-004",
+            "description": "Implement `PUT /api/v1/products/{id}` endpoint for updating an existing product.",
+            "dependencies": [
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a product ID in the URL path and a JSON body with fields to update.",
+              "Supports partial updates (e.g., updating only `price`).",
+              "Validates input data using `productValidation` schema.",
+              "Returns 200 OK status with the updated product details on success.",
+              "Returns 404 Not Found if product ID does not exist.",
+              "Returns 400 Bad Request for invalid input or ID format.",
+              "Returns 500 Internal Server Error for unexpected errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js",
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "BE-CRUD-005",
+            "description": "Implement `DELETE /api/v1/products/{id}` endpoint for deleting a product.",
+            "dependencies": [
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a product ID in the URL path.",
+              "Deletes the product from the database.",
+              "Returns 204 No Content status on successful deletion.",
+              "Returns 404 Not Found if product ID does not exist.",
+              "Returns 400 Bad Request for invalid ID format.",
+              "Returns 500 Internal Server Error for unexpected errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js",
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "TEST-001",
+            "description": "Write unit tests for `product.service.js` methods.",
+            "dependencies": [
+              "BE-PROD-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test suite created for `productService`.",
+              "Tests cover `createProduct`, `getAllProducts`, `getProductById`, `updateProduct`, `deleteProduct`.",
+              "Mocks database interactions to isolate service logic.",
+              "Tests verify correct data manipulation and error handling."
+            ],
+            "status": "pending",
+            "code_files": [
+              "test/unit/productService.test.js"
+            ]
+          },
+          {
+            "id": "TEST-002",
+            "description": "Write unit tests for `product.controller.js` methods.",
+            "dependencies": [
+              "BE-PROD-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test suite created for `productController`.",
+              "Tests cover `createProduct`, `getProducts`, `getProduct`, `updateProduct`, `deleteProduct`.",
+              "Mocks `productService` and Express `req`, `res`, `next` objects.",
+              "Tests verify correct request validation, service calls, and response formatting."
+            ],
+            "status": "pending",
+            "code_files": [
+              "test/unit/productController.test.js"
+            ]
+          },
+          {
+            "id": "TEST-003",
+            "description": "Write integration tests for all product API endpoints.",
+            "dependencies": [
+              "BE-CRUD-001",
+              "BE-CRUD-002",
+              "BE-CRUD-003",
+              "BE-CRUD-004",
+              "BE-CRUD-005"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Integration test suite created using a tool like Supertest.",
+              "Tests cover `POST /products`, `GET /products`, `GET /products/{id}`, `PUT /products/{id}`, `DELETE /products/{id}`.",
+              "Tests interact with a real (or test) database instance.",
+              "Tests verify correct HTTP status codes and response bodies for success and error cases.",
+              "Tests ensure data persistence and correct CRUD behavior end-to-end."
+            ],
+            "status": "pending",
+            "code_files": [
+              "test/integration/productApi.test.js"
+            ]
+          },
+          {
+            "id": "SEC-002",
+            "description": "Implement User model and service for user management.",
+            "dependencies": [
+              "SEC-001",
+              "BE-PROD-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "User model/schema defined.",
+              "`userService.js` created with methods for `createUser`, `findUserByUsername`, `findUserById`.",
+              "Password hashing (e.g., bcrypt) implemented for `createUser`.",
+              "Methods interact with the database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/models/userModel.js",
+              "src/services/userService.js"
+            ]
+          },
+          {
+            "id": "SEC-003",
+            "description": "Implement user registration (`POST /api/v1/auth/register`) endpoint.",
+            "dependencies": [
+              "SEC-002",
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts `username` and `password`.",
+              "Validates input, hashes password, and creates new user.",
+              "Returns 201 Created on success.",
+              "Returns 400 Bad Request for invalid input or existing username."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/authController.js",
+              "src/routes/authRoutes.js"
+            ]
+          },
+          {
+            "id": "SEC-004",
+            "description": "Implement user login (`POST /api/v1/auth/login`) endpoint.",
+            "dependencies": [
+              "SEC-002",
+              "SEC-005",
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts `username` and `password`.",
+              "Verifies password against stored hash.",
+              "Generates and returns a JWT token on successful authentication.",
+              "Returns 200 OK on success.",
+              "Returns 401 Unauthorized for invalid credentials."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/authController.js",
+              "src/routes/authRoutes.js"
+            ]
+          },
+          {
+            "id": "SEC-005",
+            "description": "Implement JWT generation and validation utility.",
+            "dependencies": [
+              "BE-SETUP-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Utility functions for `generateToken` and `verifyToken` created.",
+              "Uses a secret key from environment variables.",
+              "Token contains user ID and role.",
+              "Token expiration configured."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/utils/jwt.js"
+            ]
+          },
+          {
+            "id": "SEC-006",
+            "description": "Create JWT authentication middleware.",
+            "dependencies": [
+              "SEC-005",
+              "BE-SETUP-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware function created to extract and verify JWT from `Authorization` header.",
+              "Attaches decoded user information to `req.user`.",
+              "Calls `next()` if token is valid.",
+              "Returns 401 Unauthorized for missing or invalid tokens."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/middleware/authMiddleware.js"
+            ]
+          },
+          {
+            "id": "SEC-007",
+            "description": "Create RBAC authorization middleware.",
+            "dependencies": [
+              "SEC-006",
+              "BE-SETUP-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware function created that accepts required roles.",
+              "Checks `req.user.role` against required roles.",
+              "Calls `next()` if user has required role.",
+              "Returns 403 Forbidden if user does not have required role."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/middleware/rbacMiddleware.js"
+            ]
+          },
+          {
+            "id": "SEC-008",
+            "description": "Apply JWT authentication to all product API endpoints.",
+            "dependencies": [
+              "SEC-006",
+              "BE-PROD-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "All routes in `productRoutes.js` use `authMiddleware`.",
+              "Access to product endpoints requires a valid JWT.",
+              "Requests without a valid token receive 401 Unauthorized."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "SEC-009",
+            "description": "Apply RBAC authorization to product API endpoints (e.g., only 'admin' can delete/update).",
+            "dependencies": [
+              "SEC-007",
+              "SEC-008"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Specific routes (e.g., POST, PUT, DELETE) in `productRoutes.js` use `rbacMiddleware` with appropriate roles.",
+              "Users with insufficient roles receive 403 Forbidden.",
+              "Admin users can perform all operations."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/routes/productRoutes.js"
+            ]
+          },
+          {
+            "id": "CACHE-001",
+            "description": "Install Redis client library and create Redis connection utility.",
+            "dependencies": [
+              "BE-SETUP-002",
+              "INF-004"
+            ],
+            "estimated_time": "3 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "`ioredis` or similar package installed.",
+              "Redis client initialized using environment variables (INF-004 endpoint).",
+              "Successful connection to Redis instance can be established."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "src/config/redis.js"
+            ]
+          },
+          {
+            "id": "CACHE-002",
+            "description": "Integrate Redis caching into `GET /api/v1/products` endpoint.",
+            "dependencies": [
+              "CACHE-001",
+              "BE-CRUD-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Before querying DB, check Redis cache for 'all_products' key.",
+              "If found, return cached data.",
+              "If not found, query DB, store result in cache, then return data.",
+              "Cache expiration time configured (e.g., 5 minutes)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js"
+            ]
+          },
+          {
+            "id": "CACHE-003",
+            "description": "Integrate Redis caching into `GET /api/v1/products/{id}` endpoint.",
+            "dependencies": [
+              "CACHE-001",
+              "BE-CRUD-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Before querying DB, check Redis cache for 'product:{id}' key.",
+              "If found, return cached data.",
+              "If not found, query DB, store result in cache, then return data.",
+              "Cache expiration time configured."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js"
+            ]
+          },
+          {
+            "id": "CACHE-004",
+            "description": "Implement cache invalidation on `POST`, `PUT`, `DELETE` for products.",
+            "dependencies": [
+              "CACHE-001",
+              "BE-CRUD-001",
+              "BE-CRUD-004",
+              "BE-CRUD-005"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "On `POST /products`, invalidate 'all_products' cache key.",
+              "On `PUT /products/{id}`, invalidate 'all_products' and 'product:{id}' cache keys.",
+              "On `DELETE /products/{id}`, invalidate 'all_products' and 'product:{id}' cache keys.",
+              "Cache invalidation occurs after successful database operation."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/controllers/productController.js",
+              "src/services/productService.js"
+            ]
+          },
+          {
+            "id": "OBS-001",
+            "description": "Integrate Winston for structured logging.",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Winston installed and configured.",
+              "Logger instance created with console transport.",
+              "Log levels (info, warn, error) defined.",
+              "Basic application events (e.g., server start, request received, errors) are logged."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "src/config/logger.js",
+              "src/app.js"
+            ]
+          },
+          {
+            "id": "OBS-002",
+            "description": "Set up basic Prometheus metrics endpoint and integrate client.",
+            "dependencies": [
+              "BE-SETUP-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Prometheus client library installed.",
+              "`/metrics` endpoint exposed by Express app.",
+              "Basic metrics (e.g., request count, response time histogram) collected.",
+              "Metrics are accessible via the `/metrics` endpoint."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "src/middleware/metricsMiddleware.js",
+              "src/app.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Database Setup",
+        "description": "Tasks for database setup development",
+        "work_items": [
+          {
+            "id": "DB-002",
+            "description": "Write SQL migration script for `products` table.",
+            "dependencies": [
+              "DB-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Migration file created (e.g., `migrations/create_products_table.sql`).",
+              "SQL script defines `products` table with `id (UUID, PK)`, `name (VARCHAR)`, `description (TEXT)`, `price (NUMERIC)`, `stock (INTEGER)`, `created_at`, `updated_at` columns.",
+              "Constraints (NOT NULL, UNIQUE, CHECK) applied as per data model.",
+              "Default values for `stock`, `created_at`, `updated_at` are set."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/database/migrations/V1__create_products_table.sql"
+            ]
+          },
+          {
+            "id": "SEC-001",
+            "description": "Create `users` table migration script for authentication.",
+            "dependencies": [
+              "DB-003"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Migration file created (e.g., `migrations/create_users_table.sql`).",
+              "SQL script defines `users` table with `id (UUID, PK)`, `username (VARCHAR, UNIQUE)`, `password_hash (VARCHAR)`, `role (VARCHAR)`, `created_at`, `updated_at` columns.",
+              "Constraints applied as per data model."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/database/migrations/V2__create_users_table.sql"
+            ]
+          }
+        ]
+      }
+    ],
+    "total_work_items": 45,
+    "metadata": {
+      "estimated_total_time": "30 days",
+      "risk_assessment": "Medium - Key risks include potential performance bottlenecks under high load if caching/DB scaling are not optimized, and security vulnerabilities if authentication/authorization are not rigorously implemented. Deployment complexity on AWS also poses a moderate risk.",
+      "technology_stack": {
+        "backend": "Node.js (Express.js)",
+        "database": "PostgreSQL",
+        "caching": "Redis",
+        "cloud_provider": "AWS (ECS, RDS, ElastiCache, ALB, ECR)",
+        "ci_cd": "GitHub Actions",
+        "containerization": "Docker"
+      }
+    },
+    "plan_type": "simplified_workitem_backlog"
+  },
+  "workflow_state_snapshot": {}
+}

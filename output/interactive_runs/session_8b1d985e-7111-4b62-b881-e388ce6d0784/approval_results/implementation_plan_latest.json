@@ -1,0 +1,1082 @@
+{
+  "session_id": "session_8b1d985e-7111-4b62-b881-e388ce6d0784",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752387016,
+  "approval_data": {
+    "summary": "This plan outlines the development of the V-KYC recording retrieval portal using a microservices architecture on AWS. It covers the setup of core infrastructure, development of backend services for user management, recording metadata, recording storage, audit logging, and bulk requests, as well as the frontend portal for search, display, and download functionalities. Key non-functional requirements like security (JWT, RBAC), error handling, and basic monitoring are integrated. The plan also includes tasks for CI/CD setup and comprehensive testing to ensure a robust and reliable solution.",
+    "phases": [
+      {
+        "name": "General Development",
+        "description": "Tasks for general development development",
+        "work_items": [
+          {
+            "id": "INF-001",
+            "description": "Set up AWS VPC, subnets, and security groups for the application.",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "VPC created with public and private subnets.",
+              "Security groups configured for inter-service communication and external access (e.g., SSH, HTTPS).",
+              "Network ACLs configured appropriately."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-002",
+            "description": "Provision AWS RDS PostgreSQL instance for User Management Service.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "PostgreSQL RDS instance created in private subnet.",
+              "Database accessible from within the VPC.",
+              "Initial database and user created for User Management Service."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-003",
+            "description": "Provision AWS RDS PostgreSQL instance for VKYC Recording Metadata Service.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "PostgreSQL RDS instance created in private subnet.",
+              "Database accessible from within the VPC.",
+              "Initial database and user created for VKYC Recording Metadata Service."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-004",
+            "description": "Provision AWS RDS PostgreSQL instance for Audit Log Service.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "4 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "PostgreSQL RDS instance created in private subnet.",
+              "Database accessible from within the VPC.",
+              "Initial database and user created for Audit Log Service."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-005",
+            "description": "Create AWS S3 bucket for VKYC recordings.",
+            "dependencies": [],
+            "estimated_time": "2 hours",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "S3 bucket created with appropriate naming convention.",
+              "Bucket configured for private access by default.",
+              "Server-Side Encryption (SSE-S3) enabled.",
+              "Versioning enabled."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-010",
+            "description": "Set up AWS EKS cluster for microservices deployment.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "EKS cluster provisioned and configured.",
+              "Worker nodes (EC2 instances) joined to the cluster.",
+              "Kubectl configured to connect to the cluster.",
+              "IAM roles for EKS service account created."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-011",
+            "description": "Configure CI/CD pipeline (e.g., GitHub Actions) for backend services.",
+            "dependencies": [
+              "INF-006",
+              "INF-007",
+              "INF-008",
+              "INF-009",
+              "INF-010"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "GitHub Actions workflows created for each backend service.",
+              "Workflows trigger on push to main branch.",
+              "Workflows build Docker images, push to ECR, and update Kubernetes deployments.",
+              "Automated tests run as part of the pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/user-management-ci.yml",
+              ".github/workflows/metadata-ci.yml",
+              ".github/workflows/storage-ci.yml",
+              ".github/workflows/audit-log-ci.yml"
+            ]
+          },
+          {
+            "id": "INF-012",
+            "description": "Configure CI/CD pipeline for frontend service.",
+            "dependencies": [
+              "FE-001",
+              "INF-010"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "GitHub Actions workflow created for frontend service.",
+              "Workflow triggers on push to main branch.",
+              "Workflow builds React app, creates Docker image, pushes to ECR, and updates Kubernetes deployment.",
+              "Automated tests run as part of the pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/frontend-ci.yml"
+            ]
+          },
+          {
+            "id": "INF-013",
+            "description": "Create Kubernetes manifests for all microservices.",
+            "dependencies": [
+              "INF-010",
+              "BE-UM-001",
+              "BE-RM-001",
+              "BE-AL-001"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Deployment, Service, and Ingress manifests created for each backend service.",
+              "Deployment and Service manifests created for the frontend.",
+              "Environment variables for database connections, S3 bucket names, etc., are configured securely (e.g., Kubernetes Secrets).",
+              "Services are exposed via internal ClusterIP or NodePort as appropriate.",
+              "Ingress controller configured to route external traffic to the frontend and API Gateway."
+            ],
+            "status": "pending",
+            "code_files": [
+              "kubernetes/user-management-service.yaml",
+              "kubernetes/metadata-service.yaml",
+              "kubernetes/storage-service.yaml",
+              "kubernetes/audit-log-service.yaml",
+              "kubernetes/frontend.yaml",
+              "kubernetes/ingress.yaml"
+            ]
+          },
+          {
+            "id": "INF-015",
+            "description": "Set up basic monitoring and logging with AWS CloudWatch.",
+            "dependencies": [
+              "INF-010",
+              "INF-013"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "CloudWatch logs configured for all EKS pods.",
+              "Basic metrics (CPU, memory, network) collected for pods.",
+              "CloudWatch dashboards created for key service metrics.",
+              "Alarms configured for critical errors or performance thresholds."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "TEST-005",
+            "description": "Develop and execute end-to-end tests for core user flows (login, search, single download).",
+            "dependencies": [
+              "FE-DASH-005",
+              "TEST-001",
+              "TEST-002",
+              "TEST-003"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "qa_engineer",
+            "acceptance_criteria": [
+              "Tests simulate user login and navigation.",
+              "Tests verify search functionality and table display.",
+              "Tests verify single recording download initiation.",
+              "Tests run successfully in a staging environment."
+            ],
+            "status": "pending",
+            "code_files": [
+              "e2e-tests/cypress/integration/core_flows.spec.js"
+            ]
+          },
+          {
+            "id": "TEST-006",
+            "description": "Develop and execute end-to-end tests for bulk request and download functionality.",
+            "dependencies": [
+              "FE-BR-004",
+              "TEST-004"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "qa_engineer",
+            "acceptance_criteria": [
+              "Tests simulate bulk file upload.",
+              "Tests verify bulk results display with pagination.",
+              "Tests verify 'Download All' functionality for the current page.",
+              "Tests run successfully in a staging environment."
+            ],
+            "status": "pending",
+            "code_files": [
+              "e2e-tests/cypress/integration/bulk_flows.spec.js"
+            ]
+          },
+          {
+            "id": "DOC-001",
+            "description": "Create API documentation for all backend services.",
+            "dependencies": [
+              "BE-UM-003",
+              "BE-RM-003",
+              "BE-RS-001",
+              "BE-AL-003",
+              "BE-BR-001"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "technical_writer",
+            "acceptance_criteria": [
+              "Swagger/OpenAPI documentation generated for all endpoints.",
+              "Documentation includes request/response schemas, authentication requirements, and error codes.",
+              "Documentation is accessible and up-to-date."
+            ],
+            "status": "pending",
+            "code_files": [
+              "docs/api-spec.yaml"
+            ]
+          },
+          {
+            "id": "DOC-002",
+            "description": "Create user guide for VKYC Portal.",
+            "dependencies": [
+              "FE-DASH-005",
+              "FE-BR-004"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "technical_writer",
+            "acceptance_criteria": [
+              "User guide covers login, search, single download, bulk upload, and bulk download features.",
+              "Includes screenshots and step-by-step instructions.",
+              "Explains access restrictions and error messages.",
+              "Provided to VKYC Team Leads and Process Managers."
+            ],
+            "status": "pending",
+            "code_files": [
+              "docs/user-guide.pdf"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Backend Development",
+        "description": "Tasks for backend development development",
+        "work_items": [
+          {
+            "id": "INF-006",
+            "description": "Set up base Node.js project structure for User Management Service.",
+            "dependencies": [],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Node.js project initialized with Express.js.",
+              "Basic folder structure (src, config, routes, controllers, models, services) established.",
+              "Dockerfile created for containerization.",
+              "Package.json configured with essential dependencies."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/package.json",
+              "user-management-service/Dockerfile",
+              "user-management-service/src/app.js",
+              "user-management-service/src/routes/index.js"
+            ]
+          },
+          {
+            "id": "BE-UM-002",
+            "description": "Develop API endpoint for user login (`POST /auth/login`).",
+            "dependencies": [
+              "BE-UM-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts username and password.",
+              "Password hashed and compared securely.",
+              "Valid credentials return a JWT token.",
+              "Invalid credentials return appropriate error message (e.g., 401 Unauthorized).",
+              "User role (VKYC Team Lead, Process Manager) is included in the JWT payload.",
+              "Unit tests cover successful login and invalid credentials."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/src/routes/auth.js",
+              "user-management-service/src/controllers/authController.js",
+              "user-management-service/src/services/userService.js",
+              "user-management-service/src/models/User.js",
+              "user-management-service/src/utils/jwt.js",
+              "user-management-service/tests/auth.test.js"
+            ]
+          },
+          {
+            "id": "BE-UM-003",
+            "description": "Develop API endpoint for retrieving current user profile (`GET /users/me`).",
+            "dependencies": [
+              "BE-UM-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint requires a valid JWT token.",
+              "Returns user's profile information (excluding password hash).",
+              "Returns 401 if token is missing or invalid.",
+              "Unit tests cover successful retrieval and unauthorized access."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/src/routes/users.js",
+              "user-management-service/src/controllers/userController.js",
+              "user-management-service/src/middleware/authMiddleware.js",
+              "user-management-service/tests/users.test.js"
+            ]
+          },
+          {
+            "id": "BE-UM-004",
+            "description": "Implement Role-Based Access Control (RBAC) middleware.",
+            "dependencies": [
+              "BE-UM-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware function created to check user roles from JWT.",
+              "Middleware can be applied to specific routes.",
+              "Access granted if user has required role.",
+              "Access denied (403 Forbidden) if user does not have required role.",
+              "Unit tests cover various role scenarios."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/src/middleware/rbacMiddleware.js",
+              "user-management-service/tests/rbac.test.js"
+            ]
+          },
+          {
+            "id": "INF-007",
+            "description": "Set up base Node.js project structure for VKYC Recording Metadata Service.",
+            "dependencies": [],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Node.js project initialized with Express.js.",
+              "Basic folder structure (src, config, routes, controllers, models, services) established.",
+              "Dockerfile created for containerization.",
+              "Package.json configured with essential dependencies."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/package.json",
+              "metadata-service/Dockerfile",
+              "metadata-service/src/app.js",
+              "metadata-service/src/routes/index.js"
+            ]
+          },
+          {
+            "id": "BE-RM-002",
+            "description": "Develop API endpoint for searching VKYC recording metadata (`GET /vkyc-recordings`).",
+            "dependencies": [
+              "BE-RM-001",
+              "BE-UM-004"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts query parameters for date (day, month, year) and LAN ID (case_id).",
+              "Endpoint returns a paginated list of recording metadata (10 records per page).",
+              "Results are filtered based on provided parameters.",
+              "Endpoint requires authentication and appropriate RBAC.",
+              "Unit tests cover various search criteria and pagination."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/src/routes/vkycRecordings.js",
+              "metadata-service/src/controllers/vkycRecordingController.js",
+              "metadata-service/src/services/vkycRecordingService.js",
+              "metadata-service/src/models/VkycRecording.js",
+              "metadata-service/tests/vkycRecordings.test.js"
+            ]
+          },
+          {
+            "id": "BE-RM-003",
+            "description": "Develop API endpoint for retrieving single VKYC recording metadata (`GET /vkyc-recordings/{id}`).",
+            "dependencies": [
+              "BE-RM-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a recording ID.",
+              "Returns detailed metadata for the specified recording.",
+              "Returns 404 if recording not found.",
+              "Endpoint requires authentication and appropriate RBAC.",
+              "Unit tests cover successful retrieval and not found scenarios."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/src/routes/vkycRecordings.js",
+              "metadata-service/src/controllers/vkycRecordingController.js",
+              "metadata-service/tests/vkycRecordings.test.js"
+            ]
+          },
+          {
+            "id": "INF-008",
+            "description": "Set up base Node.js project structure for VKYC Recording Storage Service.",
+            "dependencies": [],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Node.js project initialized with Express.js.",
+              "Basic folder structure (src, config, routes, controllers, services) established.",
+              "Dockerfile created for containerization.",
+              "Package.json configured with essential dependencies (e.g., AWS SDK)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "storage-service/package.json",
+              "storage-service/Dockerfile",
+              "storage-service/src/app.js",
+              "storage-service/src/routes/index.js"
+            ]
+          },
+          {
+            "id": "BE-RS-001",
+            "description": "Develop API endpoint to generate pre-signed S3 URLs for recording download (`GET /vkyc-recordings/{id}/download-url`).",
+            "dependencies": [
+              "INF-005",
+              "INF-008",
+              "BE-UM-004"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a recording ID.",
+              "Retrieves S3 key from Metadata Service (or directly from its own DB if it stores S3 keys).",
+              "Generates a time-limited pre-signed URL for the S3 object.",
+              "Returns the pre-signed URL.",
+              "Returns 404 if recording/S3 key not found.",
+              "Endpoint requires authentication and appropriate RBAC.",
+              "Unit tests cover successful URL generation and error cases."
+            ],
+            "status": "pending",
+            "code_files": [
+              "storage-service/src/routes/vkycRecordings.js",
+              "storage-service/src/controllers/vkycRecordingController.js",
+              "storage-service/src/services/s3Service.js",
+              "storage-service/tests/s3.test.js"
+            ]
+          },
+          {
+            "id": "INF-009",
+            "description": "Set up base Node.js project structure for Audit Log Service.",
+            "dependencies": [],
+            "estimated_time": "4 hours",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Node.js project initialized with Express.js.",
+              "Basic folder structure (src, config, routes, controllers, models, services) established.",
+              "Dockerfile created for containerization.",
+              "Package.json configured with essential dependencies."
+            ],
+            "status": "pending",
+            "code_files": [
+              "audit-log-service/package.json",
+              "audit-log-service/Dockerfile",
+              "audit-log-service/src/app.js",
+              "audit-log-service/src/routes/index.js"
+            ]
+          },
+          {
+            "id": "BE-AL-002",
+            "description": "Develop internal API endpoint for logging audit events (`POST /audit-logs`).",
+            "dependencies": [
+              "BE-AL-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts audit event data (user_id, action, resource_type, resource_id, ip_address, details).",
+              "Successfully stores the event in the 'audit_logs' table.",
+              "Endpoint is secured for internal service-to-service communication (e.g., API key or internal network access).",
+              "Unit tests cover successful logging."
+            ],
+            "status": "pending",
+            "code_files": [
+              "audit-log-service/src/routes/auditLogs.js",
+              "audit-log-service/src/controllers/auditLogController.js",
+              "audit-log-service/src/services/auditLogService.js",
+              "audit-log-service/src/models/AuditLog.js",
+              "audit-log-service/tests/auditLogs.test.js"
+            ]
+          },
+          {
+            "id": "BE-AL-003",
+            "description": "Develop API endpoint for retrieving audit logs (`GET /audit-logs`).",
+            "dependencies": [
+              "BE-AL-002",
+              "BE-UM-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint returns a paginated list of audit logs.",
+              "Endpoint requires authentication and 'auditor' or 'admin' RBAC.",
+              "Unit tests cover successful retrieval and unauthorized access."
+            ],
+            "status": "pending",
+            "code_files": [
+              "audit-log-service/src/routes/auditLogs.js",
+              "audit-log-service/src/controllers/auditLogController.js",
+              "audit-log-service/tests/auditLogs.test.js"
+            ]
+          },
+          {
+            "id": "BE-AL-004",
+            "description": "Integrate audit logging into User Management Service (login, user profile access).",
+            "dependencies": [
+              "BE-UM-002",
+              "BE-UM-003",
+              "BE-AL-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Successful user logins are logged.",
+              "Failed login attempts are logged.",
+              "Access to user profile (`/users/me`) is logged.",
+              "Audit logs contain relevant user_id, action, and resource_type.",
+              "Logs appear correctly in the Audit Log Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/src/controllers/authController.js",
+              "user-management-service/src/controllers/userController.js",
+              "user-management-service/src/services/auditLogClient.js"
+            ]
+          },
+          {
+            "id": "BE-AL-005",
+            "description": "Integrate audit logging into VKYC Recording Metadata Service (search, single view).",
+            "dependencies": [
+              "BE-RM-002",
+              "BE-RM-003",
+              "BE-AL-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Successful searches for recordings are logged.",
+              "Successful retrieval of single recording metadata is logged.",
+              "Audit logs contain relevant user_id, action, resource_type, and search parameters/resource_id.",
+              "Logs appear correctly in the Audit Log Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/src/controllers/vkycRecordingController.js",
+              "metadata-service/src/services/auditLogClient.js"
+            ]
+          },
+          {
+            "id": "BE-AL-006",
+            "description": "Integrate audit logging into VKYC Recording Storage Service (download URL generation).",
+            "dependencies": [
+              "BE-RS-001",
+              "BE-AL-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Successful generation of download URLs is logged.",
+              "Audit logs contain relevant user_id, action, resource_type, and resource_id (recording ID).",
+              "Logs appear correctly in the Audit Log Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "storage-service/src/controllers/vkycRecordingController.js",
+              "storage-service/src/services/auditLogClient.js"
+            ]
+          },
+          {
+            "id": "BE-BR-001",
+            "description": "Develop API endpoint for bulk recording requests (`POST /vkyc-recordings/bulk-request`).",
+            "dependencies": [
+              "FE-BR-001",
+              "BE-UM-004",
+              "BE-RM-002",
+              "BE-RS-001"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts a CSV/TXT file containing LAN IDs.",
+              "Validates file format (CSV/TXT).",
+              "Validates LAN ID count (min 2, max 50).",
+              "Parses LAN IDs from the file.",
+              "For each valid LAN ID, calls Metadata Service to get recording info and Storage Service to get download URL.",
+              "Returns a tabular result including LAN ID, status (success/failure), and download URL (if successful).",
+              "Endpoint requires authentication and appropriate RBAC.",
+              "Unit tests cover valid/invalid file uploads and processing logic."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/src/routes/bulkRequest.js",
+              "metadata-service/src/controllers/bulkRequestController.js",
+              "metadata-service/src/services/bulkRequestService.js",
+              "metadata-service/src/utils/fileParser.js",
+              "metadata-service/tests/bulkRequest.test.js"
+            ]
+          },
+          {
+            "id": "INF-014",
+            "description": "Implement centralized error handling middleware for all backend services.",
+            "dependencies": [
+              "INF-006",
+              "INF-007",
+              "INF-008",
+              "INF-009"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Custom error handling middleware created in each service.",
+              "Middleware catches unhandled exceptions and returns consistent JSON error responses (e.g., { code, message }).",
+              "Different error types (e.g., validation, not found, internal server error) map to appropriate HTTP status codes.",
+              "Sensitive error details are not exposed in production.",
+              "Errors are logged to console/CloudWatch."
+            ],
+            "status": "pending",
+            "code_files": [
+              "*/src/middleware/errorHandler.js"
+            ]
+          },
+          {
+            "id": "TEST-001",
+            "description": "Develop and execute integration tests for User Management Service.",
+            "dependencies": [
+              "BE-UM-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Integration tests cover login, user profile retrieval, and RBAC enforcement.",
+              "Tests interact with the actual database.",
+              "Tests run successfully in the CI/CD pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/tests/integration/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-002",
+            "description": "Develop and execute integration tests for VKYC Recording Metadata Service.",
+            "dependencies": [
+              "BE-RM-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Integration tests cover search by date, LAN ID, and single record retrieval.",
+              "Tests interact with the actual database.",
+              "Tests run successfully in the CI/CD pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/tests/integration/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-003",
+            "description": "Develop and execute integration tests for VKYC Recording Storage Service.",
+            "dependencies": [
+              "BE-RS-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Integration tests cover pre-signed URL generation.",
+              "Tests interact with a mock S3 or actual S3 (if safe to do so in test env).",
+              "Tests run successfully in the CI/CD pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              "storage-service/tests/integration/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-004",
+            "description": "Develop and execute integration tests for Bulk Request functionality.",
+            "dependencies": [
+              "BE-BR-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Integration tests cover file upload, parsing, and bulk processing logic.",
+              "Tests cover valid and invalid file formats/content.",
+              "Tests run successfully in the CI/CD pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/tests/integration/bulkRequest.test.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Database Setup",
+        "description": "Tasks for database setup development",
+        "work_items": [
+          {
+            "id": "BE-UM-001",
+            "description": "Implement PostgreSQL schema for 'users' table in User Management Service.",
+            "dependencies": [
+              "INF-002",
+              "INF-006"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script created for 'users' table with id, username, password_hash, email, role, created_at, updated_at fields.",
+              "Constraints (PRIMARY KEY, UNIQUE, NOT NULL) applied correctly.",
+              "Table successfully created in the User Management Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "user-management-service/db/migrations/create_users_table.sql"
+            ]
+          },
+          {
+            "id": "BE-RM-001",
+            "description": "Implement PostgreSQL schema for 'vkyc_recordings' table in Metadata Service.",
+            "dependencies": [
+              "INF-003",
+              "INF-007"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script created for 'vkyc_recordings' table with id, case_id, customer_name, recording_date, s3_key, duration_seconds, status, uploaded_by, created_at fields.",
+              "Constraints (PRIMARY KEY, UNIQUE, NOT NULL) applied correctly.",
+              "Table successfully created in the Metadata Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "metadata-service/db/migrations/create_vkyc_recordings_table.sql"
+            ]
+          },
+          {
+            "id": "BE-AL-001",
+            "description": "Implement PostgreSQL schema for 'audit_logs' table in Audit Log Service.",
+            "dependencies": [
+              "INF-004",
+              "INF-009"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script created for 'audit_logs' table with id, user_id, action, resource_type, resource_id, timestamp, ip_address, details fields.",
+              "Constraints (PRIMARY KEY, NOT NULL, FOREIGN KEY) applied correctly.",
+              "Table successfully created in the Audit Log Service database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "audit-log-service/db/migrations/create_audit_logs_table.sql"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Frontend Development",
+        "description": "Tasks for frontend development development",
+        "work_items": [
+          {
+            "id": "FE-001",
+            "description": "Set up base React project structure for VKYC Portal Frontend.",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "React project initialized using Create React App or Vite.",
+              "Basic folder structure (src/components, src/pages, src/services, src/utils) established.",
+              "Routing setup (React Router DOM).",
+              "Package.json configured with essential dependencies."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/package.json",
+              "frontend/src/App.js",
+              "frontend/src/index.js",
+              "frontend/src/routes.js"
+            ]
+          },
+          {
+            "id": "FE-AUTH-001",
+            "description": "Develop Login Page UI.",
+            "dependencies": [
+              "FE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login form with username and password input fields.",
+              "Submit button.",
+              "Basic styling applied.",
+              "Form validation (e.g., required fields).",
+              "Error message display area."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/LoginPage.js",
+              "frontend/src/components/LoginForm.js",
+              "frontend/src/styles/LoginPage.css"
+            ]
+          },
+          {
+            "id": "FE-AUTH-002",
+            "description": "Integrate Login Page with User Management Service API.",
+            "dependencies": [
+              "FE-AUTH-001",
+              "BE-UM-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "User can enter credentials and submit the form.",
+              "Successful login redirects to dashboard.",
+              "JWT token is stored securely (e.g., HttpOnly cookie or localStorage with appropriate security measures).",
+              "Error messages from backend are displayed to the user.",
+              "User context (e.g., logged-in status, user role) is managed in React state/context."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/LoginPage.js",
+              "frontend/src/services/authService.js",
+              "frontend/src/context/AuthContext.js"
+            ]
+          },
+          {
+            "id": "FE-DASH-001",
+            "description": "Develop Dashboard Layout and Navigation.",
+            "dependencies": [
+              "FE-AUTH-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Dashboard page accessible after login.",
+              "Includes a header with application title and user info (e.g., username).",
+              "Includes a logout button.",
+              "Basic navigation structure for search and bulk upload sections.",
+              "Only accessible to authenticated users with VKYC Team Lead/Process Manager roles."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/DashboardPage.js",
+              "frontend/src/components/Header.js",
+              "frontend/src/components/Sidebar.js",
+              "frontend/src/components/ProtectedRoute.js"
+            ]
+          },
+          {
+            "id": "FE-DASH-002",
+            "description": "Develop Search and Filter components for VKYC recordings.",
+            "dependencies": [
+              "FE-DASH-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Input fields for LAN ID search.",
+              "Date pickers for day, month, and year search.",
+              "Search button.",
+              "Clear filters button.",
+              "Components are integrated into the Dashboard page."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/SearchFilters.js",
+              "frontend/src/pages/SearchRecordingsPage.js"
+            ]
+          },
+          {
+            "id": "FE-DASH-003",
+            "description": "Develop Tabular display component for VKYC recording search results with pagination.",
+            "dependencies": [
+              "FE-DASH-002"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Table displays relevant recording metadata (e.g., LAN ID, customer name, recording date).",
+              "Table shows only 10 records at a time.",
+              "Pagination controls (next, previous, page numbers) are functional.",
+              "Clicking on a single LAN ID in the table triggers download (placeholder for now).",
+              "Table handles empty results gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/RecordingsTable.js",
+              "frontend/src/components/Pagination.js"
+            ]
+          },
+          {
+            "id": "FE-DASH-004",
+            "description": "Integrate Search and Table with VKYC Recording Metadata Service API.",
+            "dependencies": [
+              "FE-DASH-003",
+              "BE-RM-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Search button triggers API call to `/vkyc-recordings` with filter parameters.",
+              "API response data is correctly displayed in the table.",
+              "Pagination controls trigger API calls with correct page parameters.",
+              "Loading states and error handling are implemented."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/SearchRecordingsPage.js",
+              "frontend/src/services/vkycRecordingService.js"
+            ]
+          },
+          {
+            "id": "FE-DASH-005",
+            "description": "Implement single recording download functionality.",
+            "dependencies": [
+              "FE-DASH-003",
+              "BE-RS-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Clicking on a single LAN ID in the table initiates a call to the download URL API.",
+              "Upon receiving the pre-signed URL, the browser automatically downloads the recording.",
+              "Error handling for failed downloads is implemented (e.g., recording not found, API error)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/RecordingsTable.js",
+              "frontend/src/services/vkycRecordingService.js"
+            ]
+          },
+          {
+            "id": "FE-BR-001",
+            "description": "Develop File Upload component for bulk video recording requests.",
+            "dependencies": [
+              "FE-DASH-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "File input field for CSV or TXT files.",
+              "Upload button.",
+              "Display for selected file name.",
+              "Client-side validation for file type (CSV/TXT).",
+              "Client-side validation for LAN ID count (min 2, max 50) after file read (if possible, or rely on backend).",
+              "Error messages for invalid file type or count."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/BulkRequestPage.js",
+              "frontend/src/components/FileUpload.js"
+            ]
+          },
+          {
+            "id": "FE-BR-002",
+            "description": "Integrate File Upload with Bulk Request Backend API.",
+            "dependencies": [
+              "FE-BR-001",
+              "BE-BR-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Upload button triggers API call to `/vkyc-recordings/bulk-request`.",
+              "File content is sent correctly in the request.",
+              "Loading indicator displayed during processing.",
+              "Error messages from backend are displayed for invalid files or processing errors."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/BulkRequestPage.js",
+              "frontend/src/services/bulkRequestService.js"
+            ]
+          },
+          {
+            "id": "FE-BR-003",
+            "description": "Develop Tabular display for bulk request results with pagination.",
+            "dependencies": [
+              "FE-BR-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Results from bulk request API are displayed in a table.",
+              "Table includes LAN ID, status (success/failure), and a download link/button for each successful record.",
+              "Table shows only 10 records at a time.",
+              "Pagination controls are functional.",
+              "Table handles empty results gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/BulkResultsTable.js",
+              "frontend/src/pages/BulkRequestPage.js"
+            ]
+          },
+          {
+            "id": "FE-BR-004",
+            "description": "Implement 'Download All' functionality for bulk request results (current page).",
+            "dependencies": [
+              "FE-BR-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "'Download All' button is visible when results are displayed.",
+              "Clicking 'Download All' initiates download for all 10 records currently displayed on the page.",
+              "Each download is triggered individually or a single zip file is created (clarify with BE-BR-002). Assuming individual for now.",
+              "Error handling for individual failed downloads within the bulk process."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/BulkResultsTable.js",
+              "frontend/src/pages/BulkRequestPage.js"
+            ]
+          }
+        ]
+      }
+    ],
+    "total_work_items": 50,
+    "metadata": {
+      "estimated_total_time": "Approximately 60 days (excluding parallel work and overhead)",
+      "risk_assessment": "Medium. Key risks include data migration (not explicitly covered in this backlog, assumed pre-existing S3/PostgreSQL data), performance of bulk downloads, and robust security implementation. Microservices complexity adds operational overhead.",
+      "project_phases_covered": "Development, Infrastructure Setup, Testing, Documentation."
+    },
+    "plan_type": "simplified_workitem_backlog"
+  },
+  "workflow_state_snapshot": {}
+}

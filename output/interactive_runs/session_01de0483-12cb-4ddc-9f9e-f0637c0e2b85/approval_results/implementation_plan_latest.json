@@ -1,0 +1,998 @@
+{
+  "session_id": "session_01de0483-12cb-4ddc-9f9e-f0637c0e2b85",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752380752,
+  "approval_data": {
+    "summary": "Develop a web portal for V-KYC team leads to access and download V-KYC recordings for audit purposes. The portal will provide user authentication, search functionality, date/month-wise filtering, bulk download via file upload, and individual recording downloads. The backend will be built using Node.js and Express.js, with PostgreSQL for the database and AWS S3 for storing recordings. The frontend will be built using React. The application will be deployed on AWS using a microservices architecture.",
+    "phases": [
+      {
+        "name": "Frontend Development",
+        "description": "Tasks for frontend development development",
+        "work_items": [
+          {
+            "id": "FE-001",
+            "description": "Set up React project with necessary dependencies (e.g., react-router-dom, axios).",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Project initializes successfully.",
+              "Required dependencies are installed.",
+              "Basic project structure is in place."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "src/index.js",
+              "src/App.js"
+            ]
+          },
+          {
+            "id": "FE-002",
+            "description": "Implement user authentication UI (login form).",
+            "dependencies": [
+              "FE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login form renders correctly.",
+              "Form fields for username and password exist.",
+              "Submit button is present."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/LoginForm.js",
+              "src/App.js"
+            ]
+          },
+          {
+            "id": "FE-003",
+            "description": "Implement user registration UI (if required).",
+            "dependencies": [
+              "FE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Registration form renders correctly.",
+              "Form fields for username, password, and any other required information exist.",
+              "Submit button is present."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/RegistrationForm.js",
+              "src/App.js"
+            ]
+          },
+          {
+            "id": "FE-004",
+            "description": "Implement basic routing using react-router-dom (login, recordings).",
+            "dependencies": [
+              "FE-001",
+              "FE-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login route is functional.",
+              "Recordings route is functional (displays a placeholder).",
+              "Navigation between routes works correctly."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/App.js",
+              "src/components/Login.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "FE-005",
+            "description": "Implement a basic layout with header, navigation, and content area.",
+            "dependencies": [
+              "FE-001",
+              "FE-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Header displays the application name.",
+              "Navigation links are present (e.g., Login, Recordings).",
+              "Content area correctly displays the content of the current route."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Layout.js",
+              "src/App.js"
+            ]
+          },
+          {
+            "id": "FE-006",
+            "description": "Implement API calls for user login.",
+            "dependencies": [
+              "FE-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login form submits data to the backend API.",
+              "API call handles successful and failed login attempts.",
+              "Error messages are displayed to the user."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/LoginForm.js",
+              "src/services/authService.js"
+            ]
+          },
+          {
+            "id": "FE-007",
+            "description": "Implement API calls for user registration.",
+            "dependencies": [
+              "FE-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Registration form submits data to the backend API.",
+              "API call handles successful and failed registration attempts.",
+              "Error messages are displayed to the user."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/RegistrationForm.js",
+              "src/services/authService.js"
+            ]
+          },
+          {
+            "id": "FE-008",
+            "description": "Implement JWT storage and retrieval (using localStorage or cookies).",
+            "dependencies": [
+              "FE-006"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "JWT is stored after successful login.",
+              "JWT is retrieved for subsequent API calls.",
+              "JWT is removed on logout."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/services/authService.js"
+            ]
+          },
+          {
+            "id": "FE-009",
+            "description": "Implement protected routes (redirect to login if not authenticated).",
+            "dependencies": [
+              "FE-004",
+              "FE-008"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Recordings route is protected.",
+              "User is redirected to the login page if not authenticated.",
+              "User is redirected to the recordings page after successful login."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/ProtectedRoute.js",
+              "src/App.js"
+            ]
+          },
+          {
+            "id": "FE-010",
+            "description": "Implement logout functionality.",
+            "dependencies": [
+              "FE-008"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "User can log out.",
+              "JWT is removed from storage on logout.",
+              "User is redirected to the login page on logout."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Header.js",
+              "src/services/authService.js"
+            ]
+          },
+          {
+            "id": "FE-011",
+            "description": "Implement UI for displaying recording metadata (table).",
+            "dependencies": [
+              "FE-009"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Table displays recording metadata (e.g., recording ID, timestamp, file size).",
+              "Table headers are present.",
+              "Data is displayed correctly."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/RecordingsTable.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "FE-012",
+            "description": "Implement API call to fetch recording metadata.",
+            "dependencies": [
+              "FE-011"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "API call fetches recording metadata from the backend.",
+              "Data is displayed in the table.",
+              "Error handling is implemented."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/services/recordingService.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "FE-013",
+            "description": "Implement search functionality by LAN ID.",
+            "dependencies": [
+              "FE-011",
+              "FE-012"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Search input field is present.",
+              "User can enter a LAN ID.",
+              "Table data is filtered based on the search input.",
+              "API call is made with the search query."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Recordings.js",
+              "src/components/Search.js"
+            ]
+          },
+          {
+            "id": "FE-014",
+            "description": "Implement date and month-wise filtering.",
+            "dependencies": [
+              "FE-011",
+              "FE-012"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Date and month selection controls are present.",
+              "User can select a date or month.",
+              "Table data is filtered based on the selected date/month.",
+              "API call is made with the date/month filter."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Recordings.js",
+              "src/components/DateFilter.js"
+            ]
+          },
+          {
+            "id": "FE-015",
+            "description": "Implement bulk download functionality (file upload).",
+            "dependencies": [
+              "FE-011",
+              "FE-012"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "File upload input is present.",
+              "User can upload a file (CSV/TXT).",
+              "API call is made to initiate bulk download.",
+              "Error handling for file upload and API call."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Recordings.js",
+              "src/components/BulkDownload.js",
+              "src/services/recordingService.js"
+            ]
+          },
+          {
+            "id": "FE-016",
+            "description": "Display results of bulk download in a table.",
+            "dependencies": [
+              "FE-015"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Table displays results of the bulk download.",
+              "Table includes download links for each recording.",
+              "Pagination is implemented (10 records per page)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/BulkDownloadResults.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "FE-017",
+            "description": "Implement 'Download All' option for bulk download results.",
+            "dependencies": [
+              "FE-016"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "'Download All' button is present.",
+              "Clicking the button triggers the download of all available recordings in the current page.",
+              "Handles cases where not all recordings are available."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/BulkDownloadResults.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "FE-018",
+            "description": "Implement pagination for the recording metadata table.",
+            "dependencies": [
+              "FE-011",
+              "FE-012"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Pagination controls are present.",
+              "User can navigate between pages.",
+              "Only 10 records are displayed per page.",
+              "API calls are made to fetch the correct page of data."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/Recordings.js",
+              "src/components/Pagination.js"
+            ]
+          },
+          {
+            "id": "FE-019",
+            "description": "Implement download functionality for individual recordings.",
+            "dependencies": [
+              "FE-011"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Download link/button is present for each recording.",
+              "Clicking the link/button triggers the download of the recording.",
+              "API call is made to initiate the download."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/RecordingsTable.js",
+              "src/services/recordingService.js"
+            ]
+          },
+          {
+            "id": "FE-020",
+            "description": "Implement error handling and display user-friendly error messages.",
+            "dependencies": [
+              "FE-006",
+              "FE-012",
+              "FE-015"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Error messages are displayed to the user for API call failures.",
+              "Error messages are clear and informative.",
+              "Error handling is implemented for file upload."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/services/authService.js",
+              "src/services/recordingService.js",
+              "src/components/Recordings.js"
+            ]
+          },
+          {
+            "id": "TEST-004",
+            "description": "Write unit tests for frontend components.",
+            "dependencies": [
+              "FE-002",
+              "FE-011",
+              "FE-013"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Tests cover login form submission.",
+              "Tests cover display of recording metadata.",
+              "Tests cover search functionality.",
+              "Tests cover date and month filtering."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/components/LoginForm.test.js",
+              "src/components/RecordingsTable.test.js",
+              "src/components/Search.test.js"
+            ]
+          },
+          {
+            "id": "UI-001",
+            "description": "Implement responsive design for the frontend.",
+            "dependencies": [
+              "FE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Frontend UI is responsive across different screen sizes.",
+              "UI elements adapt to different screen sizes.",
+              "User experience is consistent across devices."
+            ],
+            "status": "pending",
+            "code_files": [
+              "src/App.css",
+              "src/components/*.css"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Backend Development",
+        "description": "Tasks for backend development development",
+        "work_items": [
+          {
+            "id": "BE-001",
+            "description": "Set up Node.js project with Express.js and necessary dependencies (e.g., bcrypt, jsonwebtoken, pg).",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Project initializes successfully.",
+              "Required dependencies are installed.",
+              "Basic project structure is in place."
+            ],
+            "status": "pending",
+            "code_files": [
+              "package.json",
+              "index.js"
+            ]
+          },
+          {
+            "id": "BE-002",
+            "description": "Implement user registration endpoint.",
+            "dependencies": [
+              "BE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint handles POST requests to /api/auth/register.",
+              "User data is validated.",
+              "User is saved to the database (hashed password).",
+              "Returns success or error responses."
+            ],
+            "status": "pending",
+            "code_files": [
+              "routes/auth.js",
+              "controllers/authController.js",
+              "models/user.js"
+            ]
+          },
+          {
+            "id": "BE-003",
+            "description": "Implement user login endpoint.",
+            "dependencies": [
+              "BE-001",
+              "BE-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint handles POST requests to /api/auth/login.",
+              "User credentials are validated.",
+              "JWT is generated and returned on successful login.",
+              "Returns success or error responses."
+            ],
+            "status": "pending",
+            "code_files": [
+              "routes/auth.js",
+              "controllers/authController.js",
+              "models/user.js"
+            ]
+          },
+          {
+            "id": "BE-004",
+            "description": "Implement JWT authentication middleware.",
+            "dependencies": [
+              "BE-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware verifies JWT tokens.",
+              "Middleware attaches user information to the request object.",
+              "Returns 401 Unauthorized if the token is invalid."
+            ],
+            "status": "pending",
+            "code_files": [
+              "middleware/authMiddleware.js"
+            ]
+          },
+          {
+            "id": "BE-005",
+            "description": "Implement role-based access control (RBAC) middleware.",
+            "dependencies": [
+              "BE-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware checks user roles against allowed roles.",
+              "Returns 403 Forbidden if the user does not have the required role."
+            ],
+            "status": "pending",
+            "code_files": [
+              "middleware/rbacMiddleware.js"
+            ]
+          },
+          {
+            "id": "BE-006",
+            "description": "Implement endpoint to fetch recording metadata.",
+            "dependencies": [
+              "BE-004",
+              "BE-005"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint handles GET requests to /api/recordings.",
+              "Endpoint is protected by JWT authentication and RBAC (Team Lead role).",
+              "Endpoint fetches recording metadata from the database.",
+              "Endpoint supports search by LAN ID, date, and month filtering.",
+              "Returns recording metadata in a paginated format."
+            ],
+            "status": "pending",
+            "code_files": [
+              "routes/recordings.js",
+              "controllers/recordingsController.js",
+              "models/recording.js"
+            ]
+          },
+          {
+            "id": "BE-007",
+            "description": "Implement endpoint to initiate recording download.",
+            "dependencies": [
+              "BE-004",
+              "BE-005"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint handles GET requests to /api/recordings/:recordingId/download.",
+              "Endpoint is protected by JWT authentication and RBAC (Team Lead role).",
+              "Endpoint retrieves the recording from AWS S3.",
+              "Endpoint streams the recording to the user."
+            ],
+            "status": "pending",
+            "code_files": [
+              "routes/recordings.js",
+              "controllers/recordingsController.js"
+            ]
+          },
+          {
+            "id": "BE-008",
+            "description": "Implement endpoint to handle bulk download requests.",
+            "dependencies": [
+              "BE-004",
+              "BE-005"
+            ],
+            "estimated_time": "4 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint handles POST requests to /api/recordings/bulk-download.",
+              "Endpoint is protected by JWT authentication and RBAC (Team Lead role).",
+              "Endpoint receives a file upload (CSV/TXT) with LAN IDs.",
+              "Endpoint processes the file and initiates the download of recordings.",
+              "Endpoint returns a list of download results (success/failure)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "routes/recordings.js",
+              "controllers/recordingsController.js"
+            ]
+          },
+          {
+            "id": "BE-010",
+            "description": "Implement database connection and ORM setup (e.g., using Sequelize or Knex.js).",
+            "dependencies": [
+              "BE-009"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Database connection is established.",
+              "ORM is configured.",
+              "Models are defined for users and recordings."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/index.js",
+              "models/user.js",
+              "models/recording.js"
+            ]
+          },
+          {
+            "id": "BE-011",
+            "description": "Implement AWS S3 integration for storing and retrieving recordings.",
+            "dependencies": [],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "AWS S3 client is configured.",
+              "Recordings can be uploaded to S3.",
+              "Recordings can be retrieved from S3.",
+              "Appropriate S3 bucket permissions are set."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/s3Service.js"
+            ]
+          },
+          {
+            "id": "BE-012",
+            "description": "Implement API Gateway setup (e.g., using AWS API Gateway).",
+            "dependencies": [],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "API Gateway is configured.",
+              "API Gateway routes requests to the backend endpoints.",
+              "Authentication and authorization are configured in the API Gateway."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/apiGateway.yml"
+            ]
+          },
+          {
+            "id": "BE-013",
+            "description": "Implement logging and error handling in the backend.",
+            "dependencies": [
+              "BE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Logging is implemented using a logging library (e.g., Winston).",
+              "Error handling middleware is implemented.",
+              "Errors are logged with context.",
+              "User-friendly error responses are returned."
+            ],
+            "status": "pending",
+            "code_files": [
+              "middleware/errorMiddleware.js",
+              "utils/logger.js"
+            ]
+          },
+          {
+            "id": "TEST-001",
+            "description": "Write unit tests for authentication service (login, registration).",
+            "dependencies": [
+              "BE-002",
+              "BE-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Tests cover successful and failed login attempts.",
+              "Tests cover successful and failed registration attempts.",
+              "Tests cover JWT generation and validation."
+            ],
+            "status": "pending",
+            "code_files": [
+              "tests/authController.test.js"
+            ]
+          },
+          {
+            "id": "TEST-002",
+            "description": "Write unit tests for recording metadata service.",
+            "dependencies": [
+              "BE-006"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Tests cover fetching recording metadata.",
+              "Tests cover search functionality.",
+              "Tests cover filtering by date and month."
+            ],
+            "status": "pending",
+            "code_files": [
+              "tests/recordingsController.test.js"
+            ]
+          },
+          {
+            "id": "TEST-003",
+            "description": "Write unit tests for recording download service.",
+            "dependencies": [
+              "BE-007"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Tests cover successful download attempts.",
+              "Tests cover error handling for download attempts."
+            ],
+            "status": "pending",
+            "code_files": [
+              "tests/recordingsController.test.js"
+            ]
+          },
+          {
+            "id": "SECURITY-001",
+            "description": "Implement input validation and sanitization in backend endpoints.",
+            "dependencies": [
+              "BE-002",
+              "BE-003",
+              "BE-006",
+              "BE-008"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Input data is validated against expected formats.",
+              "Input data is sanitized to prevent injection attacks.",
+              "Error handling is implemented for invalid input."
+            ],
+            "status": "pending",
+            "code_files": [
+              "controllers/authController.js",
+              "controllers/recordingsController.js"
+            ]
+          },
+          {
+            "id": "SECURITY-002",
+            "description": "Implement rate limiting for API endpoints.",
+            "dependencies": [
+              "BE-006",
+              "BE-007",
+              "BE-008"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Rate limiting is implemented using a library (e.g., express-rate-limit).",
+              "Rate limits are configured for different endpoints.",
+              "Users are notified when rate limits are exceeded."
+            ],
+            "status": "pending",
+            "code_files": [
+              "middleware/rateLimitMiddleware.js"
+            ]
+          },
+          {
+            "id": "PERF-002",
+            "description": "Implement caching for frequently accessed data (e.g., using Redis).",
+            "dependencies": [
+              "BE-006"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Redis is configured.",
+              "Frequently accessed data is cached.",
+              "Cache invalidation is implemented."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/cacheService.js"
+            ]
+          },
+          {
+            "id": "DOC-001",
+            "description": "Document the API endpoints (e.g., using Swagger/OpenAPI).",
+            "dependencies": [
+              "BE-006",
+              "BE-007",
+              "BE-008"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "API documentation is generated.",
+              "Documentation includes endpoint descriptions, request/response formats, and authentication details.",
+              "Documentation is accessible."
+            ],
+            "status": "pending",
+            "code_files": [
+              "swagger.yaml"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Database Setup",
+        "description": "Tasks for database setup development",
+        "work_items": [
+          {
+            "id": "BE-009",
+            "description": "Implement database schema for users and recordings.",
+            "dependencies": [],
+            "estimated_time": "2 days",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Users table is created with required fields (user_id, username, password_hash, role).",
+              "Recordings table is created with required fields (recording_id, user_id, recording_url, timestamp, file_size).",
+              "Foreign key constraint is set up between recordings and users tables.",
+              "Indexes are created for search and filtering."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/schema.sql",
+              "models/user.js",
+              "models/recording.js"
+            ]
+          },
+          {
+            "id": "DB-001",
+            "description": "Create database schema and initial data.",
+            "dependencies": [
+              "BE-009"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Database schema is created.",
+              "Initial data (e.g., roles, admin user) is inserted.",
+              "Database is accessible and functional."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/schema.sql",
+              "db/seed.sql"
+            ]
+          },
+          {
+            "id": "DEPLOY-003",
+            "description": "Configure database on AWS (e.g., using RDS).",
+            "dependencies": [
+              "DB-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Database instance is created on AWS RDS.",
+              "Database is accessible from the backend application.",
+              "Database backups are configured."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "PERF-001",
+            "description": "Optimize database queries for performance.",
+            "dependencies": [
+              "BE-006"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "Slow queries are identified.",
+              "Queries are optimized using indexes and query optimization techniques.",
+              "Query performance is improved."
+            ],
+            "status": "pending",
+            "code_files": [
+              "models/recording.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "General Development",
+        "description": "Tasks for general development development",
+        "work_items": [
+          {
+            "id": "CI-001",
+            "description": "Set up CI/CD pipeline (e.g., using GitHub Actions).",
+            "dependencies": [],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Pipeline builds the frontend and backend code.",
+              "Pipeline runs unit tests.",
+              "Pipeline deploys the application to a staging environment.",
+              "Automated testing is performed."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/ci-cd.yml"
+            ]
+          },
+          {
+            "id": "DEPLOY-001",
+            "description": "Deploy backend to AWS (e.g., using Elastic Beanstalk or EC2).",
+            "dependencies": [
+              "BE-012",
+              "CI-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Backend application is deployed to AWS.",
+              "API Gateway is configured to route traffic to the backend.",
+              "Application is accessible via a public URL."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "DEPLOY-002",
+            "description": "Deploy frontend to AWS (e.g., using S3 and CloudFront).",
+            "dependencies": [
+              "FE-001",
+              "CI-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Frontend application is deployed to AWS S3.",
+              "CloudFront distribution is configured to serve the frontend.",
+              "Application is accessible via a public URL."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "DEPLOY-004",
+            "description": "Configure AWS S3 bucket for storing recordings.",
+            "dependencies": [
+              "BE-011"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "S3 bucket is created.",
+              "Bucket permissions are configured.",
+              "Lifecycle policies are set up for data retention."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "SECURITY-003",
+            "description": "Implement HTTPS for all API endpoints.",
+            "dependencies": [
+              "DEPLOY-001",
+              "DEPLOY-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "HTTPS is enabled for the API Gateway.",
+              "HTTPS is enabled for the frontend application (CloudFront).",
+              "SSL/TLS certificates are configured."
+            ],
+            "status": "pending",
+            "code_files": []
+          }
+        ]
+      }
+    ],
+    "total_work_items": 50,
+    "metadata": {},
+    "plan_type": "simplified_workitem_backlog"
+  },
+  "workflow_state_snapshot": {}
+}

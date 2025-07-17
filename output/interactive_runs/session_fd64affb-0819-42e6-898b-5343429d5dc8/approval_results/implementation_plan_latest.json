@@ -1,0 +1,690 @@
+{
+  "session_id": "session_fd64affb-0819-42e6-898b-5343429d5dc8",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752229049,
+  "approval_data": {
+    "work_items": [
+      {
+        "id": "SETUP-001",
+        "description": "Initialize a new Git repository and create a monorepo structure with `backend` and `frontend` directories. Push the initial structure to a new GitHub repository.",
+        "dependencies": [],
+        "estimated_time": "2 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A new GitHub repository is created.",
+          "The repository is cloned locally.",
+          "The repository contains a top-level `backend/` directory.",
+          "The repository contains a top-level `frontend/` directory.",
+          "A README.md file exists at the root.",
+          "The initial commit is pushed to the remote repository."
+        ],
+        "status": "pending",
+        "code_files": [
+          "README.md",
+          "backend/.gitkeep",
+          "frontend/.gitkeep"
+        ]
+      },
+      {
+        "id": "DB-001",
+        "description": "Create a Dockerfile for PostgreSQL to set up the V-KYC metadata database. The setup should include initial user and database creation.",
+        "dependencies": [
+          "SETUP-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "A `Dockerfile` exists for the PostgreSQL service.",
+          "The Docker container successfully builds and runs.",
+          "A database named 'vkyc_db' is created on startup.",
+          "A user named 'vkyc_user' with a secure password is created.",
+          "The 'vkyc_user' is granted all privileges on the 'vkyc_db' database."
+        ],
+        "status": "pending",
+        "code_files": [
+          "database/Dockerfile",
+          "database/init.sql"
+        ]
+      },
+      {
+        "id": "SETUP-002",
+        "description": "Create a `docker-compose.yml` file at the project root to orchestrate the backend, frontend, and database services for local development.",
+        "dependencies": [
+          "DB-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "The `docker-compose.yml` file defines services for 'backend', 'frontend', and 'db'.",
+          "The 'db' service uses the image built from `DB-001`.",
+          "The services are connected on a shared Docker network.",
+          "Environment variables for database connection are correctly passed to the backend service.",
+          "Running `docker-compose up` starts all services without errors."
+        ],
+        "status": "pending",
+        "code_files": [
+          "docker-compose.yml"
+        ]
+      },
+      {
+        "id": "BE-001",
+        "description": "Initialize a new Node.js project with Express.js in the `backend` directory. Install basic dependencies: express, cors, dotenv, pg.",
+        "dependencies": [
+          "SETUP-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A `package.json` file is created in the `backend/` directory.",
+          "Express, cors, dotenv, and pg are listed as dependencies.",
+          "A basic `index.js` or `app.js` file is created that starts an Express server.",
+          "The server listens on a port defined in an environment variable (e.g., PORT=3001).",
+          "A basic health check endpoint `/` returns a 200 OK status."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/package.json",
+          "backend/src/index.js",
+          "backend/.env"
+        ]
+      },
+      {
+        "id": "DB-002",
+        "description": "Set up a migration tool (e.g., `node-pg-migrate`) in the backend project. Create the first migration file for the `users` table as specified in the system design.",
+        "dependencies": [
+          "BE-001",
+          "DB-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "The migration tool is added as a dev dependency in `backend/package.json`.",
+          "NPM scripts are added to create and run migrations.",
+          "A migration file is created for the `users` table.",
+          "The `users` table schema matches the system design: id, username, password_hash, role, created_at.",
+          "Running the migration successfully creates the table in the PostgreSQL database."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/migrations/001_create_users_table.js"
+        ]
+      },
+      {
+        "id": "DB-003",
+        "description": "Create a migration file for the `videos` table as specified in the system design.",
+        "dependencies": [
+          "DB-002"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "A new migration file is created for the `videos` table.",
+          "The `videos` table schema matches the system design: id, lan_id (Loan Application Number), recording_date, storage_key, file_size_kb, created_at.",
+          "The `lan_id` column is unique and indexed.",
+          "Running the migration successfully creates the table."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/migrations/002_create_videos_table.js"
+        ]
+      },
+      {
+        "id": "DB-004",
+        "description": "Create a migration file for the `audit_logs` table as specified in the system design.",
+        "dependencies": [
+          "DB-003"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "database_specialist",
+        "acceptance_criteria": [
+          "A new migration file is created for the `audit_logs` table.",
+          "The `audit_logs` table schema matches the system design: id, user_id, video_id, action, details (JSONB), timestamp.",
+          "A foreign key constraint exists from `audit_logs.user_id` to `users.id`.",
+          "A foreign key constraint exists from `audit_logs.video_id` to `videos.id`.",
+          "Running the migration successfully creates the table."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/migrations/003_create_audit_logs_table.js"
+        ]
+      },
+      {
+        "id": "BE-002",
+        "description": "Implement a database connection module in the backend to connect to the PostgreSQL database using the `pg` library and connection pooling.",
+        "dependencies": [
+          "BE-001",
+          "DB-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A module `db.js` is created to manage the database connection.",
+          "The module uses `pg.Pool` for connection pooling.",
+          "Connection details are read from environment variables.",
+          "The application gracefully handles connection errors.",
+          "The module exports a query function to be used by other services."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/config/db.js"
+        ]
+      },
+      {
+        "id": "BE-003",
+        "description": "Implement user registration logic (for seeding initial users) and password hashing using `bcrypt`. Create a script to seed an initial admin user.",
+        "dependencies": [
+          "DB-002"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The `bcrypt` library is added as a dependency.",
+          "A user service module is created with a `createUser` function.",
+          "The `createUser` function correctly hashes the password before storing it in the database.",
+          "A separate seed script (`seed.js`) is created to add an initial admin and a team_lead user to the `users` table.",
+          "The seed script can be run via an npm command."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/services/userService.js",
+          "backend/scripts/seed.js"
+        ]
+      },
+      {
+        "id": "BE-004",
+        "description": "Create the `POST /api/auth/login` endpoint. It should accept a username and password, validate them against the database, and return a JWT if successful.",
+        "dependencies": [
+          "BE-003"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The `jsonwebtoken` library is added as a dependency.",
+          "A new route file `authRoutes.js` is created and mounted in the main app.",
+          "The endpoint validates the request body for `username` and `password`.",
+          "It finds the user by username in the database.",
+          "It uses `bcrypt.compare` to verify the password.",
+          "On success, it generates a JWT containing the user's ID and role, and returns it with a 200 status.",
+          "On failure (user not found, wrong password), it returns a 401 Unauthorized status."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/routes/authRoutes.js",
+          "backend/src/controllers/authController.js"
+        ]
+      },
+      {
+        "id": "BE-005",
+        "description": "Implement JWT authentication middleware to protect routes. The middleware should verify the token from the `Authorization` header and attach the user's payload to the request object.",
+        "dependencies": [
+          "BE-004"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A middleware function `authMiddleware.js` is created.",
+          "It extracts the JWT from the 'Bearer' token in the `Authorization` header.",
+          "It uses `jwt.verify` to validate the token.",
+          "If the token is valid, it attaches the decoded payload (e.g., `req.user`) and calls `next()`.",
+          "If the token is missing or invalid, it returns a 401 Unauthorized or 403 Forbidden status."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/middleware/authMiddleware.js"
+        ]
+      },
+      {
+        "id": "BE-006",
+        "description": "Implement role-based access control (RBAC) middleware. This should be a function that takes a list of allowed roles and checks if the authenticated user's role is in that list.",
+        "dependencies": [
+          "BE-005"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A middleware function `rbacMiddleware.js` is created.",
+          "The middleware accepts an array of roles (e.g., `['admin', 'team_lead']`).",
+          "It checks `req.user.role` against the allowed roles.",
+          "If the user's role is permitted, it calls `next()`.",
+          "If not, it returns a 403 Forbidden status."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/middleware/rbacMiddleware.js"
+        ]
+      },
+      {
+        "id": "BE-007",
+        "description": "Implement a centralized error handling middleware in Express to catch and format all errors, returning a consistent JSON error response.",
+        "dependencies": [
+          "BE-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "An error handling middleware is added as the last middleware in the Express app.",
+          "It correctly handles both synchronous and asynchronous errors passed via `next(error)`.",
+          "It logs the error to the console for debugging.",
+          "It returns a JSON object `{ \"error\": \"message\" }` with an appropriate HTTP status code (e.g., 500 for server errors)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/middleware/errorMiddleware.js"
+        ]
+      },
+      {
+        "id": "BE-008",
+        "description": "Implement the `GET /api/videos` endpoint for searching video metadata. The endpoint should support searching by a list of LAN IDs.",
+        "dependencies": [
+          "BE-005",
+          "DB-003"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "A new route `videoRoutes.js` is created and protected by the auth middleware.",
+          "The endpoint accepts a query parameter `lanIds` (e.g., `?lanIds=ID1,ID2,ID3`).",
+          "The controller parses the comma-separated string into an array of IDs.",
+          "It queries the `videos` table to find all records matching the provided LAN IDs.",
+          "The search results are returned as a JSON array.",
+          "If no LAN IDs are provided, it returns an empty array or a 400 Bad Request."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/routes/videoRoutes.js",
+          "backend/src/controllers/videoController.js",
+          "backend/src/services/videoService.js"
+        ]
+      },
+      {
+        "id": "BE-009",
+        "description": "Enhance the `GET /api/videos` endpoint to support filtering by date range (start and end date) and sorting by date.",
+        "dependencies": [
+          "BE-008"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint accepts optional query parameters `startDate` and `endDate`.",
+          "The endpoint accepts an optional query parameter `sortBy=date` with `sortOrder=asc|desc`.",
+          "The SQL query is dynamically built to include WHERE clauses for the date range if provided.",
+          "The SQL query is dynamically built to include an ORDER BY clause if sorting is requested.",
+          "The endpoint returns correctly filtered and sorted data."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/controllers/videoController.js",
+          "backend/src/services/videoService.js"
+        ]
+      },
+      {
+        "id": "BE-010",
+        "description": "Add pagination to the `GET /api/videos` endpoint. It should accept `page` and `limit` query parameters and return paginated results along with total count.",
+        "dependencies": [
+          "BE-009"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The endpoint accepts `page` (default 1) and `limit` (default 10) query parameters.",
+          "The SQL query uses `LIMIT` and `OFFSET` for pagination.",
+          "The response is an object containing `data` (the array of videos), `currentPage`, `totalPages`, and `totalRecords`.",
+          "A separate query is run to get the total count of records matching the filter criteria."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/controllers/videoController.js",
+          "backend/src/services/videoService.js"
+        ]
+      },
+      {
+        "id": "BE-011",
+        "description": "Implement the audit logging service. Create a function `logAction(userId, action, details)` that inserts a record into the `audit_logs` table.",
+        "dependencies": [
+          "DB-004",
+          "BE-002"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "An `auditService.js` module is created.",
+          "The `logAction` function accepts user ID, action string, and a details JSON object.",
+          "It correctly inserts a new row into the `audit_logs` table.",
+          "The function is designed to be called from other controllers without failing the main request if logging fails."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/services/auditService.js"
+        ]
+      },
+      {
+        "id": "BE-012",
+        "description": "Integrate audit logging into the authentication flow. Log successful and failed login attempts.",
+        "dependencies": [
+          "BE-004",
+          "BE-011"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The `login` controller calls `auditService.logAction` after a login attempt.",
+          "For successful logins, the action is 'LOGIN_SUCCESS' and details include the username.",
+          "For failed logins, the action is 'LOGIN_FAIL' and details include the username attempted.",
+          "The user ID is logged for successful attempts."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/controllers/authController.js"
+        ]
+      },
+      {
+        "id": "BE-013",
+        "description": "Implement the `POST /api/videos/search-by-file` endpoint to handle CSV/TXT file uploads for bulk LAN ID search. Use `multer` for file handling.",
+        "dependencies": [
+          "BE-008"
+        ],
+        "estimated_time": "6 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The `multer` library is added as a dependency.",
+          "A new endpoint `POST /api/videos/search-by-file` is created.",
+          "The endpoint uses multer middleware to handle `multipart/form-data` uploads.",
+          "It validates that the uploaded file is a `.csv` or `.txt` file.",
+          "The controller reads the file content, parsing one LAN ID per line.",
+          "It validates that the number of LAN IDs is between 2 and 50.",
+          "It reuses the `videoService` search logic to fetch results and returns them as JSON."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/routes/videoRoutes.js",
+          "backend/src/controllers/videoController.js"
+        ]
+      },
+      {
+        "id": "BE-014",
+        "description": "Implement the `GET /api/videos/:id/download-link` endpoint. This should interact with the S3-compatible storage to generate a secure, pre-signed URL for the video file.",
+        "dependencies": [
+          "BE-005",
+          "BE-011"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "backend_developer",
+        "acceptance_criteria": [
+          "The AWS SDK (or equivalent for the S3-compatible storage) is added as a dependency.",
+          "A new endpoint `GET /api/videos/:id/download-link` is created.",
+          "The controller retrieves the video's `storage_key` from the database using the video ID.",
+          "It uses the SDK's `getSignedUrl` method to generate a pre-signed URL for the object.",
+          "The URL has a short expiry time (e.g., 5 minutes).",
+          "The download request is logged to the `audit_logs` table with the user ID and video ID.",
+          "The pre-signed URL is returned to the client in a JSON response."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/src/routes/videoRoutes.js",
+          "backend/src/controllers/videoController.js",
+          "backend/src/services/storageService.js"
+        ]
+      },
+      {
+        "id": "FE-001",
+        "description": "Initialize a new React application in the `frontend` directory using Create React App with the TypeScript template.",
+        "dependencies": [
+          "SETUP-001"
+        ],
+        "estimated_time": "2 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A new React project is bootstrapped in `frontend/`.",
+          "The project uses TypeScript.",
+          "The default React app runs successfully with `npm start`.",
+          "Basic folder structure is created: `src/components`, `src/pages`, `src/services`, `src/hooks`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/package.json",
+          "frontend/src/App.tsx"
+        ]
+      },
+      {
+        "id": "FE-002",
+        "description": "Install and configure `react-router-dom` to handle client-side routing. Set up routes for `/login` and a protected `/dashboard` route.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "`react-router-dom` is added as a dependency.",
+          "A `BrowserRouter` is set up in `App.tsx` or `index.tsx`.",
+          "A route for `/login` is defined.",
+          "A `ProtectedRoute` component is created that checks for an auth token and redirects to `/login` if not present.",
+          "The `/dashboard` route is protected by `ProtectedRoute`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/App.tsx",
+          "frontend/src/components/ProtectedRoute.tsx"
+        ]
+      },
+      {
+        "id": "FE-003",
+        "description": "Set up an API service layer using `axios`. Create a centralized Axios instance with base URL and interceptors to automatically add the JWT to headers of authenticated requests.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "`axios` is added as a dependency.",
+          "A file `src/services/api.ts` is created.",
+          "It exports a pre-configured Axios instance.",
+          "The `baseURL` is set to the backend's API URL (e.g., `http://localhost:3001/api`).",
+          "An interceptor is added to read the JWT from local storage and set the `Authorization` header.",
+          "An interceptor is added to handle 401 responses by logging the user out."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/services/api.ts"
+        ]
+      },
+      {
+        "id": "FE-004",
+        "description": "Create a simple authentication context/provider to manage user state (token, user info) across the application.",
+        "dependencies": [
+          "FE-001"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `AuthContext.tsx` file is created using React's Context API.",
+          "The context provides user state, a token, and functions for `login` and `logout`.",
+          "The `login` function stores the JWT in local storage.",
+          "The `logout` function removes the JWT from local storage.",
+          "The `AuthProvider` wraps the entire application."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/context/AuthContext.tsx"
+        ]
+      },
+      {
+        "id": "FE-005",
+        "description": "Build the `LoginPage` component with a form for username and password.",
+        "dependencies": [
+          "FE-002",
+          "FE-004",
+          "BE-004"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `LoginPage.tsx` component is created.",
+          "The form includes input fields for username and password, and a submit button.",
+          "Component state manages the input values.",
+          "On submit, it calls the `login` function from the `AuthContext`.",
+          "It displays an error message if the login fails.",
+          "On successful login, the user is redirected to the `/dashboard`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/LoginPage.tsx"
+        ]
+      },
+      {
+        "id": "FE-006",
+        "description": "Create the main `DashboardPage` layout, including a header with a logout button and a placeholder for the main content.",
+        "dependencies": [
+          "FE-002",
+          "FE-004"
+        ],
+        "estimated_time": "3 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `DashboardPage.tsx` component is created.",
+          "It displays a persistent header or navigation bar.",
+          "The header shows the logged-in user's name.",
+          "A 'Logout' button is present and functional, calling the `logout` function from the `AuthContext`."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx",
+          "frontend/src/components/Header.tsx"
+        ]
+      },
+      {
+        "id": "FE-007",
+        "description": "Build the file upload component for bulk LAN ID search. It should accept `.csv` and `.txt` files and trigger the backend API call.",
+        "dependencies": [
+          "FE-006",
+          "BE-013"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `FileUpload.tsx` component is created.",
+          "It includes a file input element with an `accept` attribute for `.csv,.txt`.",
+          "It validates the file type and size on the client side.",
+          "On file selection, it uses `FormData` to prepare the file for upload.",
+          "It calls the `POST /api/videos/search-by-file` endpoint.",
+          "It handles loading states and displays success or error messages to the user.",
+          "On success, it passes the returned search results to the parent dashboard component."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/FileUpload.tsx"
+        ]
+      },
+      {
+        "id": "FE-008",
+        "description": "Build the `ResultsTable` component to display video metadata. Use a library like `react-table` for sorting and pagination.",
+        "dependencies": [
+          "FE-006",
+          "BE-010"
+        ],
+        "estimated_time": "8 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "`react-table` or a similar library is installed.",
+          "A `ResultsTable.tsx` component is created that accepts an array of video data.",
+          "The table displays columns for LAN ID, Date, etc., as per the BRD.",
+          "Column headers are clickable for sorting.",
+          "The LAN ID in each row is a clickable link to trigger a download.",
+          "The component displays a 'No results found' message when the data array is empty."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/ResultsTable.tsx"
+        ]
+      },
+      {
+        "id": "FE-009",
+        "description": "Integrate pagination controls with the `ResultsTable` component. The controls should allow users to navigate between pages of results.",
+        "dependencies": [
+          "FE-008"
+        ],
+        "estimated_time": "4 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A `Pagination.tsx` component is created.",
+          "It displays 'Previous' and 'Next' buttons, and page numbers.",
+          "It shows the current page and total number of pages.",
+          "Clicking a page number or button triggers a callback to refetch data for the new page.",
+          "The `DashboardPage` manages the current page state and passes it to the API call."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/components/Pagination.tsx"
+        ]
+      },
+      {
+        "id": "FE-010",
+        "description": "Implement the 'Download All' and individual download functionality. Clicking 'Download All' should download the 10 visible records. Clicking a LAN ID should download that single record.",
+        "dependencies": [
+          "FE-008",
+          "BE-014"
+        ],
+        "estimated_time": "6 hours",
+        "agent_role": "frontend_developer",
+        "acceptance_criteria": [
+          "A 'Download All' button is added to the dashboard.",
+          "Clicking 'Download All' iterates through the 10 currently displayed records, calls the `/api/videos/:id/download-link` for each, and triggers a download for each returned URL.",
+          "Clicking a LAN ID in the table calls the download link API for that specific record and triggers the download.",
+          "A helper function is created to programmatically trigger a browser download from a URL.",
+          "Loading indicators are shown while download links are being fetched."
+        ],
+        "status": "pending",
+        "code_files": [
+          "frontend/src/pages/DashboardPage.tsx",
+          "frontend/src/services/videoService.ts"
+        ]
+      },
+      {
+        "id": "OPS-001",
+        "description": "Create Dockerfiles for the backend and frontend applications for production builds.",
+        "dependencies": [
+          "BE-014",
+          "FE-010"
+        ],
+        "estimated_time": "5 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A `backend/Dockerfile` is created that uses a multi-stage build to create a small, optimized Node.js image.",
+          "A `frontend/Dockerfile` is created that uses a multi-stage build to build the static React assets and serve them via Nginx.",
+          "The Dockerfiles are optimized for production use (e.g., using non-root users, minimizing layers)."
+        ],
+        "status": "pending",
+        "code_files": [
+          "backend/Dockerfile",
+          "frontend/Dockerfile"
+        ]
+      },
+      {
+        "id": "OPS-002",
+        "description": "Set up a basic CI/CD pipeline using GitHub Actions to build and test the applications on every push to the main branch.",
+        "dependencies": [
+          "OPS-001"
+        ],
+        "estimated_time": "6 hours",
+        "agent_role": "devops_specialist",
+        "acceptance_criteria": [
+          "A `.github/workflows/ci.yml` file is created.",
+          "The workflow is triggered on push to `main` and pull requests.",
+          "A job is defined to build the backend Docker image.",
+          "A job is defined to build the frontend Docker image.",
+          "Placeholder steps for running tests (e.g., `npm test`) are included for both frontend and backend.",
+          "The workflow completes successfully."
+        ],
+        "status": "pending",
+        "code_files": [
+          ".github/workflows/ci.yml"
+        ]
+      }
+    ],
+    "summary": "This project plan outlines the development of a V-KYC self-service portal using a monolithic architecture with a React frontend, Node.js/Express backend, and PostgreSQL database. The plan is broken down into five logical phases: initial project and database setup, core backend development (auth, search, download APIs), frontend UI construction, integration of frontend and backend, and finally, deployment preparation. Work items are granular, with clear dependencies and acceptance criteria, enabling parallel work where possible and ensuring all requirements from the BRD and system design are met, including critical features like file-based search, audit logging, and secure, role-based access.",
+    "metadata": {
+      "estimated_total_time": "23 days",
+      "risk_assessment": "Medium. Key risks include performance bottlenecks on the file storage system and ensuring robust security/access control. These are mitigated by implementing secure pre-signed URLs, comprehensive audit logging, and proper database indexing from the start."
+    }
+  },
+  "workflow_state_snapshot": {}
+}

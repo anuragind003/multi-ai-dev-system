@@ -669,4 +669,4 @@ async def stream_workflow_events_ws(websocket: WebSocket, session_id: str):
         await websocket_manager.disconnect(session_id)
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {e}")
-        await websocket_manager.disconnect(session_id) 
+        await websocket_manager.disconnect(session_id)

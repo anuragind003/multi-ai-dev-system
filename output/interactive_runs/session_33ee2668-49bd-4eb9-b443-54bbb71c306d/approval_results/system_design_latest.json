@@ -1,0 +1,313 @@
+{
+  "session_id": "session_33ee2668-49bd-4eb9-b443-54bbb71c306d",
+  "approval_type": "system_design",
+  "timestamp": 1752234203,
+  "approval_data": {
+    "architecture": {
+      "pattern": "Monolithic Architecture",
+      "justification": "A monolithic architecture is chosen for its simplicity in development, deployment, and maintenance, which is ideal for a well-defined, single-purpose application like this portal. It reduces operational complexity and allows for faster initial development, as all components are managed within a single codebase and deployment unit."
+    },
+    "components": [
+      {
+        "name": "V-KYC Portal Frontend",
+        "description": "A single-page web application providing the user interface for team leads to log in, search for video recordings, view metadata, and initiate downloads.",
+        "category": "frontend",
+        "technologies": [
+          "React",
+          "Axios",
+          "React Router"
+        ],
+        "responsibilities": [
+          "Render user login and dashboard pages.",
+          "Handle user authentication state management.",
+          "Provide a searchable and filterable interface for video recordings.",
+          "Initiate secure download requests for selected videos.",
+          "Display user-friendly notifications and error messages."
+        ]
+      },
+      {
+        "name": "V-KYC Portal Backend",
+        "description": "A single Node.js application that serves the API, handles all business logic, user authentication, and interacts with the database and video storage.",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "Sequelize",
+          "JWT"
+        ],
+        "responsibilities": [
+          "Provide RESTful API endpoints for all frontend operations.",
+          "Authenticate users and issue JSON Web Tokens (JWT).",
+          "Authorize user actions based on roles.",
+          "Process search queries against the metadata database.",
+          "Generate secure, time-limited download links for video files.",
+          "Log all significant user actions (logins, searches, downloads) to an audit table."
+        ]
+      },
+      {
+        "name": "Metadata Database",
+        "description": "A relational database to store metadata about video recordings, user credentials, and audit trail information.",
+        "category": "database",
+        "technologies": [
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "Persist user account information, including hashed passwords and roles.",
+          "Store indexed metadata for all V-KYC video recordings.",
+          "Maintain an immutable log of all audit events.",
+          "Ensure data integrity through constraints and transactions."
+        ]
+      },
+      {
+        "name": "Secure Video Storage",
+        "description": "A dedicated, secure file or object storage system that houses the actual V-KYC video recordings. The backend application will have permission to access this storage.",
+        "category": "storage",
+        "technologies": [
+          "Network File System (NFS)",
+          "AWS S3 Compatible Object Storage"
+        ],
+        "responsibilities": [
+          "Securely store large video files.",
+          "Ensure high availability and durability of video data.",
+          "Provide access for the backend service to retrieve files for download."
+        ]
+      }
+    ],
+    "data_model": {
+      "schema_type": "relational",
+      "tables": [
+        {
+          "name": "users",
+          "purpose": "Stores credentials and role information for authorized team leads.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "password_hash",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "role",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT 'team_lead'"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "video_recordings",
+          "purpose": "Stores metadata for each V-KYC video to enable searching and identification.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "customer_identifier",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL",
+                "INDEX"
+              ]
+            },
+            {
+              "name": "session_id",
+              "type": "UUID",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "recording_date",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "NOT NULL",
+                "INDEX"
+              ]
+            },
+            {
+              "name": "storage_path",
+              "type": "TEXT",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "file_size_kb",
+              "type": "BIGINT",
+              "constraints": []
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "audit_logs",
+          "purpose": "Records all user actions for security and compliance auditing.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "user_id",
+              "type": "INTEGER",
+              "constraints": [
+                "NOT NULL",
+                "FOREIGN KEY (users.id)"
+              ]
+            },
+            {
+              "name": "action_type",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "details",
+              "type": "JSONB",
+              "constraints": []
+            },
+            {
+              "name": "timestamp",
+              "type": "TIMESTAMP",
+              "constraints": [
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "api_endpoints": {
+      "style": "REST",
+      "base_url": "/api/v1",
+      "authentication": "JWT",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "purpose": "Authenticate a user and return a JWT.",
+          "authentication_required": false
+        },
+        {
+          "method": "POST",
+          "path": "/auth/logout",
+          "purpose": "Log out the user (can be implemented on the client-side by clearing the token).",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings",
+          "purpose": "Search for video recordings based on query parameters (e.g., ?customerId=, &dateFrom=, &dateTo=).",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/recordings/{id}/download",
+          "purpose": "Generate a secure, time-limited download link for a specific video recording.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/audit-logs",
+          "purpose": "Retrieve audit logs for administrative review.",
+          "authentication_required": true
+        }
+      ]
+    },
+    "security": {
+      "authentication_method": "JWT",
+      "authorization_strategy": "RBAC",
+      "data_encryption": {
+        "at_rest": "AES-256 encryption for database volumes and video storage.",
+        "in_transit": "TLS 1.3"
+      }
+    },
+    "scalability_and_performance": {
+      "caching_strategy": "Redis",
+      "load_balancing": "Application Load Balancer",
+      "database_scaling": "Read replicas"
+    },
+    "deployment_strategy": {
+      "containerization": "Docker",
+      "orchestration": "Docker Compose",
+      "ci_cd": "GitLab CI/GitHub Actions"
+    },
+    "monitoring_and_logging": {
+      "application_monitoring": "Prometheus + Grafana",
+      "logging": "ELK Stack",
+      "alerting": "Slack"
+    },
+    "error_handling_strategy": "A centralized error handling middleware in the Express.js application will catch all errors. It will standardize error responses into a consistent JSON format and use appropriate HTTP status codes (e.g., 400, 401, 403, 404, 500). All server-side errors will be logged with a full stack trace for debugging.",
+    "development_phases_overview": [
+      {
+        "name": "Phase 1: Foundation & Backend Setup",
+        "description": "Setup project structure, CI/CD pipeline, database schema, and develop core backend services for user authentication and API structure.",
+        "estimated_duration": "2 Weeks"
+      },
+      {
+        "name": "Phase 2: Core Feature Development",
+        "description": "Implement video metadata search API, secure download link generation, and audit logging. Develop frontend components for login, dashboard, and search results display.",
+        "estimated_duration": "3 Weeks"
+      },
+      {
+        "name": "Phase 3: Integration & Testing",
+        "description": "Integrate frontend with backend APIs, conduct end-to-end testing, user acceptance testing (UAT), and perform security vulnerability scans.",
+        "estimated_duration": "2 Weeks"
+      },
+      {
+        "name": "Phase 4: Deployment & Go-Live",
+        "description": "Finalize deployment scripts, configure production environment, perform initial data migration of video metadata, and deploy the application.",
+        "estimated_duration": "1 Week"
+      }
+    ],
+    "key_risks": [
+      "Unauthorized access to sensitive V-KYC video recordings due to a security vulnerability.",
+      "Poor search performance as the volume of video metadata grows, impacting user experience.",
+      "Failure to maintain a complete and tamper-proof audit trail, leading to compliance issues.",
+      "Scalability challenges with video file storage and bandwidth for downloads."
+    ],
+    "design_justification": "This design uses a monolithic architecture with a standard React, Node.js, and PostgreSQL stack to deliver the required functionality efficiently. The primary focus is on security and auditability, addressed through JWT-based authentication, role-based access control, comprehensive audit logging, and data encryption. The system is designed to be simple to deploy and maintain, directly addressing the project's goal of replacing a manual process with a secure, self-service portal.",
+    "data_flow": "1. A Team Lead authenticates via the React frontend, which sends credentials to the Node.js backend. 2. The backend validates credentials against the PostgreSQL database and returns a JWT. 3. The frontend stores the JWT and uses it in the header for subsequent requests. 4. The user submits a search query from the React UI. 5. The backend API receives the query, validates the JWT, and queries the PostgreSQL database for matching video metadata. 6. The search results are returned to the frontend and displayed. 7. The user clicks a 'download' button. 8. The backend generates a secure, pre-signed, time-limited URL pointing to the video file in the Secure Video Storage and logs the download request in the audit_logs table. 9. The frontend uses this URL to initiate a direct download from the storage to the user's browser."
+  },
+  "workflow_state_snapshot": {}
+}

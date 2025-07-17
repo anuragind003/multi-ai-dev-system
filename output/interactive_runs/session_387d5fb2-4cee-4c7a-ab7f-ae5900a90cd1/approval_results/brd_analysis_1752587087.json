@@ -1,0 +1,161 @@
+{
+  "session_id": "session_387d5fb2-4cee-4c7a-ab7f-ae5900a90cd1",
+  "approval_type": "brd_analysis",
+  "timestamp": 1752587087,
+  "approval_data": {
+    "project_name": "V-KYC recordings to be fetched for Audit requirements",
+    "project_summary": "Development of a portal/dashboard to fetch V-KYC recordings for audit requirements, eliminating manual requests to the IT data server team.",
+    "project_goals": [
+      "Provide a portal/dashboard for VKYC leads (TL & Process Manager) to access V-KYC recordings.",
+      "Make all V-KYC recordings available on the portal.",
+      "Enable searching recordings by LAN ID.",
+      "Enable bulk video download via file upload (Excel or text file) with up to 50 LAN IDs.",
+      "Display search results in a tabular format with a 'Download All' option."
+    ],
+    "target_audience": [
+      "VKYC Team Leads",
+      "VKYC Process Managers"
+    ],
+    "business_context": "Currently, the VKYC team has to request the IT data server team to provide VKYC recordings for internal and external (Audit) requirements. The VKYC recordings are present at LTF ‘NFS(Network File System)’ server which are retrieved basis the manual request.",
+    "requirements": [
+      {
+        "id": "REQ-001",
+        "description": "A portal/Dashboard to be created and access for that will be provided to the leads of VKYC process (TL & Process Manager)",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-002",
+        "description": "All the recordings of VKYC shall be made available on this portal and will be fetched as and when required",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-003",
+        "description": "The recording shall be available date, month wise",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-004",
+        "description": "The recording shall be visible if searched by LAN",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-005",
+        "description": "Option for users to upload an Excel or text file with up to 50 Lan IDs for bulk video download.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-006",
+        "description": "System will trigger a call to backend API to process the request after file upload.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-007",
+        "description": "Results will be displayed on the screen in a tabular format, accompanied by a 'Download All' option.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-008",
+        "description": "Table pagination will display only 10 records at a time, and similarly only 10 records at a time will be downloaded.",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-009",
+        "description": "File will contain min 2 and maxmium 50 LanIDs",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-010",
+        "description": "Post clicking the LAN the recording download shall start",
+        "category": "functional",
+        "priority": 1
+      },
+      {
+        "id": "REQ-011",
+        "description": "The access for the screen will be available to very limited users (only Team leaders)",
+        "category": "non_functional",
+        "priority": 1
+      }
+    ],
+    "functional_requirements": [
+      "Create a portal/dashboard for accessing V-KYC recordings.",
+      "Make all V-KYC recordings available on the portal.",
+      "Enable searching recordings by LAN ID.",
+      "Enable searching recordings by Date and Month.",
+      "Implement bulk video download via file upload (Excel or text file) with up to 50 LAN IDs.",
+      "Trigger backend API call after file upload for processing.",
+      "Display search results in a tabular format with a 'Download All' option.",
+      "Implement pagination to display 10 records at a time.",
+      "Start recording download on clicking the LAN ID."
+    ],
+    "non_functional_requirements": [
+      "Access to the screen will be limited to Team Leaders and Process Managers.",
+      "Backend to be developed using JAVA with Spring Boot."
+    ],
+    "stakeholders": [
+      "VKYC Team",
+      "VKYC Team Leads",
+      "VKYC Process Managers",
+      "IT data server team",
+      "Audit Team",
+      "Sankalp Shaswat",
+      "Mayur Takale",
+      "Amir Khan",
+      "Atul Kantak",
+      "Harsh Gangakhedkar"
+    ],
+    "success_criteria": [
+      "V-KYC recordings are easily accessible to authorized users through the portal.",
+      "Manual requests to the IT data server team for recordings are eliminated.",
+      "Recordings can be efficiently searched and downloaded as needed.",
+      "Bulk download functionality works as expected."
+    ],
+    "constraints": [],
+    "assumptions": [
+      "The LTF ‘NFS(Network File System)’ server is accessible and reliable.",
+      "The provided LAN IDs are valid and correspond to existing V-KYC recordings.",
+      "Authorized users have the necessary network access to the portal."
+    ],
+    "risks": [
+      "Network connectivity issues affecting access to the NFS server.",
+      "Data security vulnerabilities in the portal.",
+      "Performance issues with the bulk download functionality."
+    ],
+    "domain_specific_details": {
+      "VKYC": "Video Know Your Customer",
+      "LAN ID": "Local Area Network Identifier",
+      "NFS": "Network File System"
+    },
+    "quality_assessment": {
+      "clarity_score": 7.0,
+      "completeness_score": 7.0,
+      "consistency_score": 8.0,
+      "recommendations": [
+        "Add more details on security requirements.",
+        "Specify performance requirements for video streaming and download.",
+        "Include error handling and logging requirements."
+      ]
+    },
+    "gap_analysis": {
+      "identified_gaps": [
+        "Lack of detailed security requirements.",
+        "Missing performance requirements.",
+        "No mention of error handling and logging."
+      ],
+      "recommendations_for_completion": [
+        "Define security measures to protect V-KYC recordings.",
+        "Specify performance metrics for video streaming and download.",
+        "Add requirements for error handling and logging to ensure system stability."
+      ]
+    }
+  },
+  "workflow_state_snapshot": {}
+}

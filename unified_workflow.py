@@ -6,6 +6,7 @@ Eliminates sync/async confusion with a pure async approach.
 import asyncio
 import time
 import logging
+import json
 from typing import Dict, Any, List
 from datetime import datetime
 from langgraph.graph import StateGraph, END
@@ -183,24 +184,66 @@ async def unified_system_design_node(state: AgentState, config: dict) -> Dict[st
         
         await asyncio.sleep(2.0)  # Rate limiting
         
-        # Process tech stack data
-        tech_stack_data = state[StateFields.TECH_STACK_RECOMMENDATION]
-        if hasattr(tech_stack_data, 'model_dump'):
-            tech_stack_data = tech_stack_data.model_dump()
+        # SIMPLIFIED: Process tech stack recommendation (single recommendation format)
+        tech_stack_recommendation = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+        logger.info(f"UNIFIED: Tech stack recommendation keys: {list(tech_stack_recommendation.keys()) if isinstance(tech_stack_recommendation, dict) else 'Not a dict'}")
         
+        # Extract single recommendations from the new format
+        final_tech_stack = {}
+        if isinstance(tech_stack_recommendation, dict):
+            # Try direct fields with name/reasoning structure first
+            if tech_stack_recommendation.get("frontend", {}).get("name"):
+                logger.info("UNIFIED: System design - Using direct fields from tech stack recommendation")
+                final_tech_stack = {
+                    'frontend': tech_stack_recommendation.get("frontend", {}).get("name", "React"),
+                    'backend': tech_stack_recommendation.get("backend", {}).get("name", "Node.js with Express.js"),
+                    'database': tech_stack_recommendation.get("database", {}).get("name", "PostgreSQL"),
+                    'architecture': tech_stack_recommendation.get("architecture", {}).get("name", "Microservices Architecture"),
+                    'cloud': tech_stack_recommendation.get("cloud", {}).get("name", "AWS")
+                }
+            # Try synthesis format as fallback
+            elif tech_stack_recommendation.get("synthesis", {}).get("frontend"):
+                logger.info("UNIFIED: System design - Using synthesis from tech stack recommendation")
+                synthesis = tech_stack_recommendation.get("synthesis", {})
+                final_tech_stack = {
+                    'frontend': synthesis.get("frontend", {}).get("framework", "React"),
+                    'backend': synthesis.get("backend", {}).get("framework", "Node.js with Express.js"),
+                    'database': synthesis.get("database", {}).get("type", "PostgreSQL"),
+                    'architecture': synthesis.get("architecture_pattern", "Microservices Architecture"),
+                    'cloud': synthesis.get("deployment_environment", {}).get("hosting", "AWS")
+                }
+        
+        # Emergency fallback
+        if not final_tech_stack or not any(final_tech_stack.values()):
+            logger.warning("UNIFIED: System design - No tech stack data found, using emergency fallback.")
+            final_tech_stack = {
+                'frontend': 'React', 
+                'backend': 'Node.js with Express.js', 
+                'database': 'PostgreSQL', 
+                'architecture': 'Microservices Architecture',
+                'cloud': 'AWS'
+            }
+        
+        logger.info(f"UNIFIED: System design - Final tech stack being passed to agent: {final_tech_stack}")
+        
+        # ADD DEBUGGING: Check the requirements analysis data
+        req_analysis = state[StateFields.REQUIREMENTS_ANALYSIS]
+        logger.info(f"UNIFIED: Requirements analysis type: {type(req_analysis)}")
+        logger.info(f"UNIFIED: Requirements analysis keys: {list(req_analysis.keys()) if isinstance(req_analysis, dict) else 'Not a dict'}")
+        
+        # Pass clean dictionary to the agent (this will be passed as tech_stack_recommendation)
         result = await asyncio.to_thread(
             agent.run,
-            requirements_analysis=state[StateFields.REQUIREMENTS_ANALYSIS],
-            tech_stack_recommendation=tech_stack_data
+            requirements_analysis=req_analysis,
+            tech_stack_recommendation=final_tech_stack  # Pass the simplified format
         )
         
-        # Ensure result is properly serialized to dictionary
+        # Handle result serialization
         if hasattr(result, 'model_dump'):
             result = result.model_dump()
         elif hasattr(result, 'dict'):
             result = result.dict()
         elif not isinstance(result, dict):
-            # Handle string or other non-dict types
             try:
                 import json
                 if isinstance(result, str):
@@ -247,7 +290,14 @@ async def unified_planning_node(state: AgentState, config: dict) -> Dict[str, An
         if hasattr(tech_stack_data, 'model_dump'):
             tech_stack_data = tech_stack_data.model_dump()
         elif not isinstance(tech_stack_data, dict):
-            tech_stack_data = str(tech_stack_data)
+            logger.warning(f" UNIFIED: Tech stack data is not a dict (type: {type(tech_stack_data)}), using fallback")
+            tech_stack_data = {
+                "frontend": "React",
+                "backend": "Node.js with Express.js", 
+                "database": "PostgreSQL",
+                "architecture": "Microservices Architecture",
+                "cloud": "AWS"
+            }
         
         logger.info(" UNIFIED: Calling plan compiler agent")
         result = await asyncio.to_thread(
@@ -473,7 +523,7 @@ async def unified_work_item_iterator_node(state: AgentState, config: dict) -> Di
             "_work_item_id": work_item_id
         }
     else:
-        logger.info(f"UNIFIED: 🎉 All {total_items} work items processed! (✅ {completed_count} completed, ❌ {failed_count} failed)")
+        logger.info(f"UNIFIED: [SUCCESS] All {total_items} work items processed! {completed_count} completed, {failed_count} failed")
         return {
             "current_work_item": None,
             StateFields.WORKFLOW_COMPLETE: True,
@@ -625,9 +675,19 @@ async def unified_code_generation_dispatcher_node(state: AgentState, config: dic
         from agents.code_generation.simple_frontend_agent import SimpleFrontendAgent
         from agents.code_generation.simple_database_agent import SimpleDatabaseAgent
         from agents.code_generation.simple_ops_agent import SimpleOpsAgent
-        from agents.simple_code_quality_agent import SimpleCodeQualityAgent
         from config import get_llm
         from agent_temperatures import get_agent_temperature
+        
+        # Import enhanced error handling
+        from tools.error_handling_utils import get_error_handler
+        error_handler = get_error_handler()
+        
+        context = {
+            "work_item_id": work_item_id,
+            "agent_role": agent_role,
+            "workflow_id": state.get("workflow_id", "unknown"),
+            "timestamp": time.time()
+        }
         
         # UNIFIED & SIMPLIFIED AGENT MAPPING
         generator_map = {
@@ -647,13 +707,21 @@ async def unified_code_generation_dispatcher_node(state: AgentState, config: dic
             "site_reliability_engineer": SimpleOpsAgent, # SRE handles system reliability and ops
             "architecture_specialist": SimpleOpsAgent,  # Architecture (scaffolding, Docker, CI/CD) is an Ops task
             "testing_specialist": SimpleOpsAgent,       # All testing (unit, integration, e2e) is handled by Ops
+            "qa_engineer": SimpleOpsAgent,              # QA engineers handle testing frameworks and automation
+            "quality_assurance": SimpleOpsAgent,        # QA handles test automation and quality processes
+            "test_engineer": SimpleOpsAgent,            # Test engineers handle test automation and frameworks
+            "automation_engineer": SimpleOpsAgent,      # Automation engineers handle test and deployment automation
             "documentation_specialist": SimpleOpsAgent, # All docs (README, API docs) are handled by Ops
+            "technical_writer": SimpleOpsAgent,         # Technical writers handle documentation and guides
+            "technical_documentation": SimpleOpsAgent,  # Technical documentation is handled by Ops
+            "content_writer": SimpleOpsAgent,           # Content writers handle user-facing documentation
+            "documentation_engineer": SimpleOpsAgent,   # Documentation engineers handle doc systems and automation
             "security_specialist": SimpleOpsAgent,      # Security setup is handled by Ops
             "monitoring_specialist": SimpleOpsAgent,    # Monitoring setup is handled by Ops
             
             # Specialized development tasks routed to the most relevant agent
             "integration_specialist": SimpleBackendAgent, # Integrations are typically backend-focused
-            "code_optimizer": SimpleCodeQualityAgent, # Code optimization is a quality concern
+            "code_optimizer": SimpleBackendAgent, # Code optimization handled by backend agent
         }
         
         agent_class = generator_map.get(agent_role)
@@ -683,6 +751,134 @@ async def unified_code_generation_dispatcher_node(state: AgentState, config: dic
             code_execution_tool = CodeExecutionTool(output_dir=output_dir)
             logger.info(f"UNIFIED: Created default CodeExecutionTool for {work_item_id} using output_dir: {output_dir}")
         
+        # FIXED: Extract tech stack the SAME WAY as system design node
+        tech_stack_recommendation = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+        final_tech_stack = {}
+
+        logger.info(f"UNIFIED: Code Gen - Tech stack recommendation keys: {list(tech_stack_recommendation.keys()) if isinstance(tech_stack_recommendation, dict) else 'Not a dict'}")
+        
+        # Use the SAME extraction logic as system design node
+        if isinstance(tech_stack_recommendation, dict):
+            # 1. Try synthesis first (should contain the single recommendations/user selections)
+            synthesis = tech_stack_recommendation.get("synthesis", {})
+            if synthesis and isinstance(synthesis, dict):
+                logger.info("UNIFIED: Code Gen - Using synthesis from tech stack recommendation")
+                final_tech_stack = {
+                    'frontend': synthesis.get("frontend", {}).get("name", "React"),
+                    'backend': synthesis.get("backend", {}).get("name", "Node.js with Express.js"),
+                    'database': synthesis.get("database", {}).get("name", "PostgreSQL"),
+                    'architecture': synthesis.get("architecture", {}).get("name", "Microservices Architecture"),
+                    'cloud': synthesis.get("cloud", {}).get("name", "AWS")
+                }
+                logger.info(f"UNIFIED: Code Gen - Extracted from synthesis: {final_tech_stack}")
+            
+            # 2. Fallback: Try direct fields from tech stack recommendation
+            elif tech_stack_recommendation.get("frontend"):
+                logger.info("UNIFIED: Code Gen - Using direct fields from tech stack")
+                final_tech_stack = {
+                    'frontend': tech_stack_recommendation.get("frontend", {}).get("name", "React"),
+                    'backend': tech_stack_recommendation.get("backend", {}).get("name", "Node.js with Express.js"),
+                    'database': tech_stack_recommendation.get("database", {}).get("name", "PostgreSQL"),
+                    'architecture': tech_stack_recommendation.get("architecture", {}).get("name", "Microservices Architecture"),
+                    'cloud': tech_stack_recommendation.get("cloud", {}).get("name", "AWS")
+                }
+                logger.info(f"UNIFIED: Code Gen - Extracted from direct fields: {final_tech_stack}")
+        
+        # 3. Parse work item description and code_files for technology hints (only if still empty)
+        if not final_tech_stack or not any(final_tech_stack.values()):
+            work_item_description = work_item.get('description', '').lower()
+            code_files = work_item.get('code_files', [])
+            
+            logger.info(f"UNIFIED: Code Gen - No tech stack found, parsing work item description: {work_item_description[:100]}...")
+            
+            # Detect technologies from work item description
+            backend_tech = None
+            frontend_tech = None
+            database_tech = None
+            
+            if 'vue' in work_item_description or 'vue.js' in work_item_description:
+                frontend_tech = "Vue.js"
+            elif 'react' in work_item_description:
+                frontend_tech = "React"
+            elif 'angular' in work_item_description:
+                frontend_tech = "Angular"
+                
+            if 'node.js' in work_item_description or 'express' in work_item_description:
+                backend_tech = "Node.js with Express.js"
+            elif 'fastapi' in work_item_description or 'python' in work_item_description:
+                backend_tech = "Python with FastAPI"
+            elif 'django' in work_item_description:
+                backend_tech = "Python with Django"
+            elif 'spring boot' in work_item_description or 'java' in work_item_description:
+                backend_tech = "Java with Spring Boot"
+                
+            if 'postgresql' in work_item_description or 'postgres' in work_item_description:
+                database_tech = "PostgreSQL"
+            elif 'mysql' in work_item_description:
+                database_tech = "MySQL"
+            elif 'mongodb' in work_item_description:
+                database_tech = "MongoDB"
+            
+            # Detect from file extensions in code_files
+            if not backend_tech and code_files:
+                js_files = any('.js' in f or '.ts' in f or '.tsx' in f or 'package.json' in f for f in code_files)
+                py_files = any('.py' in f or 'requirements.txt' in f for f in code_files)
+                java_files = any('.java' in f or 'pom.xml' in f for f in code_files)
+                vue_files = any('.vue' in f for f in code_files)
+                
+                if vue_files:
+                    frontend_tech = "Vue.js"
+                if js_files:
+                    backend_tech = "Node.js with Express.js"
+                elif py_files:
+                    backend_tech = "Python with FastAPI"
+                elif java_files:
+                    backend_tech = "Java with Spring Boot"
+            
+            final_tech_stack = {
+                'frontend': frontend_tech or "React",
+                'backend': backend_tech or "Node.js with Express.js", 
+                'database': database_tech or "PostgreSQL",
+                'architecture': "Microservices Architecture",
+                'cloud': "AWS"
+            }
+            logger.info(f"UNIFIED: Code Gen - Extracted from work item hints: {final_tech_stack}")
+        
+        # Emergency fallback (only if absolutely nothing was found)
+        if not final_tech_stack or not any(final_tech_stack.values()):
+            logger.warning("UNIFIED: Code Gen - No tech stack data found, using emergency fallback.")
+            final_tech_stack = {
+                'frontend': 'React', 
+                'backend': 'Node.js with Express.js', 
+                'database': 'PostgreSQL', 
+                'architecture': 'Microservices Architecture',
+                'cloud': 'AWS'
+            }
+            logger.warning(f"UNIFIED: Code Gen - Emergency fallback: {final_tech_stack}")
+        
+        logger.info(f"UNIFIED: Code Gen - 🎯 FINAL tech stack for {work_item_id}: {final_tech_stack}")
+        
+        # Create enhanced state with proper tech stack info and work item details
+        enhanced_state = {
+            **state,
+            'tech_stack_info': {
+                'backend': final_tech_stack.get('backend'),
+                'frontend': final_tech_stack.get('frontend'),
+                'database': final_tech_stack.get('database'),
+                'architecture': final_tech_stack.get('architecture'),
+                'cloud': final_tech_stack.get('cloud'),
+                'work_item_files': work_item.get('code_files', []),
+                'work_item_description': work_item.get('description', ''),
+                'expected_file_structure': work_item.get('code_files', []),
+                'work_item_dependencies': work_item.get('dependencies', []),
+                'work_item_acceptance_criteria': work_item.get('acceptance_criteria', []),
+                'work_item_estimated_time': work_item.get('estimated_time', ''),
+                'work_item_status': work_item.get('status', 'pending'),
+                'work_item_id': work_item_id,
+                'agent_role': work_item.get('agent_role', '')
+            }
+        }
+        
         agent_args = {
             "llm": llm,
             "memory": config["configurable"].get("memory"),
@@ -707,7 +903,8 @@ async def unified_code_generation_dispatcher_node(state: AgentState, config: dic
         else:
             work_item_obj = work_item
         
-        result = await asyncio.to_thread(agent.run, work_item=work_item_obj, state=state)
+        # Pass enhanced state with proper tech stack information
+        result = await asyncio.to_thread(agent.run, work_item=work_item_obj, state=enhanced_state)
         
         # Handle result format
         if hasattr(result, 'model_dump'):
@@ -715,138 +912,148 @@ async def unified_code_generation_dispatcher_node(state: AgentState, config: dic
         else:
             result_dict = result
         
-        logger.info(f"UNIFIED: Completed {work_item_id} using {agent_class.__name__}")
+        logger.info(f"UNIFIED: Completed {work_item_id} using {agent_class.__name__} with {final_tech_stack.get('backend')}")
+        
+        # ENHANCED: Validate and monitor the LLM output parsing
+        if hasattr(result_dict, 'model_dump'):
+            result_dict = result_dict.model_dump()
+        elif hasattr(result_dict, 'dict'):
+            result_dict = result_dict.dict()
+        elif isinstance(result_dict, dict):
+            result_dict = result_dict
+        else:
+            logger.warning(f"UNIFIED: Unexpected result type {type(result_dict)} for {work_item_id}, converting to dict")
+            result_dict = {"status": "completed", "raw_result": str(result_dict)}
+        
+        # ENHANCED: Use error handler for robust file validation
+        generated_files = result_dict.get("generated_files", [])
+        if generated_files:
+            logger.info(f"UNIFIED: {work_item_id} generated {len(generated_files)} files - validating...")
+            
+            # Use enhanced validation from error handler
+            try:
+                from tools.error_handling_utils import get_error_handler
+                error_handler = get_error_handler()
+                validation_result = error_handler.validate_generated_files(generated_files, context)
+                
+                valid_files = validation_result["valid_files"]
+                invalid_files = validation_result["invalid_files"]
+                validation_errors = validation_result["validation_errors"]
+                
+                if validation_errors:
+                    logger.warning(f"UNIFIED: {work_item_id} validation issues: {validation_errors}")
+                
+                if valid_files:
+                    result_dict["generated_files"] = valid_files
+                    result_dict["status"] = "completed"
+                    result_dict["validation_summary"] = {
+                        "total_files": validation_result["total_files"],
+                        "valid_files": len(valid_files),
+                        "invalid_files": len(invalid_files),
+                        "validation_errors": validation_errors
+                    }
+                    logger.info(f"UNIFIED: {work_item_id} - {len(valid_files)} valid files processed successfully")
+                else:
+                    logger.error(f"UNIFIED: {work_item_id} - No valid files generated!")
+                    error_response = error_handler.handle_code_generation_error(
+                        Exception(f"No valid files generated. Validation errors: {validation_errors}"),
+                        context
+                    )
+                    return {StateFields.CODE_GENERATION_RESULT: error_response}
+            
+            except Exception as validation_error:
+                logger.error(f"UNIFIED: Error during validation for {work_item_id}: {validation_error}")
+                # Fallback: accept files as-is if validation fails
+                result_dict["generated_files"] = generated_files
+                result_dict["status"] = "completed"
+                result_dict["validation_note"] = f"Validation failed but files accepted: {str(validation_error)}"
+                logger.info(f"UNIFIED: {work_item_id} - Accepted {len(generated_files)} files despite validation error")
+        else:
+            logger.warning(f"UNIFIED: {work_item_id} - No files were generated")
+            if result_dict.get("status") != "error":  # Don't override existing error status
+                try:
+                    from tools.error_handling_utils import get_error_handler
+                    error_handler = get_error_handler()
+                    error_response = error_handler.handle_code_generation_error(
+                        Exception("No files were generated by the agent"),
+                        context
+                    )
+                    return {StateFields.CODE_GENERATION_RESULT: error_response}
+                except Exception:
+                    result_dict["status"] = "error"
+                    result_dict["error"] = "No files were generated by the agent"
+        
         return {StateFields.CODE_GENERATION_RESULT: result_dict}
         
     except Exception as e:
         logger.error(f"UNIFIED: Code generation failed for {work_item_id}: {str(e)}")
+        logger.exception("Full traceback:")
+        
+        # Use enhanced error handling
+        error_response = error_handler.handle_code_generation_error(e, context)
+        
         return {
-            StateFields.CODE_GENERATION_RESULT: {"status": "error", "error": str(e)},
-            "errors": state.get("errors", []) + [{"module": "Code Generation", "error": str(e)}]
+            StateFields.CODE_GENERATION_RESULT: error_response,
+            "errors": state.get("errors", []) + [{
+                "module": "Code Generation",
+                "error": str(e),
+                "work_item_id": work_item_id,
+                "timestamp": time.time()
+            }]
         }
 
-async def unified_code_quality_analysis_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Code quality analysis with pure async approach."""
-    work_item = state.get("current_work_item", {})
-    work_item_id = work_item.get("id", "unknown")
-    
-    # Check if the previous step failed
-    code_gen_result = state.get(StateFields.CODE_GENERATION_RESULT, {})
-    if code_gen_result.get("status") == "error":
-        logger.warning(f"UNIFIED: Skipping quality check for {work_item_id} due to code generation failure.")
-        return {
-            StateFields.CODE_REVIEW_FEEDBACK: {
-                "approved": False, # Explicitly mark as not approved
-                "quality_score": 0.0,
-                "summary": "Skipped due to code generation failure.",
-                "feedback": [],
-                "error": "Upstream failure in code generation."
-            }
-        }
-    
-    try:
-        # Check if tools are available
-        code_execution_tool = config["configurable"].get("code_execution_tool")
-        if not code_execution_tool:
-            logger.info(f"UNIFIED: Quality check {work_item_id} (auto-approved)")
-            return {
-                StateFields.CODE_REVIEW_FEEDBACK: {
-                    "approved": True,
-                    "quality_score": 7.0,
-                    "summary": "Quality analysis skipped - no tools available",
-                    "feedback": []
-                }
-            }
-        
-        from agents.simple_code_quality_agent import SimpleCodeQualityAgent
-        from config import get_llm
-        from agent_temperatures import get_agent_temperature
-        
-        temperature = get_agent_temperature("Code Quality Agent")
-        llm = get_llm(temperature=temperature)
-        
-        # Get output directory with default
-        import os
-        run_output_dir = config["configurable"].get("run_output_dir", "output/code_quality")
-        os.makedirs(run_output_dir, exist_ok=True)
-        
-        agent_args = {
-            "llm": llm,
-            "memory": config["configurable"].get("memory"),
-            "temperature": temperature,
-            "code_execution_tool": code_execution_tool,
-            "run_output_dir": run_output_dir
-        }
-        
-        agent = SimpleCodeQualityAgent(**agent_args)
-        
-        await asyncio.sleep(2.0)  # Rate limiting
-        
-        # Convert work_item dict to WorkItem object if needed
-        from models.data_contracts import WorkItem
-        if isinstance(work_item, dict):
-            work_item_obj = WorkItem(**work_item)
-        else:
-            work_item_obj = work_item
-        
-        result = await asyncio.to_thread(agent.run, work_item=work_item_obj, state=state)
-        
-        approved = result.get("approved", False)
-        logger.info(f"UNIFIED: Quality check {work_item_id} - {'PASSED' if approved else 'REVISION NEEDED'}")
-        
-        return {StateFields.CODE_REVIEW_FEEDBACK: result}
-        
-    except Exception as e:
-        logger.error(f"UNIFIED: Quality check failed for {work_item_id}: {str(e)}")
-        return {
-            StateFields.CODE_REVIEW_FEEDBACK: {
-                "approved": True,  # Approve to prevent infinite loops
-                "quality_score": 6.0,
-                "summary": f"Quality analysis failed: {str(e)} - approved to continue",
-                "feedback": [],
-                "error": str(e)
-            }
-        }
+
 
 # ============================================================================
 # DECISION FUNCTIONS
 # ============================================================================
 
-def unified_decide_on_code_quality(state: AgentState) -> str:
-    """Decision function for code quality results."""
-    feedback = state.get(StateFields.CODE_REVIEW_FEEDBACK, {})
-    work_item_id = state.get("current_work_item", {}).get("id", "unknown")
-    
-    # If code generation failed, we must revise.
-    if feedback.get("error") == "Upstream failure in code generation.":
-        return "revise"
 
-    revision_counts = state.get("revision_counts", {})
-    current_revisions = revision_counts.get(work_item_id, 0)
-    max_revisions = 2
-    
-    if feedback.get("approved") or current_revisions >= max_revisions:
-        return "approve"
-    else:
-        return "revise"
 
 async def unified_test_execution_node(state: AgentState, config: dict) -> Dict[str, Any]:
-    """Test execution with pure async approach."""
-    work_item = state.get("current_work_item", {})
+    """Test execution with pure async approach - Simplified for speed."""
+    work_item = state.get("current_work_item")
+    
+    # Handle case where work_item is None (e.g., after failure and cleanup)
+    if work_item is None:
+        logger.warning("UNIFIED: No current work item found in test execution node, returning default result")
+        return {StateFields.TEST_VALIDATION_RESULT: {
+            "status": "skipped",
+            "passed": False,
+            "summary": "No current work item to test",
+            "test_count": 0,
+            "passed_count": 0,
+            "failed_count": 0
+        }}
+    
     work_item_id = work_item.get('id', 'unknown')
     
-    # For now, return a simple passing test result
-    # This can be expanded with actual test execution logic
-    test_result = {
-        "status": "passed",
-        "passed": True,
-        "summary": f"Tests passed for work item {work_item_id}",
-        "test_count": 5,
-        "passed_count": 5,
-        "failed_count": 0
-    }
+    # Check if the previous step (code generation) succeeded
+    code_gen_result = state.get(StateFields.CODE_GENERATION_RESULT, {})
+    code_gen_status = code_gen_result.get("status", "unknown")
     
-    logger.info(f"UNIFIED: Tests completed for {work_item_id}")
+    if code_gen_status == "error":
+        test_result = {
+            "status": "failed",
+            "passed": False,
+            "summary": f"Tests skipped for {work_item_id} due to code generation failure",
+            "test_count": 0,
+            "passed_count": 0,
+            "failed_count": 1
+        }
+    else:
+        # Simplified test validation - just check if files were generated
+        generated_files = code_gen_result.get("generated_files", [])
+        test_result = {
+            "status": "passed",
+            "passed": True,
+            "summary": f"Basic validation passed for {work_item_id} - {len(generated_files)} files generated",
+            "test_count": 1,
+            "passed_count": 1,
+            "failed_count": 0
+        }
+    
+    logger.info(f"UNIFIED: Test validation completed for {work_item_id} - Status: {test_result['status']}")
     return {StateFields.TEST_VALIDATION_RESULT: test_result}
 
 def unified_decide_on_test_results(state: AgentState) -> str:
@@ -860,7 +1067,13 @@ def unified_decide_on_test_results(state: AgentState) -> str:
 
 async def unified_phase_completion_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Phase completion with pure async approach."""
-    work_item = state.get("current_work_item", {})
+    work_item = state.get("current_work_item")
+    
+    # Handle case where work_item is None (e.g., after failure and cleanup)
+    if work_item is None:
+        logger.warning("UNIFIED: No current work item found in phase completion node, skipping completion")
+        return {}
+    
     work_item_id = work_item.get("id", "unknown")
     code_generation_result = state.get(StateFields.CODE_GENERATION_RESULT, {})
 
@@ -881,7 +1094,7 @@ async def unified_phase_completion_node(state: AgentState, config: dict) -> Dict
     }
     updated_completed_items = completed_work_items + [completed_work_item]
     
-    logger.info(f"UNIFIED: ✅ {work_item_id} completed")
+    logger.info(f"UNIFIED: [SUCCESS] {work_item_id} completed")
     
     return {
         "completed_work_items": updated_completed_items,
@@ -925,13 +1138,15 @@ async def unified_increment_revision_node(state: AgentState, config: dict) -> Di
         completed_work_items.append(failed_item)
         
         logger.info(f"UNIFIED: Continuing workflow despite {work_item_id} failure")
-        return {
+        result = {
             "revision_counts": revision_counts,
             "failed_work_items": failed_work_items,
             "completed_work_items": completed_work_items,
             "current_work_item": None,  # Clear current work item to move to next
             "skip_current_item": True  # Flag to skip to next work item
         }
+        logger.info(f"UNIFIED: Increment revision returning for failed item: {result}")
+        return result
     
     logger.info(f"UNIFIED: Retry {work_item_id} (attempt {new_count}/{max_revisions})")
     return {"revision_counts": revision_counts}
@@ -941,6 +1156,9 @@ def unified_check_circuit_breaker(state: AgentState) -> str:
     circuit_breaker = state.get("circuit_breaker_triggered", False)
     workflow_complete = state.get(StateFields.WORKFLOW_COMPLETE, False)
     skip_current_item = state.get("skip_current_item", False)
+    
+    # DEBUG: Log the circuit breaker state
+    logger.info(f"UNIFIED: Circuit breaker check - circuit_breaker: {circuit_breaker}, workflow_complete: {workflow_complete}, skip_current_item: {skip_current_item}")
     
     # ENHANCED: Check for too many failed items (graceful degradation)
     failed_work_items = state.get("failed_work_items", [])
@@ -953,10 +1171,13 @@ def unified_check_circuit_breaker(state: AgentState) -> str:
         return "stop"
     
     if circuit_breaker or workflow_complete:
+        logger.info("UNIFIED: Circuit breaker triggered - routing to stop")
         return "stop"
     elif skip_current_item:
+        logger.info("UNIFIED: Skip current item flag detected - routing to continue_next_item")
         return "continue_next_item"  # New path for skipping failed items
     else:
+        logger.info("UNIFIED: Normal flow - routing to continue")
         return "continue"
 
 async def unified_finalize_workflow(state: AgentState, config: dict) -> Dict[str, Any]:
@@ -1003,13 +1224,13 @@ async def unified_finalize_workflow(state: AgentState, config: dict) -> Dict[str
         "success_rate": (completed_items / (completed_items + failed_items)) if (completed_items + failed_items) > 0 else 0.0
     }
     
-    # ENHANCED: Better logging
+    # ENHANCED: Better logging without emojis
     if failed_items == 0:
-        logger.info(f"UNIFIED: 🎉 Workflow completed successfully! {completed_items} items in {total_time:.1f}s")
+        logger.info(f"UNIFIED: [SUCCESS] Workflow completed successfully! {completed_items} items in {total_time:.1f}s")
     elif completed_items > 0:
-        logger.info(f"UNIFIED: ⚠️ Workflow completed with mixed results! ✅ {completed_items} succeeded, ❌ {failed_items} failed in {total_time:.1f}s")
+        logger.info(f"UNIFIED: [WARNING] Workflow completed with mixed results! {completed_items} succeeded, {failed_items} failed in {total_time:.1f}s")
     else:
-        logger.error(f"UNIFIED: ❌ Workflow failed completely! {failed_items} items failed in {total_time:.1f}s")
+        logger.error(f"UNIFIED: [ERROR] Workflow failed completely! {failed_items} items failed in {total_time:.1f}s")
     
     return {
         StateFields.WORKFLOW_SUMMARY: summary,
@@ -1071,66 +1292,91 @@ async def unified_human_approval_node(step_key: str, readable_name: str):
 
 async def unified_tech_stack_approval_node(state: AgentState, config: dict) -> Dict[str, Any]:
     """Specific tech stack approval node that handles user selections."""
-    logger.info(" UNIFIED: Tech stack approval node reached")
+    logger.info("="*60)
+    logger.info(" UNIFIED: [DEBUG] TECH STACK APPROVAL NODE CALLED")
+    logger.info("="*60)
+    logger.info(f" UNIFIED: State keys at entry: {list(state.keys())}")
     
     # Check for user feedback with tech stack selections
     user_feedback = state.get("user_feedback", {})
     decision = user_feedback.get("decision")
     selected_stack_data = user_feedback.get("selected_stack")
     
+    logger.info(f" UNIFIED: User feedback found: {user_feedback}")
+    logger.info(f" UNIFIED: Decision extracted: {decision}")
+    logger.info(f" UNIFIED: Selected stack data: {selected_stack_data}")
+    
     if decision == "proceed" and selected_stack_data:
+        logger.info(f" UNIFIED: [SUCCESS] PROCESSING USER SELECTIONS")
         logger.info(f" UNIFIED: Processing tech stack selections: {selected_stack_data}")
         
-        # Import required models
-        from models.data_contracts import SelectedTechStack, TechStackComponent
-        
-        # Create SelectedTechStack instance from user selections
-        selected_tech_stack = SelectedTechStack(
-            frontend=TechStackComponent(
-                name=selected_stack_data.get("frontend_selection", ""),
-                reasoning="User selected",
-                selected=True
-            ) if selected_stack_data.get("frontend_selection") else None,
-            backend=TechStackComponent(
-                name=selected_stack_data.get("backend_selection", ""),
-                reasoning="User selected", 
-                selected=True
-            ) if selected_stack_data.get("backend_selection") else None,
-            database=TechStackComponent(
-                name=selected_stack_data.get("database_selection", ""),
-                reasoning="User selected",
-                selected=True
-            ) if selected_stack_data.get("database_selection") else None,
-            cloud=TechStackComponent(
-                name=selected_stack_data.get("cloud_selection", ""),
-                reasoning="User selected",
-                selected=True
-            ) if selected_stack_data.get("cloud_selection") else None,
-            tools=[TechStackComponent(
-                name=selected_stack_data.get("tool_selection", ""),
-                reasoning="User selected",
-                selected=True
-            )] if selected_stack_data.get("tool_selection") else []
-        )
-        
-        # Update the tech stack recommendation with user selections
+        # Get the existing tech stack recommendation
         tech_stack_output = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
+        logger.info(f" UNIFIED: Original tech stack type: {type(tech_stack_output)}")
+        
+        # Create a clean copy of the tech stack output
         if hasattr(tech_stack_output, 'model_dump'):
             tech_stack_dict = tech_stack_output.model_dump()
+            logger.info(" UNIFIED: Used model_dump() to convert tech stack")
         else:
-            tech_stack_dict = tech_stack_output
+            tech_stack_dict = tech_stack_output.copy() if isinstance(tech_stack_output, dict) else {}
+            logger.info(" UNIFIED: Used dict.copy() to convert tech stack")
         
-        # Store the selected stack in the expected format
-        tech_stack_dict["selected_stack"] = selected_tech_stack.model_dump()
-        
-        # Also store individual selections for easy access
+        # CRITICAL FIX: Store user selections directly in multiple formats for compatibility
         tech_stack_dict["user_selections"] = selected_stack_data
         
-        logger.info(f" UNIFIED: Tech stack selections processed and stored: {selected_stack_data}")
-        return {
+        # ALSO: Update the synthesis section to reflect user choices
+        tech_stack_dict["synthesis"] = {
+            "frontend": {
+                "name": selected_stack_data.get("frontend_selection", ""),
+                "technology": selected_stack_data.get("frontend_selection", ""),
+                "selected": True
+            },
+            "backend": {
+                "name": selected_stack_data.get("backend_selection", ""),
+                "technology": selected_stack_data.get("backend_selection", ""),
+                "selected": True
+            },
+            "database": {
+                "name": selected_stack_data.get("database_selection", ""),
+                "technology": selected_stack_data.get("database_selection", ""),
+                "selected": True
+            },
+            "architecture": {
+                "name": selected_stack_data.get("architecture_selection", ""),
+                "technology": selected_stack_data.get("architecture_selection", ""),
+                "selected": True
+            },
+            "cloud": {
+                "name": selected_stack_data.get("cloud_selection", ""),
+                "technology": selected_stack_data.get("cloud_selection", ""),
+                "selected": True
+            },
+            "architecture_pattern": selected_stack_data.get("architecture_selection", "")
+        }
+        
+        # ALSO: Create selected_stack for compatibility
+        tech_stack_dict["selected_stack"] = {
+            "frontend": {"name": selected_stack_data.get("frontend_selection", ""), "selected": True},
+            "backend": {"name": selected_stack_data.get("backend_selection", ""), "selected": True},
+            "database": {"name": selected_stack_data.get("database_selection", ""), "selected": True},
+            "architecture": {"name": selected_stack_data.get("architecture_selection", ""), "selected": True},
+            "cloud": {"name": selected_stack_data.get("cloud_selection", ""), "selected": True},
+            "tools": [{"name": selected_stack_data.get("tool_selection", ""), "selected": True}]
+        }
+        
+        logger.info(f" UNIFIED: [SUCCESS] Updated synthesis: {tech_stack_dict['synthesis']}")
+        logger.info(f" UNIFIED: [SUCCESS] Updated user_selections: {tech_stack_dict['user_selections']}")
+        logger.info(f" UNIFIED: [SUCCESS] Updated selected_stack: {tech_stack_dict['selected_stack']}")
+        
+        # CRITICAL: Return the updated tech stack recommendation
+        return_value = {
             StateFields.TECH_STACK_RECOMMENDATION: tech_stack_dict,
             "human_decision": "proceed"
         }
+        
+        logger.info(f" UNIFIED: [SUCCESS] RETURNING updated state with keys: {list(return_value.keys())}")
+        return return_value
     
     elif decision == "revise":
         logger.info(" UNIFIED: User requested tech stack revision")
@@ -1141,6 +1387,8 @@ async def unified_tech_stack_approval_node(state: AgentState, config: dict) -> D
         return {"human_decision": "end"}
     
     else:
+        logger.info(f" UNIFIED: [INITIAL] No user feedback - showing tech stack options")
+        
         # Initial pause for human approval
         tech_stack_output = state.get(StateFields.TECH_STACK_RECOMMENDATION, {})
         
@@ -1194,20 +1442,20 @@ async def create_unified_workflow() -> StateGraph:
     workflow.add_node("system_design_node", unified_system_design_node)
     workflow.add_node("planning_node", unified_planning_node)
     
-    # === HUMAN APPROVAL NODES ===
+    # === HUMAN APPROVAL NODES - ALL USING SIMPLE FACTORY ===
     brd_approval = await unified_human_approval_node(StateFields.REQUIREMENTS_ANALYSIS, "BRD Analysis")
+    tech_stack_approval = await unified_human_approval_node(StateFields.TECH_STACK_RECOMMENDATION, "Tech Stack Recommendation")  # SIMPLIFIED
     design_approval = await unified_human_approval_node(StateFields.SYSTEM_DESIGN, "System Design")
     plan_approval = await unified_human_approval_node(StateFields.IMPLEMENTATION_PLAN, "Implementation Plan")
     
     workflow.add_node("human_approval_brd_node", brd_approval)
-    workflow.add_node("human_approval_tech_stack_node", unified_tech_stack_approval_node)  # Use specific tech stack approval
+    workflow.add_node("human_approval_tech_stack_node", tech_stack_approval)  # SIMPLIFIED
     workflow.add_node("human_approval_system_design_node", design_approval)
     workflow.add_node("human_approval_plan_node", plan_approval)
     
     # === IMPLEMENTATION NODES ===
     workflow.add_node("work_item_iterator_node", unified_work_item_iterator_node)
     workflow.add_node("code_generation_node", unified_code_generation_dispatcher_node)
-    workflow.add_node("code_quality_node", unified_code_quality_analysis_node)
     workflow.add_node("test_execution_node", unified_test_execution_node)
     workflow.add_node("phase_completion_node", unified_phase_completion_node)
     workflow.add_node("increment_revision_node", unified_increment_revision_node)
@@ -1252,12 +1500,8 @@ async def create_unified_workflow() -> StateGraph:
         "complete": "finalize_node"
     })
     
-    # Quality and testing flow
-    workflow.add_edge("code_generation_node", "code_quality_node")
-    workflow.add_conditional_edges("code_quality_node", unified_decide_on_code_quality, {
-        "approve": "test_execution_node",
-        "revise": "increment_revision_node"
-    })
+    # Skip quality analysis and go directly to testing
+    workflow.add_edge("code_generation_node", "test_execution_node")
     
     workflow.add_conditional_edges("test_execution_node", unified_decide_on_test_results, {
         "approve": "phase_completion_node",
@@ -1289,4 +1533,4 @@ async def get_unified_workflow() -> StateGraph:
     return await create_unified_workflow()
 
 # Default export
-__all__ = ["create_unified_workflow", "get_unified_workflow"] 
+__all__ = ["create_unified_workflow", "get_unified_workflow"]

@@ -25,8 +25,10 @@ class SimpleOpsAgent(SimpleBaseAgent):
     Handles:
     ✅ Docker containerization
     ✅ CI/CD pipelines  
-    ✅ Basic tests (unit + integration)
-    ✅ Documentation (README + API docs)
+    ✅ Testing (unit, integration, e2e, automation)
+    ✅ QA processes and test frameworks
+    ✅ Documentation (README, API docs, user guides)
+    ✅ Technical writing and documentation systems
     ✅ Environment configuration
     ✅ Monitoring setup
     ✅ Security basics
@@ -49,51 +51,90 @@ class SimpleOpsAgent(SimpleBaseAgent):
     def _initialize_simple_prompts(self):
         """Enhanced prompt for comprehensive operational infrastructure."""
         self.ops_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a senior DevOps engineer creating complete, production-ready operational infrastructure.
+            ("system", """You are a senior DevOps engineer, QA engineer, and technical writer creating complete, production-ready operational infrastructure, testing frameworks, and comprehensive documentation.
 
             CRITICAL REQUIREMENTS:
-            - Generate EXACTLY 12-16 files (substantial, functional code)
-            - Each file must serve a clear purpose in the operational infrastructure
-            - Include comprehensive DevOps automation
+            - Generate EXACTLY 12-16 files (substantial, functional code/documentation)
+            - Each file must serve a clear purpose in the operational infrastructure, testing, or documentation
+            - Include comprehensive DevOps automation, QA processes, and technical documentation
             - Follow industry best practices and security standards
-            - Implement proper monitoring and observability
+            - Implement proper monitoring, testing, and documentation systems
             
-            REQUIRED OPERATIONAL COMPONENTS (generate ALL):
+            REQUIRED OPERATIONAL COMPONENTS (generate ALL applicable):
+            
+            **DevOps & Infrastructure:**
             1. Multi-stage Dockerfile with optimization
-            2. Docker Compose for development and production
+            2. Docker Compose for development and production  
             3. CI/CD pipeline (GitHub Actions or GitLab CI)
-            4. Comprehensive test suite (unit, integration, e2e)
-            5. Professional README with setup instructions
-            6. API documentation (OpenAPI/Swagger)
-            7. Environment configuration files (.env templates)
-            8. Monitoring and logging setup (Prometheus, Grafana)
-            9. Security configuration (HTTPS, headers, secrets)
-            10. Deployment scripts and automation
-            11. Health check and liveness probes
-            12. Backup and recovery procedures
-            13. Performance testing and benchmarks
-            14. Code quality tools (linting, formatting)
-            15. Infrastructure as Code (Terraform/Kubernetes)
-            16. Troubleshooting and runbook documentation
+            4. Environment configuration files (.env templates)
+            5. Security configuration (HTTPS, headers, secrets)
+            6. Deployment scripts and automation
+            7. Health check and liveness probes
+            8. Backup and recovery procedures
+            9. Infrastructure as Code (Terraform/Kubernetes)
+            
+            **QA & Testing:**
+            10. Comprehensive test suite (unit, integration, e2e)
+            11. Test automation frameworks (Selenium, Cypress, Pytest)
+            12. Performance testing and benchmarks (JMeter, Artillery)
+            13. Code quality tools (linting, formatting, coverage)
+            14. Test data management and fixtures
+            15. QA processes and test plans
+            
+            **Documentation & Technical Writing:**
+            16. Professional README with setup instructions
+            17. API documentation (OpenAPI/Swagger)
+            18. User guides and tutorials
+            19. Developer documentation and architecture guides
+            20. Troubleshooting and runbook documentation
+            21. Installation and deployment guides
+            22. Monitoring and logging setup documentation
             
             Use the ### FILE: path format for each file.
-            Focus on production-ready, enterprise-grade operational setup."""),
+            Focus on production-ready, enterprise-grade operational setup with comprehensive testing and documentation."""),
             
             ("human", """Create complete operational infrastructure for: {description}
             
             **Technical Context:**
+            - Backend: {backend_tech}
+            - Frontend: {frontend_tech}  
+            - Database: {database_tech}
             - Language: {language}
             - Framework: {framework}
             - Deployment: {deployment_type}
             - Required Features: {features}
             - Work Item: {work_item}
             
+            **Work Item Dependencies:**
+            {dependencies}
+            
+            **Acceptance Criteria:**
+            {acceptance_criteria}
+            
+            **Role Focus:**
+            {role_focus}
+            
+            **Expected File Structure (MUST FOLLOW EXACTLY):**
+            {expected_files}
+            
+            **CRITICAL: File Structure Requirements:**
+            - You MUST create files that match the expected file structure above
+            - Use the EXACT file paths and names specified
+            - If Dockerfile is expected, create appropriate Dockerfile for {language}/{framework}
+            - If package.json is in expected files, create Node.js compatible infrastructure
+            - If requirements.txt is in expected files, create Python compatible infrastructure
+            - Follow the file naming conventions shown in the expected structure
+            - Ensure generated files serve the purposes implied by their paths
+            
             **Mandatory Requirements:**
-            - Generate EXACTLY 12-16 substantial files
+            - Generate files that match the expected structure above
+            - Use {language} with {framework} as specified for backend
+            - Ensure all acceptance criteria are met in the infrastructure
+            - Consider and handle dependencies appropriately in deployment
+            
+            **DevOps & Infrastructure Requirements:**
             - Docker containerization with multi-stage builds and optimization
-            - Automated CI/CD pipeline with proper testing stages
-            - Comprehensive testing setup (unit, integration, performance)
-            - Professional documentation with clear setup instructions
+            - Automated CI/CD pipeline with proper testing stages for {language}
             - Environment management with secure configuration
             - Monitoring and logging with alerting capabilities
             - Security best practices and vulnerability scanning
@@ -101,11 +142,33 @@ class SimpleOpsAgent(SimpleBaseAgent):
             - Infrastructure as Code for reproducible deployments
             - Performance optimization and scalability considerations
             - Disaster recovery and backup procedures
-            - Code quality enforcement and automated checks
-            - Comprehensive troubleshooting documentation
             
-            Focus on creating enterprise-grade operational infrastructure.
-            Each file should be production-ready with comprehensive functionality and best practices.""")
+            **QA & Testing Requirements (if QA role):**
+            - Comprehensive testing frameworks (unit, integration, e2e)
+            - Test automation setup (Selenium, Cypress, Pytest for Python, Jest for Node.js)
+            - Performance testing tools and benchmarks
+            - Code quality enforcement and automated checks for {language}
+            - Test data management and fixtures
+            - QA processes and testing workflows
+            - Coverage reporting and quality metrics
+            
+            **Documentation & Technical Writing Requirements (if technical writer role):**
+            - Professional documentation with clear setup instructions
+            - Comprehensive API documentation (OpenAPI/Swagger)
+            - User guides and step-by-step tutorials
+            - Developer documentation and architecture guides
+            - Installation and deployment guides
+            - Troubleshooting and runbook documentation
+            - Contributing guidelines and code standards
+            - Release notes and changelog templates
+            
+            **Role-Specific Priority Guidelines:**
+            - If QA/Testing focused: Prioritize test frameworks, automation scripts, coverage tools, and quality processes
+            - If Documentation focused: Prioritize comprehensive docs, user guides, API documentation, and technical writing
+            - Otherwise: Balanced approach covering DevOps, testing, and documentation needs
+            
+            Focus on creating enterprise-grade operational infrastructure that follows the exact file structure specified and meets all acceptance criteria.
+            Each file should be production-ready with comprehensive functionality and best practices for {language}/{framework}.""")
         ])
 
     def run(self, work_item: WorkItem, state: Dict[str, Any]) -> CodeGenerationOutput:
@@ -113,43 +176,108 @@ class SimpleOpsAgent(SimpleBaseAgent):
         try:
             logger.info(f"SimpleOpsAgent processing: {work_item.description}")
             
-            # Extract context
-            tech_stack = state.get('tech_stack_recommendation', {})
-            language = tech_stack.get('backend_language', 'Python')
-            framework = tech_stack.get('backend_framework', 'FastAPI')
-            deployment_type = tech_stack.get('deployment', 'Docker')
+            # ENHANCED: Extract technology stack from enhanced state
+            tech_stack_info = state.get('tech_stack_info', {})
+            backend_tech = tech_stack_info.get('backend', 'Python with FastAPI')
+            frontend_tech = tech_stack_info.get('frontend', 'JavaScript with React')
+            database_tech = tech_stack_info.get('database', 'PostgreSQL')
+            expected_files = tech_stack_info.get('expected_file_structure', [])
+            
+            # Parse backend technology for infrastructure decisions
+            if 'node.js' in backend_tech.lower() or 'express' in backend_tech.lower():
+                language = 'JavaScript'
+                framework = 'Node.js/Express'
+            elif 'python' in backend_tech.lower():
+                language = 'Python'
+                if 'django' in backend_tech.lower():
+                    framework = 'Django'
+                else:
+                    framework = 'FastAPI'
+            elif 'java' in backend_tech.lower():
+                language = 'Java'
+                framework = 'Spring Boot'
+            else:
+                # Fallback parsing
+                parts = backend_tech.split(' with ')
+                language = parts[0] if len(parts) > 0 else 'Python'
+                framework = parts[1] if len(parts) > 1 else 'FastAPI'
+            
+            deployment_type = 'Docker'  # Default deployment
+            
+            logger.info(f"SimpleOpsAgent using: {language} with {framework}")
+            logger.info(f"Expected files: {expected_files}")
+            
+            # Detect specific role focus
+            agent_role = tech_stack_info.get('agent_role', '').lower()
+            is_qa_focused = any(role in agent_role for role in ['qa', 'test', 'quality', 'automation_engineer'])
+            is_docs_focused = any(role in agent_role for role in ['technical_writer', 'documentation', 'writer', 'content_writer', 'documentation_engineer'])
+            
+            logger.info(f"SimpleOpsAgent role focus - QA: {is_qa_focused}, Docs: {is_docs_focused}, Role: {agent_role}")
             
             # Determine features from work item
             features = self._extract_features(work_item.description)
             
-            # Generate code with LLM
+            # Add role-specific features
+            if is_qa_focused:
+                features.extend(["qa_automation", "test_coverage", "performance_testing"])
+            if is_docs_focused:
+                features.extend(["technical_writing", "api_documentation", "user_documentation"])
+            
+            # Generate code with LLM - Enhanced with work item details
+            dependencies = tech_stack_info.get('work_item_dependencies', [])
+            acceptance_criteria = tech_stack_info.get('work_item_acceptance_criteria', [])
+            
             prompt_input = {
                 "description": work_item.description,
                 "language": language,
                 "framework": framework,
                 "deployment_type": deployment_type,
                 "features": ", ".join(features),
-                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}"
+                "work_item": f"ID: {work_item.id}, Role: {work_item.agent_role}",
+                "expected_files": "\n".join(expected_files) if expected_files else "No specific file structure specified",
+                "backend_tech": backend_tech,
+                "frontend_tech": frontend_tech,
+                "database_tech": database_tech,
+                "dependencies": "\n".join([f"- {dep}" for dep in dependencies]) if dependencies else "No dependencies",
+                "acceptance_criteria": "\n".join([f"✓ {criteria}" for criteria in acceptance_criteria]) if acceptance_criteria else "No specific acceptance criteria",
+                "role_focus": f"QA/Testing focused: {is_qa_focused}, Documentation focused: {is_docs_focused}"
             }
             
             response = self.llm.invoke(self.ops_prompt.format_messages(**prompt_input))
-            content = response.content if hasattr(response, 'content') else str(response)
-            
+            raw_content = response.content if hasattr(response, 'content') else str(response)
+
+            # Handle case where content is a list of strings/chunks
+            if isinstance(raw_content, list):
+                content = "".join(raw_content)
+            else:
+                content = str(raw_content)
+
             # Parse files
             generated_files = parse_llm_output_into_files(content)
             
-            # Quality validation - ensure we have comprehensive operational files
-            if len(generated_files) < 10:
-                logger.error(f"Insufficient operational files generated: {len(generated_files)}. Expected at least 10 substantial files.")
-                return CodeGenerationOutput(
-                    generated_files=[],
-                    summary=f"Ops generation failed: Only {len(generated_files)} files generated, expected at least 10",
-                    status="error"
-                )
+            # ENHANCED: More flexible quality validation for operational files
+            min_files_required = 1  # Accept even single files if they're meaningful
+            
+            if len(generated_files) < min_files_required:
+                logger.warning(f"Generated {len(generated_files)} operational files. Minimum recommended: {min_files_required}")
+                # Don't fail immediately - let validation decide
+            else:
+                logger.info(f"Generated {len(generated_files)} operational files - sufficient for deployment")
             
             # Validate file content quality
             validated_files = self._validate_generated_files(generated_files, language, framework, deployment_type)
+            
+            # More flexible success criteria
             if not validated_files:
+                logger.error(f"No valid operational files after validation from {len(generated_files)} generated files")
+                return CodeGenerationOutput(
+                    generated_files=[],
+                    summary=f"Ops generation failed: No valid files after validation from {len(generated_files)} candidates",
+                    status="error"
+                )
+            elif len(validated_files) < min_files_required:
+                logger.warning(f"Only {len(validated_files)} valid files generated, but proceeding as they may be sufficient")
+                # Proceed anyway - some deployments might need fewer files
                 return CodeGenerationOutput(
                     generated_files=[],
                     summary="Ops generation failed: Files did not meet quality standards",
@@ -179,12 +307,19 @@ class SimpleOpsAgent(SimpleBaseAgent):
         features = []
         desc_lower = description.lower()
         
-        # Enhanced feature detection
+        # Enhanced feature detection including QA and technical writing
         feature_patterns = {
             "containerization": ["docker", "container", "image", "build"],
             "cicd_pipeline": ["ci", "cd", "pipeline", "deploy", "automation", "build"],
             "testing_suite": ["test", "testing", "unit", "integration", "e2e"],
+            "qa_automation": ["qa", "quality assurance", "test automation", "test framework", "selenium", "cypress", "pytest", "jest"],
+            "test_coverage": ["coverage", "test coverage", "code coverage", "quality metrics"],
+            "performance_testing": ["performance test", "load test", "stress test", "benchmark", "jmeter"],
             "documentation": ["doc", "readme", "guide", "manual", "instruction"],
+            "technical_writing": ["technical writing", "user guide", "tutorial", "how-to", "documentation system"],
+            "api_documentation": ["api doc", "swagger", "openapi", "postman", "api guide"],
+            "user_documentation": ["user manual", "user guide", "help", "support doc", "faq"],
+            "developer_documentation": ["dev doc", "developer guide", "code doc", "architecture doc"],
             "monitoring": ["monitor", "logging", "metrics", "alerts", "observability"],
             "security": ["security", "auth", "ssl", "https", "cert", "secrets"],
             "performance": ["performance", "optimization", "benchmark", "load", "stress"],

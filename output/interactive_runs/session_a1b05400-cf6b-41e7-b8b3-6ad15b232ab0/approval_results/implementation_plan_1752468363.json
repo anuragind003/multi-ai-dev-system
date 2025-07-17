@@ -1,0 +1,1181 @@
+{
+  "session_id": "session_a1b05400-cf6b-41e7-b8b3-6ad15b232ab0",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752468363,
+  "approval_data": {
+    "summary": "The project aims to create a secure and efficient V-KYC recordings portal, eliminating manual data requests. It will feature user authentication, search capabilities by date, month, and LAN ID, and both single and bulk download functionalities. The system is designed with a microservices architecture, leveraging React for the frontend, Node.js/Express.js for backend services, PostgreSQL for structured data, and AWS for scalable cloud infrastructure. Key services include User Management, Recording Metadata, Recording Storage, and Audit Logging, all orchestrated via an API Gateway. The implementation plan is broken down into granular work items covering infrastructure setup, database schema design, backend API development, frontend UI/UX, containerization, CI/CD, testing, security, and documentation. This structured approach ensures a robust, maintainable, and auditable solution.",
+    "phases": [
+      {
+        "name": "General Development",
+        "description": "Tasks for general development development",
+        "work_items": [
+          {
+            "id": "INF-001",
+            "description": "Set up AWS account and configure basic security (IAM users, roles, MFA).",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "AWS account is created and secured.",
+              "Root user MFA is enabled.",
+              "Admin IAM user with programmatic access is created."
+            ],
+            "status": "pending",
+            "code_files": []
+          },
+          {
+            "id": "INF-002",
+            "description": "Design and implement AWS VPC, subnets, route tables, and internet gateway.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "VPC with public and private subnets is created.",
+              "Route tables are configured for internet access and private network isolation.",
+              "Security groups are defined for each service layer (web, app, database)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/vpc.tf",
+              "aws/security_groups.tf"
+            ]
+          },
+          {
+            "id": "INF-003",
+            "description": "Provision AWS RDS PostgreSQL instance within the private subnet.",
+            "dependencies": [
+              "INF-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "PostgreSQL RDS instance is created and accessible from within the VPC.",
+              "Database security group allows access only from application subnets.",
+              "Initial database user and password are set securely."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/rds.tf"
+            ]
+          },
+          {
+            "id": "INF-004",
+            "description": "Provision AWS S3 bucket for VKYC recordings storage.",
+            "dependencies": [
+              "INF-001"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "S3 bucket is created with appropriate naming conventions.",
+              "Bucket policy is configured to restrict public access.",
+              "Server-Side Encryption (SSE-KMS) is enabled for the bucket."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/s3.tf"
+            ]
+          },
+          {
+            "id": "INF-005",
+            "description": "Provision AWS ElastiCache (Redis) instance.",
+            "dependencies": [
+              "INF-002"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Redis ElastiCache instance is created and accessible from application subnets.",
+              "Security group allows access only from application subnets."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/elasticache.tf"
+            ]
+          },
+          {
+            "id": "DEV-001",
+            "description": "Set up Dockerfiles for all microservices (User Management, Metadata, Storage, Audit Log, API Gateway).",
+            "dependencies": [
+              "BE-UMS-001",
+              "BE-AGW-001",
+              "BE-RMS-001",
+              "BE-RSS-001",
+              "BE-ALS-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Each service has a functional Dockerfile.",
+              "Docker images can be built successfully for each service.",
+              "Services run correctly within Docker containers locally."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/Dockerfile",
+              "services/api-gateway/Dockerfile",
+              "services/recording-metadata/Dockerfile",
+              "services/recording-storage/Dockerfile",
+              "services/audit-log/Dockerfile"
+            ]
+          },
+          {
+            "id": "DEV-002",
+            "description": "Set up Dockerfile for React Frontend Portal.",
+            "dependencies": [
+              "FE-001"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Frontend has a functional Dockerfile.",
+              "Docker image can be built successfully.",
+              "Frontend runs correctly within a Docker container locally."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/Dockerfile"
+            ]
+          },
+          {
+            "id": "DEV-003",
+            "description": "Implement basic CI/CD pipeline for backend services (build & push Docker images to ECR).",
+            "dependencies": [
+              "DEV-001",
+              "INF-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "GitHub Actions/AWS CodePipeline workflow is configured.",
+              "Code push to `main` branch triggers automated build and push of Docker images to AWS ECR.",
+              "ECR repositories are created and images are successfully pushed."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/backend-ci.yml",
+              "aws/ecr.tf"
+            ]
+          },
+          {
+            "id": "DEV-004",
+            "description": "Implement basic CI/CD pipeline for frontend (build & push Docker image to ECR).",
+            "dependencies": [
+              "DEV-002",
+              "INF-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "GitHub Actions/AWS CodePipeline workflow is configured for frontend.",
+              "Code push to `main` branch triggers automated build and push of Docker image to AWS ECR."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/frontend-ci.yml"
+            ]
+          },
+          {
+            "id": "DEPLOY-001",
+            "description": "Set up AWS EKS cluster and configure Kubernetes deployments for all microservices.",
+            "dependencies": [
+              "INF-002",
+              "DEV-003"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "EKS cluster is provisioned and accessible.",
+              "Kubernetes deployment manifests are created for each backend service.",
+              "Services are deployed to EKS and are reachable internally."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/eks.tf",
+              "kubernetes/backend-deployments.yaml",
+              "kubernetes/backend-services.yaml"
+            ]
+          },
+          {
+            "id": "DEPLOY-002",
+            "description": "Configure AWS Application Load Balancer (ALB) for API Gateway and Frontend.",
+            "dependencies": [
+              "DEPLOY-001",
+              "BE-AGW-001",
+              "FE-001"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "ALB is provisioned and configured to route traffic to API Gateway and Frontend services.",
+              "HTTPS listeners are configured with SSL certificates.",
+              "External access to the portal is functional via ALB DNS."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/alb.tf",
+              "kubernetes/ingress.yaml"
+            ]
+          },
+          {
+            "id": "DEPLOY-003",
+            "description": "Implement CI/CD pipeline for Kubernetes deployments (CD part).",
+            "dependencies": [
+              "DEV-003",
+              "DEV-004",
+              "DEPLOY-001",
+              "DEPLOY-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Automated deployment to EKS is triggered upon new Docker image push to ECR.",
+              "Rollback strategy is defined and tested.",
+              "Deployment status is reported in CI/CD pipeline."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/cd.yml"
+            ]
+          },
+          {
+            "id": "SEC-001",
+            "description": "Implement robust logging for all microservices (CloudWatch integration).",
+            "dependencies": [
+              "DEPLOY-001"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "All service logs are collected and sent to AWS CloudWatch Logs.",
+              "Log groups and streams are configured.",
+              "Basic log analysis and search capabilities are available in CloudWatch."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/*/src/config/logger.js",
+              "kubernetes/logging-config.yaml"
+            ]
+          },
+          {
+            "id": "SEC-002",
+            "description": "Configure monitoring and alerting for critical service metrics (CPU, memory, error rates).",
+            "dependencies": [
+              "SEC-001",
+              "DEPLOY-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "CloudWatch alarms are set up for key metrics (e.g., high CPU, low memory, 5xx errors).",
+              "Alerts are configured to notify relevant teams (e.g., via SNS to email/Slack).",
+              "Basic dashboards are created in CloudWatch for service health overview."
+            ],
+            "status": "pending",
+            "code_files": [
+              "aws/monitoring.tf"
+            ]
+          },
+          {
+            "id": "DOC-001",
+            "description": "Create API documentation for all backend services (e.g., OpenAPI/Swagger).",
+            "dependencies": [
+              "BE-UMS-005",
+              "BE-RMS-005",
+              "BE-RSS-005",
+              "BE-ALS-003"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "technical_writer",
+            "acceptance_criteria": [
+              "Comprehensive API documentation is generated for all endpoints.",
+              "Request/response schemas, authentication requirements, and error codes are clearly defined.",
+              "Documentation is accessible (e.g., Swagger UI)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "docs/api-spec.yaml"
+            ]
+          },
+          {
+            "id": "DOC-002",
+            "description": "Prepare deployment and operational runbook documentation.",
+            "dependencies": [
+              "DEPLOY-003",
+              "SEC-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "technical_writer",
+            "acceptance_criteria": [
+              "Documentation covers deployment steps, monitoring setup, and common troubleshooting procedures.",
+              "Contact information for support teams is included.",
+              "Runbook is reviewed by DevOps and operations teams."
+            ],
+            "status": "pending",
+            "code_files": [
+              "docs/deployment-runbook.md",
+              "docs/operations-guide.md"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Database Setup",
+        "description": "Tasks for database setup development",
+        "work_items": [
+          {
+            "id": "DB-001",
+            "description": "Design and implement `users` table schema in PostgreSQL.",
+            "dependencies": [
+              "INF-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script for `users` table creation is prepared.",
+              "Table includes `id`, `username`, `password_hash`, `role`, `created_at`, `updated_at` fields.",
+              "Constraints (PRIMARY KEY, UNIQUE, NOT NULL) are applied correctly."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/migrations/001_create_users_table.sql"
+            ]
+          },
+          {
+            "id": "DB-002",
+            "description": "Design and implement `vkyc_recordings` table schema in PostgreSQL.",
+            "dependencies": [
+              "INF-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script for `vkyc_recordings` table creation is prepared.",
+              "Table includes `id`, `lan_id`, `recording_date`, `s3_path`, `file_name`, `duration_seconds`, `file_size_bytes`, `uploaded_at` fields.",
+              "Constraints (PRIMARY KEY, NOT NULL, UNIQUE for s3_path) are applied correctly.",
+              "Indexes are created for `lan_id` and `recording_date`."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/migrations/002_create_vkyc_recordings_table.sql"
+            ]
+          },
+          {
+            "id": "DB-003",
+            "description": "Design and implement `audit_logs` table schema in PostgreSQL.",
+            "dependencies": [
+              "INF-003",
+              "DB-001"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "SQL script for `audit_logs` table creation is prepared.",
+              "Table includes `id`, `user_id`, `action`, `resource_id`, `details`, `timestamp`, `ip_address` fields.",
+              "Foreign key constraint to `users` table is defined.",
+              "Indexes are created for `user_id` and `timestamp`."
+            ],
+            "status": "pending",
+            "code_files": [
+              "db/migrations/003_create_audit_logs_table.sql"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Backend Development",
+        "description": "Tasks for backend development development",
+        "work_items": [
+          {
+            "id": "BE-UMS-001",
+            "description": "Initialize User Management Service project with Node.js and Express.js.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "New Node.js project is created.",
+              "Express.js is installed and a basic server is running.",
+              "Project structure for models, routes, controllers, and services is defined."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/package.json",
+              "services/user-management/src/app.js"
+            ]
+          },
+          {
+            "id": "BE-UMS-002",
+            "description": "Implement user model and repository for PostgreSQL interaction.",
+            "dependencies": [
+              "BE-UMS-001",
+              "DB-001"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "User model (e.g., using Sequelize/TypeORM or raw SQL queries) is defined.",
+              "Repository methods for creating, finding, and updating users are implemented.",
+              "Database connection is established and tested."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/src/models/User.js",
+              "services/user-management/src/repositories/UserRepository.js",
+              "services/user-management/src/config/db.js"
+            ]
+          },
+          {
+            "id": "BE-UMS-003",
+            "description": "Develop user registration (for initial admin/TL setup) and login API endpoint (`POST /auth/login`).",
+            "dependencies": [
+              "BE-UMS-002"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Login endpoint accepts username and password.",
+              "Passwords are securely hashed (e.g., bcrypt) and compared.",
+              "JWT token is generated upon successful login.",
+              "Error handling for invalid credentials is implemented."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/src/routes/authRoutes.js",
+              "services/user-management/src/controllers/authController.js",
+              "services/user-management/src/utils/jwt.js",
+              "services/user-management/src/utils/password.js"
+            ]
+          },
+          {
+            "id": "BE-UMS-004",
+            "description": "Implement JWT token validation and user role-based authorization logic.",
+            "dependencies": [
+              "BE-UMS-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware for JWT validation is created.",
+              "Middleware extracts user ID and role from token.",
+              "Authorization middleware checks user role against required permissions.",
+              "Unauthorized access attempts return 401/403 status codes."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/src/middleware/authMiddleware.js",
+              "services/user-management/src/middleware/roleMiddleware.js"
+            ]
+          },
+          {
+            "id": "BE-UMS-005",
+            "description": "Develop `GET /users/me` API endpoint to retrieve current user's profile.",
+            "dependencies": [
+              "BE-UMS-004"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint returns authenticated user's details (e.g., username, role).",
+              "Endpoint requires valid JWT token.",
+              "Sensitive information (password hash) is not exposed."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/src/routes/userRoutes.js",
+              "services/user-management/src/controllers/userController.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-001",
+            "description": "Initialize API Gateway project with Node.js and Express.js.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "New Node.js project is created.",
+              "Express.js is installed and a basic server is running.",
+              "Proxy library (e.g., `http-proxy-middleware`) is installed."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/package.json",
+              "services/api-gateway/src/app.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-002",
+            "description": "Configure routing for User Management Service endpoints.",
+            "dependencies": [
+              "BE-AGW-001",
+              "BE-UMS-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Requests to `/api/auth/*` are correctly proxied to the User Management Service.",
+              "Requests to `/api/users/*` are correctly proxied to the User Management Service."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/src/routes/authProxy.js",
+              "services/api-gateway/src/routes/userProxy.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-003",
+            "description": "Implement JWT validation middleware in API Gateway.",
+            "dependencies": [
+              "BE-AGW-002",
+              "BE-UMS-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Middleware intercepts requests and validates JWT token.",
+              "Invalid tokens result in 401 Unauthorized response.",
+              "Valid tokens allow request to proceed to downstream service."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/src/middleware/jwtAuth.js"
+            ]
+          },
+          {
+            "id": "BE-RMS-001",
+            "description": "Initialize VKYC Recording Metadata Service project.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "New Node.js project is created.",
+              "Express.js is installed and a basic server is running.",
+              "Project structure for models, routes, controllers, and services is defined."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/package.json",
+              "services/recording-metadata/src/app.js"
+            ]
+          },
+          {
+            "id": "BE-RMS-002",
+            "description": "Implement recording metadata model and repository for PostgreSQL.",
+            "dependencies": [
+              "BE-RMS-001",
+              "DB-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Recording metadata model is defined.",
+              "Repository methods for finding recordings are implemented.",
+              "Database connection is established and tested."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/src/models/Recording.js",
+              "services/recording-metadata/src/repositories/RecordingRepository.js",
+              "services/recording-metadata/src/config/db.js"
+            ]
+          },
+          {
+            "id": "BE-RMS-003",
+            "description": "Develop `GET /recordings/search` API endpoint with date, month, and LAN ID filters.",
+            "dependencies": [
+              "BE-RMS-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts `date`, `month`, `lanId` as query parameters.",
+              "Search logic correctly filters recordings based on provided parameters.",
+              "Returns a list of matching recording metadata.",
+              "Handles cases where no filters are provided (returns all or error)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/src/routes/recordingRoutes.js",
+              "services/recording-metadata/src/controllers/recordingController.js"
+            ]
+          },
+          {
+            "id": "BE-RMS-004",
+            "description": "Implement pagination for `/recordings/search` results (10 records per page).",
+            "dependencies": [
+              "BE-RMS-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts `page` and `limit` (default 10) query parameters.",
+              "Results are paginated correctly.",
+              "Response includes total count and current page information."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/src/controllers/recordingController.js"
+            ]
+          },
+          {
+            "id": "BE-RMS-005",
+            "description": "Integrate Redis for caching frequently accessed recording metadata.",
+            "dependencies": [
+              "BE-RMS-003",
+              "INF-005"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Redis client is configured and connected.",
+              "Search results are cached in Redis.",
+              "Subsequent identical search queries retrieve data from cache.",
+              "Cache invalidation strategy is defined (e.g., TTL)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/src/config/redis.js",
+              "services/recording-metadata/src/services/cacheService.js",
+              "services/recording-metadata/src/controllers/recordingController.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-004",
+            "description": "Configure routing for VKYC Recording Metadata Service endpoints.",
+            "dependencies": [
+              "BE-AGW-003",
+              "BE-RMS-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Requests to `/api/recordings/search*` are correctly proxied to the Recording Metadata Service.",
+              "JWT validation middleware is applied to these routes."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/src/routes/recordingMetadataProxy.js"
+            ]
+          },
+          {
+            "id": "BE-RSS-001",
+            "description": "Initialize VKYC Recording Storage Service project.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "New Node.js project is created.",
+              "Express.js is installed and a basic server is running.",
+              "AWS SDK for S3 is installed.",
+              "Project structure is defined."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/package.json",
+              "services/recording-storage/src/app.js"
+            ]
+          },
+          {
+            "id": "BE-RSS-002",
+            "description": "Develop `GET /recordings/:id/download` API endpoint for single recording download.",
+            "dependencies": [
+              "BE-RSS-001",
+              "INF-004",
+              "BE-RMS-002"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts recording ID as a path parameter.",
+              "Retrieves S3 path from metadata service (or directly from DB if service is merged).",
+              "Generates a pre-signed S3 URL for direct download.",
+              "Returns the pre-signed URL to the client.",
+              "Error handling for non-existent recording IDs."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/src/routes/downloadRoutes.js",
+              "services/recording-storage/src/controllers/downloadController.js",
+              "services/recording-storage/src/services/s3Service.js"
+            ]
+          },
+          {
+            "id": "BE-RSS-003",
+            "description": "Develop `POST /recordings/bulk-download` API endpoint for file upload.",
+            "dependencies": [
+              "BE-RSS-001"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts file upload (CSV/TXT) containing LAN IDs.",
+              "File size and type validation (CSV/TXT only) is implemented.",
+              "Returns a success response upon file reception."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/src/routes/bulkDownloadRoutes.js",
+              "services/recording-storage/src/controllers/bulkDownloadController.js",
+              "services/recording-storage/src/middleware/uploadMiddleware.js"
+            ]
+          },
+          {
+            "id": "BE-RSS-004",
+            "description": "Implement LAN ID parsing and validation (2-50 IDs) from uploaded file.",
+            "dependencies": [
+              "BE-RSS-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Uploaded file content is parsed to extract LAN IDs.",
+              "Validation ensures minimum 2 and maximum 50 LAN IDs.",
+              "Invalid file content or ID count triggers appropriate error response."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/src/services/fileProcessingService.js",
+              "services/recording-storage/src/controllers/bulkDownloadController.js"
+            ]
+          },
+          {
+            "id": "BE-RSS-005",
+            "description": "Implement logic to fetch recording metadata for bulk LAN IDs and prepare download links.",
+            "dependencies": [
+              "BE-RSS-004",
+              "BE-RMS-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "For each valid LAN ID, corresponding recording metadata is retrieved.",
+              "Pre-signed S3 URLs are generated for each found recording.",
+              "Response includes a list of LAN IDs and their corresponding download URLs/status.",
+              "Handles cases where LAN IDs do not have associated recordings."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/src/services/bulkDownloadService.js",
+              "services/recording-storage/src/controllers/bulkDownloadController.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-005",
+            "description": "Configure routing for VKYC Recording Storage Service endpoints.",
+            "dependencies": [
+              "BE-AGW-004",
+              "BE-RSS-002",
+              "BE-RSS-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Requests to `/api/recordings/:id/download` are correctly proxied.",
+              "Requests to `/api/recordings/bulk-download` are correctly proxied.",
+              "JWT validation middleware is applied to these routes."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/src/routes/recordingStorageProxy.js"
+            ]
+          },
+          {
+            "id": "BE-ALS-001",
+            "description": "Initialize Audit Log Service project.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "New Node.js project is created.",
+              "Express.js is installed and a basic server is running.",
+              "Project structure is defined."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/audit-log/package.json",
+              "services/audit-log/src/app.js"
+            ]
+          },
+          {
+            "id": "BE-ALS-002",
+            "description": "Implement audit log model and repository for PostgreSQL.",
+            "dependencies": [
+              "BE-ALS-001",
+              "DB-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Audit log model is defined.",
+              "Repository methods for creating audit entries are implemented.",
+              "Database connection is established and tested."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/audit-log/src/models/AuditLog.js",
+              "services/audit-log/src/repositories/AuditLogRepository.js",
+              "services/audit-log/src/config/db.js"
+            ]
+          },
+          {
+            "id": "BE-ALS-003",
+            "description": "Develop `POST /audit-logs` API endpoint to record user actions.",
+            "dependencies": [
+              "BE-ALS-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Endpoint accepts `user_id`, `action`, `resource_id`, `details`, `ip_address`.",
+              "Successfully stores audit entry in the database.",
+              "Endpoint is secured (e.g., only accessible by internal services or specific roles)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/audit-log/src/routes/auditLogRoutes.js",
+              "services/audit-log/src/controllers/auditLogController.js"
+            ]
+          },
+          {
+            "id": "BE-AGW-006",
+            "description": "Configure routing for Audit Log Service endpoints.",
+            "dependencies": [
+              "BE-AGW-005",
+              "BE-ALS-003"
+            ],
+            "estimated_time": "0.5 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Requests to `/api/audit-logs*` are correctly proxied to the Audit Log Service.",
+              "JWT validation middleware is applied to these routes."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/api-gateway/src/routes/auditLogProxy.js"
+            ]
+          },
+          {
+            "id": "TEST-001",
+            "description": "Write unit tests for User Management Service (models, controllers, services).",
+            "dependencies": [
+              "BE-UMS-005"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test coverage for core logic (login, user retrieval) is at least 80%.",
+              "All tests pass successfully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/user-management/tests/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-002",
+            "description": "Write unit tests for VKYC Recording Metadata Service (search, pagination).",
+            "dependencies": [
+              "BE-RMS-005"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test coverage for search filters and pagination logic is at least 80%.",
+              "All tests pass successfully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-metadata/tests/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-003",
+            "description": "Write unit tests for VKYC Recording Storage Service (single/bulk download logic, file parsing).",
+            "dependencies": [
+              "BE-RSS-005"
+            ],
+            "estimated_time": "2.5 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test coverage for S3 interaction, file parsing, and LAN ID validation is at least 80%.",
+              "All tests pass successfully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/recording-storage/tests/*.test.js"
+            ]
+          },
+          {
+            "id": "TEST-004",
+            "description": "Write unit tests for Audit Log Service.",
+            "dependencies": [
+              "BE-ALS-003"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Test coverage for audit log creation is at least 80%.",
+              "All tests pass successfully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/audit-log/tests/*.test.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Frontend Development",
+        "description": "Tasks for frontend development development",
+        "work_items": [
+          {
+            "id": "FE-001",
+            "description": "Initialize React Frontend Portal project.",
+            "dependencies": [],
+            "estimated_time": "0.5 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "New React project is created using Create React App or Vite.",
+              "Basic project structure is set up.",
+              "Routing library (e.g., React Router DOM) is installed."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/package.json",
+              "frontend/src/App.js",
+              "frontend/src/index.js"
+            ]
+          },
+          {
+            "id": "FE-002",
+            "description": "Develop Login Page UI and integrate with User Management Service API.",
+            "dependencies": [
+              "FE-001",
+              "BE-AGW-002"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login form with username and password fields is displayed.",
+              "Form submission sends credentials to `/api/auth/login`.",
+              "Successful login redirects to dashboard.",
+              "Failed login displays appropriate error message.",
+              "JWT token is stored securely (e.g., HttpOnly cookie or local storage)."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/LoginPage.js",
+              "frontend/src/components/LoginForm.js",
+              "frontend/src/services/authService.js"
+            ]
+          },
+          {
+            "id": "FE-003",
+            "description": "Create Dashboard Layout and implement protected routes.",
+            "dependencies": [
+              "FE-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Dashboard component is created with a basic layout (header, sidebar/main content).",
+              "Routes are protected, requiring authentication to access.",
+              "Unauthorized access attempts redirect to login page."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/pages/DashboardPage.js",
+              "frontend/src/components/Layout.js",
+              "frontend/src/routes/ProtectedRoutes.js"
+            ]
+          },
+          {
+            "id": "FE-004",
+            "description": "Develop Search Form UI for date, month, and LAN ID.",
+            "dependencies": [
+              "FE-003"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Form includes input fields for date, month (dropdown/picker), and LAN ID.",
+              "Search button triggers search functionality.",
+              "Input validation for date/month formats."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/SearchForm.js"
+            ]
+          },
+          {
+            "id": "FE-005",
+            "description": "Implement Search Results Table UI with pagination.",
+            "dependencies": [
+              "FE-004",
+              "BE-AGW-004"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Table displays recording metadata (LAN ID, date, file name).",
+              "Pagination controls (next/previous page, page numbers) are functional.",
+              "Table displays 10 records per page.",
+              "Data is fetched from `/api/recordings/search` API."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/SearchResultsTable.js",
+              "frontend/src/services/recordingService.js"
+            ]
+          },
+          {
+            "id": "FE-006",
+            "description": "Add Single Recording Download button to search results table.",
+            "dependencies": [
+              "FE-005",
+              "BE-AGW-005"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Each row in the table has a 'Download' button.",
+              "Clicking 'Download' button triggers download of the corresponding recording.",
+              "Download uses the pre-signed URL obtained from the backend."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/SearchResultsTable.js",
+              "frontend/src/services/downloadService.js"
+            ]
+          },
+          {
+            "id": "FE-007",
+            "description": "Develop Bulk Upload Form UI for CSV/TXT file input.",
+            "dependencies": [
+              "FE-003"
+            ],
+            "estimated_time": "1.5 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "File input field is present for uploading CSV/TXT files.",
+              "Upload button triggers file submission.",
+              "Client-side validation for file type (CSV/TXT) is implemented.",
+              "Error messages are displayed for invalid file types."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/BulkUploadForm.js"
+            ]
+          },
+          {
+            "id": "FE-008",
+            "description": "Implement Bulk Upload Results Table UI with pagination and 'Download All' option.",
+            "dependencies": [
+              "FE-007",
+              "BE-AGW-005"
+            ],
+            "estimated_time": "2.5 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Table displays results of bulk upload (LAN ID, status, download link/error).",
+              "Pagination displays 10 records at a time.",
+              "'Download All' button is present and triggers download of all displayed records (10 at a time).",
+              "Individual download links within the table are functional.",
+              "Data is fetched from `/api/recordings/bulk-download` API."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/BulkUploadResultsTable.js",
+              "frontend/src/services/bulkDownloadService.js"
+            ]
+          },
+          {
+            "id": "FE-009",
+            "description": "Implement client-side error handling and display for all API calls.",
+            "dependencies": [
+              "FE-002",
+              "FE-005",
+              "FE-006",
+              "FE-008"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "API errors are caught and displayed to the user in a user-friendly manner.",
+              "Network errors are handled gracefully.",
+              "Loading states are shown during API requests."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/utils/errorHandler.js",
+              "frontend/src/components/ErrorMessage.js"
+            ]
+          },
+          {
+            "id": "TEST-005",
+            "description": "Write unit tests for Frontend components and services.",
+            "dependencies": [
+              "FE-009"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Test coverage for login, search form, results table, and upload form is at least 70%.",
+              "All tests pass successfully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "frontend/src/components/*.test.js",
+              "frontend/src/services/*.test.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Security Implementation",
+        "description": "Tasks for security implementation development",
+        "work_items": [
+          {
+            "id": "SEC-003",
+            "description": "Conduct security review and implement best practices (e.g., input validation, rate limiting).",
+            "dependencies": [
+              "BE-UMS-005",
+              "BE-RMS-005",
+              "BE-RSS-005",
+              "BE-ALS-003",
+              "BE-AGW-006"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "security_specialist",
+            "acceptance_criteria": [
+              "All API endpoints have input validation.",
+              "Rate limiting is implemented on critical endpoints (e.g., login, bulk download).",
+              "Sensitive data handling (e.g., password storage, JWT secrets) follows best practices.",
+              "Vulnerability scan (SAST/DAST) is performed and critical findings addressed."
+            ],
+            "status": "pending",
+            "code_files": [
+              "services/*/src/middleware/validation.js",
+              "services/*/src/middleware/rateLimiter.js"
+            ]
+          }
+        ]
+      }
+    ],
+    "total_work_items": 58,
+    "metadata": {
+      "estimated_total_time": "50.5 days",
+      "risk_assessment": "Medium-High",
+      "key_risks_addressed": [
+        "Data security and privacy (JWT, RBAC, S3 encryption, TLS, audit logs).",
+        "Performance issues with large data (Redis caching, pagination, pre-signed URLs, microservices scaling).",
+        "Integration challenges (explicit API definitions, S3 SDK).",
+        "User adoption (user-friendly UI, clear error handling).",
+        "Scalability (Microservices, AWS EKS, ALB, RDS Read Replicas)."
+      ]
+    },
+    "plan_type": "simplified_workitem_backlog"
+  },
+  "workflow_state_snapshot": {}
+}

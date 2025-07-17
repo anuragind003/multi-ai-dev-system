@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import List, Optional, Dict, Any, Union, ClassVar, Type
 from datetime import datetime
 import json
+import logging
+import json
 
 # --- Core Data Contract Models ---
 
@@ -491,7 +493,7 @@ class DevelopmentPhaseModel(BaseModel):
     """Model for a development phase."""
     name: str = Field(description="Name of the phase")
     description: str = Field(description="Description of what happens in this phase")
-    priority: str = Field(description="Priority of this phase (High, Medium, Low)")
+    priority: str = Field(description="Priority of the phase (High, Medium, Low)")
     dependencies: List[str] = Field(
         description="Phases that must be completed before this one",
         default_factory=list
@@ -939,7 +941,7 @@ class MultipleComponentStructuresDesignInput(BaseModel):
                     return parsed
                 return [v]  # If all else fails, treat as a single component name
             except json.JSONDecodeError:
-                return [v]  # Not valid JSON, treat as single component name
+                return [v]  # Not valid JSON, treat single component name
         elif isinstance(v, dict) and "component_names" in v:
             return v["component_names"]
         return v
@@ -1818,12 +1820,178 @@ class ComprehensiveTechStackOutput(BaseModel):
     Defines the complete, structured output for the comprehensive tech stack recommendation.
     This ensures a predictable and reliable response from the LLM.
     """
+    # OPTIONS ARRAYS (for multi-option selection mode)
     frontend_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for frontend frameworks and languages.")
     backend_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for backend frameworks and languages.")
     database_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for database technologies.")
     cloud_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for cloud platforms.")
     architecture_options: List[ArchitecturePatternOption] = Field(default_factory=list, description="Ranked options for architecture patterns.")
     tool_options: List[TechStackComponent] = Field(default_factory=list, description="Ranked options for additional tools.")
+    
+    # INDIVIDUAL RECOMMENDATIONS (for single recommendation mode)
+    frontend: Optional[Dict[str, Any]] = Field(None, description="Single frontend recommendation with name and reasoning.")
+    backend: Optional[Dict[str, Any]] = Field(None, description="Single backend recommendation with name and reasoning.")
+    database: Optional[Dict[str, Any]] = Field(None, description="Single database recommendation with name and reasoning.")
+    cloud: Optional[Dict[str, Any]] = Field(None, description="Single cloud platform recommendation with name and reasoning.")
+    architecture: Optional[Dict[str, Any]] = Field(None, description="Single architecture pattern recommendation with name and reasoning.")
+    tools: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="List of tool recommendations with name and reasoning.")
+    
+    # ADDITIONAL FIELDS
     risks: List[TechRisk] = Field(default_factory=list, description="Potential risks associated with the recommended stack.")
-    synthesis: Optional[TechStackSynthesisOutput] = Field(None, description="The initial synthesized tech stack recommendation (can be null if options are provided). ")
+    synthesis: Optional[TechStackSynthesisOutput] = Field(None, description="The initial synthesized tech stack recommendation (can be null if options are provided).")
     selected_stack: Optional[SelectedTechStack] = Field(None, description="The user's final selection of the tech stack components.")
+    design_justification: Optional[str] = Field(None, description="Overall justification for the tech stack design.")
+    recommendation_summary: Optional[str] = Field(None, description="A high-level summary of the tech stack recommendations.")
+    evaluation_criteria: Optional[Dict[str, Any]] = Field(default_factory=dict, description="The criteria used to evaluate and rank the tech stack options.")
+    compatibility_matrix: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Compatibility information between different tech stack components.")
+    estimated_learning_curve: Optional[str] = Field(None, description="Estimated learning curve for the development team (Low/Medium/High).")
+    development_speed_impact: Optional[str] = Field(None, description="Expected impact on development speed (Fast/Medium/Slow).")
+    maintenance_complexity: Optional[str] = Field(None, description="Expected maintenance complexity (Low/Medium/High).")
+    total_cost_estimate: Optional[str] = Field(None, description="Rough estimate of total cost implications (Low/Medium/High).")
+    recommended_team_size: Optional[str] = Field(None, description="Recommended team size based on the tech stack complexity.")
+    deployment_complexity: Optional[str] = Field(None, description="Expected deployment complexity (Low/Medium/High).")
+    scalability_rating: Optional[str] = Field(None, description="Overall scalability rating of the recommended stack (Low/Medium/High).")
+    
+    model_config = {
+        "extra": "allow",  # Allow additional fields for flexibility
+        "arbitrary_types_allowed": True  # Allow flexible typing
+    }
+    
+    def get_top_recommendation_by_category(self, category: str) -> Optional[TechStackComponent]:
+        """
+        Get the top recommendation for a specific category.
+        
+        Args:
+            category: The category to get recommendation for ('frontend', 'backend', 'database', 'cloud', 'tools')
+            
+        Returns:
+            The top-ranked TechStackComponent for the category, or None if no options available
+        """
+        category_mapping = {
+            'frontend': self.frontend_options,
+            'backend': self.backend_options,
+            'database': self.database_options,
+            'cloud': self.cloud_options,
+            'tools': self.tool_options
+        }
+        
+        options = category_mapping.get(category.lower(), [])
+        if options:
+            return options[0]  # Return first option (highest ranked)
+        return None
+    
+    def has_user_selections(self) -> bool:
+        """Check if the user has made any technology selections."""
+        return self.selected_stack is not None
+    
+    def get_selected_or_recommended(self, category: str) -> Optional[TechStackComponent]:
+        """
+        Get either the user's selection or the top recommendation for a category.
+        
+        Args:
+            category: The category to get selection/recommendation for
+            
+        Returns:
+            The selected or recommended TechStackComponent for the category
+        """
+        if self.selected_stack:
+            selected_mapping = {
+                'frontend': self.selected_stack.frontend,
+                'backend': self.selected_stack.backend,
+                'database': self.selected_stack.database,
+                'cloud': self.selected_stack.cloud,
+                'tools': self.selected_stack.tools[0] if self.selected_stack.tools else None
+            }
+            selected = selected_mapping.get(category.lower())
+            if selected:
+                return selected
+        
+        # Fall back to top recommendation
+        return self.get_top_recommendation_by_category(category)
+    
+    def populate_options_from_individual_fields(self, individual_fields: Dict[str, Any]) -> None:
+        """
+        Populate the *_options arrays from individual recommendation fields when options arrays are empty.
+        This ensures frontend compatibility when the backend provides single recommendations.
+        
+        Args:
+            individual_fields: Dictionary containing individual category recommendations (frontend, backend, etc.)
+        """
+        # Mapping from individual field names to options array attributes
+        field_mapping = {
+            'frontend': 'frontend_options',
+            'backend': 'backend_options', 
+            'database': 'database_options',
+            'cloud': 'cloud_options',
+            'architecture': 'architecture_options',
+            'tools': 'tool_options'
+        }
+        
+        for field_name, options_attr in field_mapping.items():
+            # Check if the options array is empty and individual field has data
+            current_options = getattr(self, options_attr, [])
+            if not current_options and field_name in individual_fields:
+                individual_data = individual_fields[field_name]
+                
+                if isinstance(individual_data, dict) and individual_data:
+                    if field_name == 'architecture':
+                        # Handle architecture pattern differently
+                        arch_option = ArchitecturePatternOption(
+                            pattern=individual_data.get('pattern', 'Unknown Architecture'),
+                            scalability_score=8.0,  # Default score
+                            maintainability_score=8.0,
+                            development_speed_score=8.0,
+                            overall_score=8.0,
+                            reasoning=individual_data.get('reasoning', 'Recommended architecture pattern')
+                        )
+                        setattr(self, options_attr, [arch_option])
+                    else:
+                        # Handle other tech stack components
+                        tech_component = TechStackComponent(
+                            name=individual_data.get('name', individual_data.get('language', 'Unknown')),
+                            language=individual_data.get('language'),
+                            reasoning=individual_data.get('reasoning', 'Recommended technology'),
+                            key_libraries=individual_data.get('key_libraries', []),
+                            pros=individual_data.get('pros', []),
+                            cons=individual_data.get('cons', []),
+                            selected=True  # Mark as selected since it's the recommendation
+                        )
+                        setattr(self, options_attr, [tech_component])
+                elif isinstance(individual_data, list) and individual_data:
+                    # If it's already a list, set it directly
+                    setattr(self, options_attr, individual_data)
+    
+    def ensure_frontend_compatibility(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ensure the data structure is compatible with the frontend expectations.
+        
+        Args:
+            workflow_data: The complete workflow data dictionary
+            
+        Returns:
+            Modified workflow data with proper options arrays populated
+        """
+        # First populate options from individual fields if needed
+        individual_fields = {
+            'frontend': workflow_data.get('frontend'),
+            'backend': workflow_data.get('backend'), 
+            'database': workflow_data.get('database'),
+            'cloud': workflow_data.get('cloud'),
+            'architecture': workflow_data.get('architecture'),
+            'tools': workflow_data.get('tools')
+        }
+        
+        self.populate_options_from_individual_fields(individual_fields)
+        
+        # Update the workflow data with the populated options
+        workflow_data.update({
+            'frontend_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.frontend_options],
+            'backend_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.backend_options],
+            'database_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.database_options],
+            'cloud_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.cloud_options],
+            'architecture_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.architecture_options],
+            'tool_options': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.tool_options],
+            'risks': [item.model_dump() if hasattr(item, 'model_dump') else item for item in self.risks],
+        })
+        
+        return workflow_data

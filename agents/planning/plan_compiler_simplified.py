@@ -5,7 +5,7 @@ Returns WorkItemBacklog format directly instead of complex conversion.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 import asyncio
 from datetime import datetime
 
@@ -60,49 +60,51 @@ class PlanCompilerSimplifiedAgent(BaseAgent):
             self.log_info(f"Planning tool returned result type: {type(backlog_result)}")
             self.log_info(f"Planning tool result keys: {list(backlog_result.keys()) if isinstance(backlog_result, dict) else 'Not a dict'}")
             
-            # Standardize return format - keep it simple
-            if isinstance(backlog_result, WorkItemBacklog):
-                self.log_success("Planning tool executed successfully, converting to dict format.")
-                # Convert WorkItemBacklog to dict and create simple structure
-                return self._create_simple_plan_format(backlog_result)
-                
-            elif isinstance(backlog_result, dict) and "error" in backlog_result:
+            # The tool can return either a Pydantic object or a dict.
+            # It can also return a dict with an 'error' key on failure.
+            
+            # Check for error case first
+            if isinstance(backlog_result, dict) and "error" in backlog_result:
                 self.log_error(f"Planning tool returned error: {backlog_result}")
                 return self.get_default_response(Exception(backlog_result.get("details", "Unknown planning error")))
-                
+
+            # Handle success case (either WorkItemBacklog object or a valid dict)
+            if isinstance(backlog_result, (WorkItemBacklog, dict)):
+                self.log_success("Planning tool executed successfully. Creating simplified plan format.")
+                return self._create_simple_plan_format(backlog_result)
+
+            # Handle unexpected types
             else:
                 self.log_warning(f"Planning tool returned unexpected result type: {type(backlog_result)}")
-                
-                # ADD DEBUGGING: More detailed logging for dict results
-                if isinstance(backlog_result, dict):
-                    self.log_info(f"Dict result has keys: {list(backlog_result.keys())}")
-                    if 'work_items' in backlog_result:
-                        work_items = backlog_result['work_items']
-                        self.log_info(f"Found {len(work_items)} work items directly in result")
-                    else:
-                        self.log_warning("No 'work_items' key found in dict result")
-                
-                # Try to handle it anyway
-                if isinstance(backlog_result, dict):
-                    return self._ensure_dict_format(backlog_result)
-                else:
-                    return self.get_default_response(Exception(f"Unexpected planning tool result: {str(backlog_result)[:200]}"))
+                return self.get_default_response(Exception(f"Unexpected planning tool result: {str(backlog_result)[:200]}"))
             
         except Exception as e:
             self.log_error(f"Error in synchronous plan compilation: {str(e)}", exc_info=True)
             return self.get_default_response(e)
 
-    def _create_simple_plan_format(self, backlog: WorkItemBacklog) -> Dict[str, Any]:
+    def _create_simple_plan_format(self, backlog: Union[WorkItemBacklog, Dict[str, Any]]) -> Dict[str, Any]:
         """
         Create a simple plan format that the workflow can easily consume.
         No complex conversions - just organize the work items into phases.
         """
         # Convert to dict first
-        backlog_dict = backlog.model_dump() if hasattr(backlog, 'model_dump') else backlog
+        if hasattr(backlog, 'model_dump'):
+            backlog_dict = backlog.model_dump()
+        elif isinstance(backlog, dict):
+            backlog_dict = backlog
+        else:
+            # Handle unexpected types - create error response
+            self.log_error(f"Unexpected backlog type: {type(backlog)} - content: {str(backlog)[:200]}")
+            return self.get_default_response(Exception(f"Invalid backlog type: {type(backlog)}"))
         
         # ADD DEBUGGING: Log the backlog structure
         self.log_info(f"Converting WorkItemBacklog to simple format")
-        self.log_info(f"Backlog dict keys: {list(backlog_dict.keys())}")
+        self.log_info(f"Backlog dict keys: {list(backlog_dict.keys()) if isinstance(backlog_dict, dict) else 'Not a dict'}")
+        
+        # Additional safety check
+        if not isinstance(backlog_dict, dict):
+            self.log_error(f"backlog_dict is not a dictionary: {type(backlog_dict)}")
+            return self.get_default_response(Exception(f"backlog_dict is not a dictionary: {type(backlog_dict)}"))
         
         # Group work items by agent role to create simple phases
         phases_map = {}

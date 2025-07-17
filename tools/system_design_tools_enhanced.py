@@ -104,21 +104,60 @@ def generate_comprehensive_system_design(requirements_analysis: dict, tech_stack
     """
     Analyzes requirements and tech stack to generate a complete, well-reasoned system design
     in a single, efficient operation.
-    This tool covers architectural components, data flows, API designs, database schemas,
-    security, deployment, monitoring, and scalability strategies.
-    
-    Args:
-        requirements_analysis: The full JSON output from the BRD analysis agent.
-        tech_stack_recommendation: The full JSON output from the tech stack recommendation agent.
-        llm: The language model to use for the analysis.
-        
-    Returns:
-        A dictionary containing the full, structured system design or error information.
     """
     logger.info("Executing consolidated tool: generate_comprehensive_system_design")
 
     try:
         llm_instance = llm or get_llm(temperature=0.2)
+
+        # --- Extract single tech stack recommendation (simplified approach) ---
+        logger.info(f"Tech stack recommendation type: {type(tech_stack_recommendation)}")
+        logger.info(f"Tech stack recommendation keys: {list(tech_stack_recommendation.keys()) if isinstance(tech_stack_recommendation, dict) else 'Not a dict'}")
+        
+        final_tech_stack = {}
+        
+        try:
+            # Use direct field extraction (new simple format from tech stack tool)
+            if isinstance(tech_stack_recommendation, dict):
+                # Check if it's in the simple format first (strings directly as values)
+                if tech_stack_recommendation.get("frontend") and isinstance(tech_stack_recommendation.get("frontend"), str):
+                    final_tech_stack = {
+                        "frontend": tech_stack_recommendation.get("frontend", "React"),
+                        "backend": tech_stack_recommendation.get("backend", "Node.js with Express.js"),
+                        "database": tech_stack_recommendation.get("database", "PostgreSQL"),
+                        "architecture": tech_stack_recommendation.get("architecture", "Microservices Architecture"),
+                        "cloud": tech_stack_recommendation.get("cloud", "AWS")
+                    }
+                    logger.info(f"Using simple format tech stack: {final_tech_stack}")
+                
+                # Check if it's in the complex format (objects with name/reasoning structure)
+                elif tech_stack_recommendation.get("frontend", {}).get("name"):
+                    # Direct fields with name/reasoning structure
+                    final_tech_stack = {
+                        "frontend": tech_stack_recommendation.get("frontend", {}).get("name", "React"),
+                        "backend": tech_stack_recommendation.get("backend", {}).get("name", "Node.js with Express.js"),
+                        "database": tech_stack_recommendation.get("database", {}).get("name", "PostgreSQL"),
+                        "architecture": tech_stack_recommendation.get("architecture", {}).get("name", "Microservices Architecture"),
+                        "cloud": tech_stack_recommendation.get("cloud", {}).get("name", "AWS")
+                    }
+                    logger.info(f"Using direct tech stack recommendations: {final_tech_stack}")
+        except Exception as tech_stack_error:
+            logger.error(f"Error extracting tech stack: {str(tech_stack_error)}")
+            logger.error(f"Tech stack error type: {type(tech_stack_error)}")
+            raise tech_stack_error
+        
+        # Emergency fallback if no valid data found
+        if not final_tech_stack or not any(final_tech_stack.values()):
+            logger.warning("No valid tech stack data found, using emergency fallback")
+            final_tech_stack = {
+                "frontend": "React",
+                "backend": "Node.js with Express.js", 
+                "database": "PostgreSQL",
+                "architecture": "Microservices Architecture",
+                "cloud": "AWS"
+            }
+        
+        logger.info(f"Final tech stack for system design: {final_tech_stack}")
 
         # Simplified prompt that focuses on essential system design elements
         prompt_template = ChatPromptTemplate.from_messages([
@@ -220,45 +259,27 @@ USER SELECTED TECH STACK:
 Return only the JSON object with no additional text.""")
         ])
 
-        # --- Prioritize selected_stack and user_selections ---
-        selected_stack = tech_stack_recommendation.get("selected_stack", {})
-        user_selections = tech_stack_recommendation.get("user_selections", {})
+        # Create simplified inputs - with debugging
+        logger.info(f"Requirements analysis type: {type(requirements_analysis)}")
+        logger.info(f"Requirements analysis keys: {list(requirements_analysis.keys()) if isinstance(requirements_analysis, dict) else 'Not a dict'}")
         
-        # Use selected stack if available, otherwise fall back to original recommendation
-        if selected_stack:
-            final_tech_stack = selected_stack
-            logger.info(f"Using user-selected tech stack: {final_tech_stack}")
-        elif user_selections:
-            final_tech_stack = user_selections
-            logger.info(f"Using user selections: {final_tech_stack}")
+        if isinstance(requirements_analysis, dict):
+            logger.info("About to call requirements_analysis.get('project_summary')")
+            requirements_summary = requirements_analysis.get("project_summary", "Web application project")
+            logger.info(f"Successfully got requirements_summary: {requirements_summary[:100]}...")
         else:
-            # Fallback: extract synthesis from tech stack recommendation
-            synthesis = tech_stack_recommendation.get("synthesis", {})
-            if synthesis:
-                final_tech_stack = {
-                    "frontend": synthesis.get("frontend", {}).get("technology", "React"),
-                    "backend": synthesis.get("backend", {}).get("technology", "Node.js"),
-                    "database": synthesis.get("database", {}).get("technology", "PostgreSQL"),
-                    "architecture": synthesis.get("architecture_pattern", "Microservices")
-                }
-            else:
-                final_tech_stack = {
-                    "frontend": "React",
-                    "backend": "Node.js", 
-                    "database": "PostgreSQL",
-                    "architecture": "Microservices"
-                }
-            logger.info(f"Using fallback tech stack: {final_tech_stack}")
-        
-        logger.info(f"Final tech stack for system design: {final_tech_stack}")
-
-        # Create simplified inputs
-        requirements_summary = requirements_analysis.get("project_summary", "Web application project")
+            logger.warning(f"Requirements analysis is not a dict (type: {type(requirements_analysis)}), using fallback")
+            requirements_summary = "Web application project"
+            
         if len(requirements_summary) > 1000:
             requirements_summary = requirements_summary[:1000] + "..."
         
         # Convert tech stack to simple string format
+        logger.info("About to call json.dumps on final_tech_stack")
         selected_tech_stack = json.dumps(final_tech_stack, indent=2)
+        logger.info(f"Successfully converted tech stack to JSON string")
+        
+        logger.info("About to call _safe_llm_invoke")
         
         # Use safe LLM invocation
         response_text = _safe_llm_invoke(
@@ -271,13 +292,40 @@ Return only the JSON object with no additional text.""")
             operation_name="generate_comprehensive_system_design"
         )
 
-        # Use centralized JSON parsing
-        response_json = clean_and_parse_json(response_text, "system design")
+        logger.info("LLM invocation completed, about to parse JSON")
+        logger.info(f"Response text type: {type(response_text)}")
+        logger.info(f"Response text length: {len(response_text) if response_text else 'None'}")
+
+        # Use centralized JSON parsing with try-catch for debugging
+        try:
+            response_json = clean_and_parse_json(response_text, "system design")
+            logger.info("JSON parsing succeeded")
+        except Exception as parse_error:
+            logger.error(f"JSON parsing failed: {str(parse_error)}")
+            logger.error(f"Parse error type: {type(parse_error)}")
+            raise parse_error
         
-        log_tool_execution("generate_comprehensive_system_design", success=True, 
-                          metadata={"components_count": len(response_json.get("components", [])),
-                                   "has_data_model": bool(response_json.get("data_model")),
-                                   "api_endpoints_count": len(response_json.get("api_endpoints", {}).get("endpoints", []))})
+        logger.info("JSON parsing completed, about to call log_tool_execution")
+        logger.info(f"Response JSON type: {type(response_json)}")
+        logger.info(f"Response JSON keys: {list(response_json.keys()) if isinstance(response_json, dict) else 'Not a dict'}")
+        
+        # Safe metadata extraction
+        try:
+            components_count = len(response_json.get("components", [])) if isinstance(response_json, dict) else 0
+            has_data_model = bool(response_json.get("data_model")) if isinstance(response_json, dict) else False
+            
+            api_endpoints = response_json.get("api_endpoints", {}) if isinstance(response_json, dict) else {}
+            api_endpoints_count = len(api_endpoints.get("endpoints", [])) if isinstance(api_endpoints, dict) else 0
+            
+            log_tool_execution("generate_comprehensive_system_design", success=True, 
+                              metadata={"components_count": components_count,
+                                       "has_data_model": has_data_model,
+                                       "api_endpoints_count": api_endpoints_count})
+        except Exception as metadata_error:
+            logger.warning(f"Error extracting metadata: {metadata_error}")
+            log_tool_execution("generate_comprehensive_system_design", success=True, 
+                              metadata={"metadata_extraction_error": str(metadata_error)})
+        
         return response_json
 
     except json.JSONDecodeError as e:
@@ -290,4 +338,4 @@ Return only the JSON object with no additional text.""")
         error_msg = f"Tool execution error: {str(e)}"
         logger.error(f"System design tool failed: {error_msg}")
         log_tool_execution("generate_comprehensive_system_design", success=False, error_msg=error_msg)
-        return _create_default_system_design(error_msg) 
+        return _create_default_system_design(error_msg)

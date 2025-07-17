@@ -1,0 +1,422 @@
+{
+  "session_id": "session_8b1d985e-7111-4b62-b881-e388ce6d0784",
+  "approval_type": "system_design",
+  "timestamp": 1752386834,
+  "approval_data": {
+    "architecture": {
+      "pattern": "Microservices Architecture",
+      "justification": "Microservices provide modularity, allowing independent development, deployment, and scaling of individual services. This enhances system resilience, simplifies maintenance, and enables the use of specific technologies for different concerns, aligning well with the need for a scalable and maintainable VKYC portal on AWS."
+    },
+    "components": [
+      {
+        "name": "VKYC Portal Frontend",
+        "description": "User interface for VKYC team members to search, view metadata, and download V-KYC recordings.",
+        "category": "frontend",
+        "technologies": [
+          "React"
+        ],
+        "responsibilities": [
+          "Render user interface",
+          "Handle user input and interactions",
+          "Communicate with API Gateway",
+          "Display recording metadata and status"
+        ]
+      },
+      {
+        "name": "API Gateway",
+        "description": "Central entry point for all client requests, responsible for routing, authentication validation, and rate limiting.",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "AWS API Gateway (optional, for managed service)"
+        ],
+        "responsibilities": [
+          "Route incoming requests to appropriate microservices",
+          "Perform initial JWT validation",
+          "Handle cross-cutting concerns like logging and monitoring hooks",
+          "Provide a unified API endpoint"
+        ]
+      },
+      {
+        "name": "User Management Service",
+        "description": "Manages user authentication, authorization (roles), and user profiles for the VKYC portal.",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "User registration and login",
+          "Password hashing and management",
+          "JWT token generation and validation",
+          "Role-Based Access Control (RBAC) enforcement",
+          "User profile management"
+        ]
+      },
+      {
+        "name": "VKYC Recording Metadata Service",
+        "description": "Manages the metadata associated with V-KYC recordings (e.g., case ID, customer name, recording date, S3 key).",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "Store and retrieve VKYC recording metadata",
+          "Handle search and filtering queries for recordings",
+          "Manage recording status and attributes",
+          "Integrate with data ingestion process (if applicable)"
+        ]
+      },
+      {
+        "name": "VKYC Recording Storage Service",
+        "description": "Manages the storage and secure retrieval of the actual V-KYC video recording files.",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "AWS S3"
+        ],
+        "responsibilities": [
+          "Generate pre-signed URLs for secure recording downloads from S3",
+          "Handle file upload (if direct upload is enabled)",
+          "Manage S3 bucket policies and object lifecycle"
+        ]
+      },
+      {
+        "name": "Audit Log Service",
+        "description": "Records all significant user actions and system events for auditability and compliance.",
+        "category": "backend",
+        "technologies": [
+          "Node.js",
+          "Express.js",
+          "PostgreSQL"
+        ],
+        "responsibilities": [
+          "Receive and store audit events from other services",
+          "Provide an API for querying audit logs",
+          "Ensure immutability of audit records"
+        ]
+      }
+    ],
+    "data_model": {
+      "schema_type": "relational",
+      "tables": [
+        {
+          "name": "users",
+          "purpose": "Stores user authentication and profile information.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "password_hash",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "email",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "role",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT 'auditor'"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "vkyc_recordings",
+          "purpose": "Stores metadata for V-KYC recordings.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "case_id",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "customer_name",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "recording_date",
+              "type": "DATE",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "s3_key",
+              "type": "VARCHAR(500)",
+              "constraints": [
+                "UNIQUE",
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "duration_seconds",
+              "type": "INTEGER",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "status",
+              "type": "VARCHAR(50)",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT 'available'"
+              ]
+            },
+            {
+              "name": "uploaded_by",
+              "type": "VARCHAR(255)",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "audit_logs",
+          "purpose": "Records all user actions and system events for audit purposes.",
+          "fields": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "constraints": [
+                "PRIMARY KEY"
+              ]
+            },
+            {
+              "name": "user_id",
+              "type": "UUID",
+              "constraints": [
+                "NOT NULL",
+                "FOREIGN KEY REFERENCES users(id)"
+              ]
+            },
+            {
+              "name": "action",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "resource_type",
+              "type": "VARCHAR(100)",
+              "constraints": [
+                "NOT NULL"
+              ]
+            },
+            {
+              "name": "resource_id",
+              "type": "UUID",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "timestamp",
+              "type": "TIMESTAMP WITH TIME ZONE",
+              "constraints": [
+                "NOT NULL",
+                "DEFAULT CURRENT_TIMESTAMP"
+              ]
+            },
+            {
+              "name": "ip_address",
+              "type": "VARCHAR(45)",
+              "constraints": [
+                "NULLABLE"
+              ]
+            },
+            {
+              "name": "details",
+              "type": "JSONB",
+              "constraints": [
+                "NULLABLE"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "api_endpoints": {
+      "style": "REST",
+      "base_url": "/api",
+      "authentication": "JWT",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "purpose": "Authenticate user and issue JWT.",
+          "authentication_required": false
+        },
+        {
+          "method": "GET",
+          "path": "/users/me",
+          "purpose": "Retrieve current user's profile.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/vkyc-recordings",
+          "purpose": "Search and retrieve a list of V-KYC recording metadata.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/vkyc-recordings/{id}",
+          "purpose": "Retrieve detailed metadata for a specific V-KYC recording.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/vkyc-recordings/{id}/download-url",
+          "purpose": "Request a pre-signed URL for downloading a V-KYC recording.",
+          "authentication_required": true
+        },
+        {
+          "method": "GET",
+          "path": "/audit-logs",
+          "purpose": "Retrieve audit logs (admin/auditor role required).",
+          "authentication_required": true
+        }
+      ]
+    },
+    "security": {
+      "authentication_method": "JWT",
+      "authorization_strategy": "RBAC (Role-Based Access Control)",
+      "data_encryption": {
+        "at_rest": "AWS S3 Server-Side Encryption (SSE-S3/KMS), AWS RDS Encryption (PostgreSQL), AWS EBS Encryption (EC2 volumes)",
+        "in_transit": "TLS 1.3"
+      }
+    },
+    "scalability_and_performance": {
+      "caching_strategy": "Redis (for session data, frequently accessed metadata, rate limiting)",
+      "load_balancing": "AWS Application Load Balancer (ALB) distributing traffic across microservice instances",
+      "database_scaling": "PostgreSQL Read Replicas (AWS RDS Read Replicas) for read-heavy workloads; vertical scaling for primary DB; connection pooling"
+    },
+    "deployment_strategy": {
+      "containerization": "Docker",
+      "orchestration": "Kubernetes (AWS EKS)",
+      "ci_cd": "GitLab CI"
+    },
+    "monitoring_and_logging": {
+      "application_monitoring": "Prometheus + Grafana (for metrics and dashboards), AWS CloudWatch (for infrastructure metrics)",
+      "logging": "ELK Stack (Elasticsearch, Logstash, Kibana) for centralized log aggregation and analysis",
+      "alerting": "PagerDuty/Slack (integrated with Prometheus Alertmanager and CloudWatch Alarms)"
+    },
+    "error_handling_strategy": "Centralized error handling middleware in each Node.js service to catch unhandled exceptions and return consistent, structured JSON error responses (e.g., { 'code': 'ERR_CODE', 'message': 'Error description' }). All errors are logged to the ELK stack for analysis and alerting.",
+    "development_phases_overview": [
+      {
+        "name": "Phase 1: Discovery & Planning",
+        "description": "Detailed requirements gathering, system design finalization, technology stack setup, and initial project planning.",
+        "estimated_duration": "2 weeks"
+      },
+      {
+        "name": "Phase 2: Core Backend Services Development",
+        "description": "Development of User Management, VKYC Recording Metadata, and Audit Log services, including database schema and basic CRUD APIs.",
+        "estimated_duration": "6 weeks"
+      },
+      {
+        "name": "Phase 3: Frontend Development & Integration",
+        "description": "Development of the React UI, integration with core backend services, and implementation of search/filter functionalities.",
+        "estimated_duration": "5 weeks"
+      },
+      {
+        "name": "Phase 4: VKYC Recording Storage & Download",
+        "description": "Implementation of the VKYC Recording Storage Service, S3 integration for file storage, and secure download mechanism (pre-signed URLs).",
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 5: Security, Deployment & Infrastructure",
+        "description": "Implementation of JWT, RBAC, encryption, Dockerization, Kubernetes deployment setup (EKS), CI/CD pipelines, and monitoring/logging infrastructure.",
+        "estimated_duration": "4 weeks"
+      },
+      {
+        "name": "Phase 6: Testing & User Acceptance Testing (UAT)",
+        "description": "Comprehensive unit, integration, and end-to-end testing. User Acceptance Testing with the VKYC team.",
+        "estimated_duration": "3 weeks"
+      },
+      {
+        "name": "Phase 7: Go-Live & Post-Launch Support",
+        "description": "Deployment to production, user training, and initial post-launch monitoring and support.",
+        "estimated_duration": "2 weeks"
+      }
+    ],
+    "key_risks": [
+      "Data migration complexity: Ensuring accurate and complete migration of existing V-KYC recording metadata and files from the IT data server to the new system (PostgreSQL and S3).",
+      "Performance bottlenecks: Potential performance issues with large numbers of concurrent video downloads from S3, requiring careful S3 configuration and CDN consideration.",
+      "Security vulnerabilities: Risk of unauthorized access to sensitive V-KYC recordings if JWT, RBAC, and S3 access policies are not robustly implemented.",
+      "Microservices complexity: Increased operational overhead due to managing multiple services, requiring strong DevOps practices and Kubernetes expertise.",
+      "Integration with existing VKYC systems: If there's an existing system generating recordings, ensuring a smooth, automated ingestion pipeline into S3 and metadata into PostgreSQL."
+    ],
+    "design_justification": "The chosen microservices architecture with Node.js/Express.js backend, React frontend, and PostgreSQL database, all hosted on AWS, provides a robust, scalable, and maintainable solution. Microservices enable independent development and deployment, reducing coupling and increasing resilience. Node.js and React offer a modern, efficient development stack for rapid iteration. PostgreSQL provides a reliable and feature-rich relational database for structured metadata. Leveraging AWS services (S3, RDS, EKS, ALB) ensures high availability, scalability, and security, while offloading infrastructure management. The design prioritizes security with JWT and RBAC, and auditability with a dedicated audit log service, directly addressing the project's core requirement for independent access and compliance.",
+    "data_flow": "The VKYC team user accesses the VKYC Portal Frontend (React) via a web browser. Upon login, the Frontend sends credentials to the API Gateway, which routes to the User Management Service. This service authenticates the user against PostgreSQL and issues a JWT. The Frontend stores this JWT and includes it in subsequent requests. When the user searches for recordings, the Frontend sends a request with the JWT to the API Gateway, which routes it to the VKYC Recording Metadata Service. This service queries PostgreSQL for recording metadata and returns it to the Frontend. If the user wishes to download a recording, the Frontend requests a pre-signed S3 URL from the API Gateway, which routes to the VKYC Recording Storage Service. This service generates a time-limited, secure URL for the specific recording from AWS S3 and returns it to the Frontend. The Frontend then uses this URL to directly download the recording from S3. All significant user actions (login, search, download) are captured by the respective services and sent to the Audit Log Service, which stores them in PostgreSQL, ensuring a comprehensive audit trail."
+  },
+  "workflow_state_snapshot": {}
+}

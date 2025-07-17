@@ -4,73 +4,137 @@
       Human Review Required: Tech Stack Recommendation
     </h2>
 
-    <div v-if="processedOptions && Object.keys(processedOptions).length > 0" class="bg-slate-900/70 border border-slate-700 p-4 rounded-lg max-h-[50vh] overflow-y-auto space-y-6">
-      <div v-for="(options, category_key) in processedOptions" :key="category_key" class="space-y-4">
-        <h4 class="text-lg font-semibold text-indigo-300 capitalize border-b border-slate-700 pb-2">{{ formatCategory(String(category_key)) }}</h4>
+    <div
+      v-if="techStackData && Object.keys(techStackData).length > 0"
+      class="bg-slate-900/70 border border-slate-700 p-4 rounded-lg max-h-[50vh] overflow-y-auto space-y-6"
+    >
+      <!-- Tech Stack Recommendations -->
+      <div class="space-y-4">
+        <h4 class="text-lg font-semibold text-indigo-300 border-b border-slate-700 pb-2">
+          Recommended Technology Stack
+        </h4>
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <label 
-            v-for="option in options" 
-            :key="option.name || option.pattern" 
-            :for="`${String(category_key)}-${option.name || option.pattern}`"
-            class="relative flex items-start p-4 rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
-            :class="[isSelected(String(category_key), option.name || option.pattern) ? 'bg-indigo-700/40 border-indigo-500 shadow-lg' : 'bg-slate-800/60 border-slate-700 hover:border-indigo-500/50 hover:bg-slate-700/50']"
+          <!-- Frontend -->
+          <div
+            v-if="techStackData.frontend"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
           >
-            <input
-              type="radio"
-              :id="`${String(category_key)}-${option.name || option.pattern}`"
-              :name="String(category_key)"
-              :value="option.name || option.pattern"
-              v-model="selectedOptions[String(category_key)]"
-              class="mt-0.5 h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 cursor-pointer bg-slate-900"
-            />
-            <div class="ml-3 text-sm flex-grow">
-              <p class="font-medium text-gray-100 group-hover:text-white">{{ option.name || option.pattern }} <span v-if="option.language">({{ option.language }})</span></p>
-              <p class="text-gray-300 mt-1">{{ option.reasoning || option.description || 'No reasoning provided.' }}</p>
-              <div v-if="option.pros && option.pros.length > 0" class="mt-2 text-green-300 text-xs">
-                <strong>Pros:</strong> {{ option.pros.join(', ') }}
-              </div>
-              <div v-if="option.cons && option.cons.length > 0" class="mt-1 text-red-300 text-xs">
-                <strong>Cons:</strong> {{ option.cons.join(', ') }}
-              </div>
-              <div v-if="option.key_libraries && option.key_libraries.length > 0" class="mt-1 text-blue-300 text-xs">
-                <strong>Libraries:</strong> {{ option.key_libraries.join(', ') }}
-              </div>
-            </div>
-            <span v-if="isSelected(String(category_key), option.name || option.pattern)" class="absolute top-2 right-2 text-indigo-200">
-                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-            </span>
-          </label>
+            <h5 class="font-bold text-blue-200 mb-2">Frontend</h5>
+            <p class="font-medium text-gray-100">{{ techStackData.frontend.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ techStackData.frontend.reasoning }}</p>
+          </div>
+
+          <!-- Backend -->
+          <div
+            v-if="techStackData.backend"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
+          >
+            <h5 class="font-bold text-green-200 mb-2">Backend</h5>
+            <p class="font-medium text-gray-100">{{ techStackData.backend.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ techStackData.backend.reasoning }}</p>
+          </div>
+
+          <!-- Database -->
+          <div
+            v-if="techStackData.database"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
+          >
+            <h5 class="font-bold text-purple-200 mb-2">Database</h5>
+            <p class="font-medium text-gray-100">{{ techStackData.database.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ techStackData.database.reasoning }}</p>
+          </div>
+
+          <!-- Cloud -->
+          <div
+            v-if="techStackData.cloud"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
+          >
+            <h5 class="font-bold text-yellow-200 mb-2">Cloud Platform</h5>
+            <p class="font-medium text-gray-100">{{ techStackData.cloud.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ techStackData.cloud.reasoning }}</p>
+          </div>
+
+          <!-- Architecture -->
+          <div
+            v-if="techStackData.architecture"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
+          >
+            <h5 class="font-bold text-red-200 mb-2">Architecture</h5>
+            <p class="font-medium text-gray-100">{{ techStackData.architecture.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ techStackData.architecture.reasoning }}</p>
+          </div>
         </div>
       </div>
-      
-      <!-- Risks Section -->
-      <div v-if="processedRisks.length > 0" class="space-y-4">
-        <h4 class="text-lg font-semibold text-red-300 capitalize border-b border-slate-700 pb-2">Identified Risks</h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div v-for="risk in processedRisks" :key="risk.category" class="bg-red-900/30 p-4 rounded-lg border border-red-700/50">
-            <p class="font-bold text-red-100">{{ risk.category }}</p>
-            <p class="text-sm text-red-200 mt-1">{{ risk.description || 'No description provided.' }}</p>
-            <p class="text-xs text-red-300 mt-1"><strong>Severity:</strong> {{ risk.severity || 'N/A' }}</p>
-            <p class="text-xs text-red-300"><strong>Mitigation:</strong> {{ risk.mitigation || 'N/A' }}</p>
+
+      <!-- Tools -->
+      <div v-if="techStackData.tools && techStackData.tools.length > 0" class="space-y-4">
+        <h4 class="text-lg font-semibold text-cyan-300 border-b border-slate-700 pb-2">
+          Development Tools
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            v-for="tool in techStackData.tools"
+            :key="tool.name"
+            class="bg-slate-800/60 p-4 rounded-lg border border-slate-700"
+          >
+            <p class="font-medium text-gray-100">{{ tool.name }}</p>
+            <p class="text-sm text-gray-300 mt-1">{{ tool.reasoning }}</p>
           </div>
         </div>
       </div>
 
       <!-- Synthesis Section -->
-      <div v-if="processedSynthesis" class="space-y-4">
-        <h4 class="text-lg font-semibold text-green-300 capitalize border-b border-slate-700 pb-2">Overall Synthesis</h4>
-        <div class="bg-slate-800/60 p-4 rounded-lg border border-slate-700/50 text-gray-200 space-y-2">
-          <p v-if="processedSynthesis.architecture_pattern"><strong>Architecture Pattern:</strong> {{ processedSynthesis.architecture_pattern }}</p>
-          <p v-if="processedSynthesis.estimated_complexity"><strong>Estimated Complexity:</strong> {{ processedSynthesis.estimated_complexity }}</p>
-          <p v-if="processedSynthesis.backend"><strong>Backend Summary:</strong> {{ formatSynthesis(processedSynthesis.backend) }}</p>
-          <p v-if="processedSynthesis.frontend"><strong>Frontend Summary:</strong> {{ formatSynthesis(processedSynthesis.frontend) }}</p>
-          <p v-if="processedSynthesis.database"><strong>Database Summary:</strong> {{ formatSynthesis(processedSynthesis.database) }}</p>
-          <p v-if="processedSynthesis.key_libraries_tools && processedSynthesis.key_libraries_tools.length > 0">
-            <strong>Key Libraries & Tools:</strong> {{ processedSynthesis.key_libraries_tools.map((lib: any) => lib.name).join(', ') }}
+      <div
+        v-if="techStackData.synthesis && Object.keys(techStackData.synthesis).length > 0"
+        class="space-y-4"
+      >
+        <h4 class="text-lg font-semibold text-green-300 border-b border-slate-700 pb-2">
+          Overall Analysis
+        </h4>
+        <div
+          class="bg-slate-800/60 p-4 rounded-lg border border-slate-700/50 text-gray-200 space-y-2"
+        >
+          <p v-if="techStackData.synthesis.architecture_pattern">
+            <strong>Architecture Pattern:</strong>
+            {{ techStackData.synthesis.architecture_pattern }}
           </p>
+          <p v-if="techStackData.synthesis.estimated_complexity">
+            <strong>Estimated Complexity:</strong>
+            {{ techStackData.synthesis.estimated_complexity }}
+          </p>
+          <div v-if="techStackData.synthesis.deployment_environment">
+            <p>
+              <strong>Deployment:</strong>
+              {{ techStackData.synthesis.deployment_environment.hosting }} with
+              {{ techStackData.synthesis.deployment_environment.ci_cd }}
+            </p>
+          </div>
+          <div
+            v-if="
+              techStackData.synthesis.key_libraries_tools &&
+              techStackData.synthesis.key_libraries_tools.length > 0
+            "
+          >
+            <p>
+              <strong>Key Libraries & Tools:</strong>
+              {{
+                techStackData.synthesis.key_libraries_tools.map((lib: any) => lib.name).join(", ")
+              }}
+            </p>
+          </div>
         </div>
       </div>
 
+      <!-- Design Justification -->
+      <div v-if="techStackData.design_justification" class="space-y-4">
+        <h4 class="text-lg font-semibold text-orange-300 border-b border-slate-700 pb-2">
+          Design Justification
+        </h4>
+        <div class="bg-slate-800/60 p-4 rounded-lg border border-slate-700/50 text-gray-200">
+          <p>{{ techStackData.design_justification }}</p>
+        </div>
+      </div>
     </div>
     <div v-else class="text-center text-gray-400 py-8">
       <p>Waiting for tech stack recommendation data...</p>
@@ -79,13 +143,15 @@
     <!-- Action Buttons -->
     <div class="border-t border-white/10 pt-6 space-y-4">
       <div v-if="showFeedback" class="transition-all">
-        <label for="feedback" class="block text-sm font-medium text-gray-300 mb-2">Please provide feedback for revision:</label>
+        <label for="feedback" class="block text-sm font-medium text-gray-300 mb-2"
+          >Please provide feedback for revision:</label
+        >
         <textarea
           v-model="feedbackText"
           id="feedback"
           rows="4"
           class="block w-full bg-slate-900 border-slate-700 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white"
-          placeholder="e.g., 'Let's use React instead of Vue for the frontend.'"
+          placeholder="e.g., 'Please use Vue.js instead of React for the frontend' or 'Consider using MySQL instead of PostgreSQL'"
         ></textarea>
       </div>
       <div class="flex items-center justify-end gap-4">
@@ -113,114 +179,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue';
+import { ref, computed } from "vue";
 
 const props = defineProps<{
-  data: any
+  data: any;
 }>();
 
 const emit = defineEmits<{
-  (e: 'proceed', selectedStack: { [key: string]: string }): void;
-  (e: 'revise', feedback: string, selectedStack: { [key: string]: string }): void;
-  (e: 'end'): void;
+  (e: "proceed"): void;
+  (e: "revise", feedback: string): void;
+  (e: "end"): void;
 }>();
 
 const showFeedback = ref(false);
-const feedbackText = ref('');
+const feedbackText = ref("");
 
-const selectedOptions = reactive<{ [key: string]: string }>({});
-
-const processedOptions = computed(() => {
-  const data = props.data || {};
-  const categories = [
-    "frontend_options", "backend_options", "database_options", 
-    "cloud_options", "architecture_options", "tool_options"
-  ];
-  
-  const options: { [key: string]: any[] } = {};
-  categories.forEach(category => {
-    const categoryData = data[category] || [];
-    options[category] = categoryData.map((item: any) => {
-      // Initialize selectedOptions if not already set
-      if (item.selected && !selectedOptions[category]) {
-        selectedOptions[category] = item.name || item.pattern; // 'pattern' for architecture
-      }
-      return item;
-    });
-  });
-  return options;
+const techStackData = computed(() => {
+  return props.data || {};
 });
-
-const processedRisks = computed(() => {
-  return props.data?.risks || [];
-});
-
-const processedSynthesis = computed(() => {
-  return props.data?.synthesis || {};
-});
-
-const formatCategory = (category: string) => {
-  return category.replace(/_options$/, '').replace(/_/g, ' ');
-};
-
-const formatSynthesis = (synthesis: { [key: string]: string }) => {
-  if (!synthesis || Object.keys(synthesis).length === 0) {
-    return 'No summary provided.';
-  }
-  return Object.entries(synthesis)
-    .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`)
-    .join('; ');
-};
-
-const isSelected = (category: string, optionValue: string) => {
-  return selectedOptions[category] === optionValue;
-};
-
-watch(() => props.data, (newData) => {
-  if (newData) {
-    const categories = [
-      "frontend_options", "backend_options", "database_options", 
-      "cloud_options", "architecture_options", "tool_options"
-    ];
-    categories.forEach(category => {
-      const selectedItem = newData[category]?.find((item: any) => item.selected);
-      if (selectedItem) {
-        selectedOptions[category] = selectedItem.name || selectedItem.pattern; // 'pattern' for architecture
-      } else if (newData[category] && newData[category].length > 0) {
-        // If no explicit selection, default to the first option
-        selectedOptions[category] = newData[category][0].name || newData[category][0].pattern;
-      }
-    });
-  }
-}, { immediate: true });
-
-function getSelectedStackForEmit() {
-  const finalSelection: { [key: string]: string } = {};
-  for (const category in selectedOptions) {
-    if (selectedOptions[category]) {
-      // Map internal category_key to the expected backend field name
-      // e.g., 'frontend_options' -> 'frontend_selection'
-      const backendKey = category.replace('_options', '_selection');
-      finalSelection[backendKey] = selectedOptions[category];
-    }
-  }
-  return finalSelection;
-}
 
 function handleApprove() {
-  emit('proceed', getSelectedStackForEmit());
+  emit("proceed");
 }
 
 function handleReject() {
   if (showFeedback.value && feedbackText.value.trim()) {
-    emit('revise', feedbackText.value, getSelectedStackForEmit());
+    emit("revise", feedbackText.value);
   } else {
     showFeedback.value = true;
   }
 }
 
 function handleTerminate() {
-  emit('end');
+  emit("end");
 }
 </script>
 
@@ -241,4 +232,4 @@ function handleTerminate() {
 .feedback-section {
   margin-top: 16px;
 }
-</style> 
+</style>

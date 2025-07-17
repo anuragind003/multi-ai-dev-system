@@ -1,0 +1,361 @@
+{
+  "session_id": "session_4ed38d40-53dc-4936-8958-8d72e761480d",
+  "approval_type": "implementation_plan",
+  "timestamp": 1752647038,
+  "approval_data": {
+    "summary": "This project aims to develop a portal/dashboard for VKYC leads (TL & Process Manager) to access V-KYC recordings for audit purposes. The system will allow searching recordings by LAN ID and bulk video download based on a list of LAN IDs uploaded via Excel or text file. The architecture will be based on microservices, using React for the frontend, Node.js with Express.js for the backend, PostgreSQL for the database, and AWS for cloud hosting. JWT authentication and RBAC will be implemented for security. Docker, Git, and CI/CD pipelines will streamline the development and deployment process.",
+    "phases": [
+      {
+        "name": "Database Setup",
+        "description": "Tasks for database setup development",
+        "work_items": [
+          {
+            "id": "BE-001",
+            "description": "Set up PostgreSQL database on AWS RDS with necessary tables (users, vkyc_recordings, audit_logs) based on the data model.",
+            "dependencies": [],
+            "estimated_time": "1 day",
+            "agent_role": "database_specialist",
+            "acceptance_criteria": [
+              "PostgreSQL database is running on AWS RDS.",
+              "All tables (users, vkyc_recordings, audit_logs) are created with correct schema.",
+              "Database is accessible from other AWS services.",
+              "Initial user with admin privileges is created."
+            ],
+            "status": "pending",
+            "code_files": []
+          }
+        ]
+      },
+      {
+        "name": "Backend Development",
+        "description": "Tasks for backend development development",
+        "work_items": [
+          {
+            "id": "BE-002",
+            "description": "Implement Authentication Service (Node.js, Express.js, JWT, Passport.js) with user registration and login endpoints.",
+            "dependencies": [
+              "BE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "User registration endpoint is functional.",
+              "User login endpoint is functional and returns a JWT token.",
+              "JWT token is correctly generated and verified.",
+              "User roles and permissions are managed in the database.",
+              "API endpoints are protected with JWT authentication."
+            ],
+            "status": "pending",
+            "code_files": [
+              "auth-service/app.js",
+              "auth-service/routes/auth.js",
+              "auth-service/models/user.js"
+            ]
+          },
+          {
+            "id": "BE-003",
+            "description": "Implement V-KYC Data Retrieval Service (Node.js, Express.js, PostgreSQL, AWS SDK (S3)) to fetch recordings and metadata.",
+            "dependencies": [
+              "BE-001"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Service can fetch V-KYC recordings from S3 based on metadata in PostgreSQL.",
+              "Service can query metadata from PostgreSQL based on search criteria (LAN ID, date, month).",
+              "Service can filter and sort data based on user criteria.",
+              "Service provides data in a format suitable for the UI.",
+              "Service handles errors gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "data-retrieval-service/app.js",
+              "data-retrieval-service/routes/vkyc.js",
+              "data-retrieval-service/models/recording.js"
+            ]
+          },
+          {
+            "id": "BE-004",
+            "description": "Implement Reporting Service (Node.js, Express.js, PDFKit, PostgreSQL) to generate audit reports.",
+            "dependencies": [
+              "BE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Service can generate reports in PDF format.",
+              "Reports can be customized based on user requirements.",
+              "Service can store and retrieve generated reports.",
+              "Reports include relevant V-KYC data and audit information.",
+              "Service handles errors gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "reporting-service/app.js",
+              "reporting-service/routes/reports.js"
+            ]
+          },
+          {
+            "id": "BE-005",
+            "description": "Implement API Gateway (Node.js, Express.js, API Gateway library) to route requests to microservices.",
+            "dependencies": [
+              "BE-002",
+              "BE-003",
+              "BE-004"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "API Gateway routes requests to the correct microservice.",
+              "API Gateway handles authentication and authorization using JWT.",
+              "API Gateway implements rate limiting.",
+              "API Gateway logs requests.",
+              "API Gateway handles errors gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "api-gateway/app.js",
+              "api-gateway/routes/index.js"
+            ]
+          },
+          {
+            "id": "BE-006",
+            "description": "Implement backend API endpoint to handle bulk video download requests.",
+            "dependencies": [
+              "BE-003",
+              "BE-005"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "API endpoint accepts an Excel or text file containing a list of LAN IDs (2-50).",
+              "API endpoint processes the file and retrieves the corresponding V-KYC recordings.",
+              "API endpoint returns the results in a format suitable for the UI.",
+              "API endpoint handles errors gracefully, including invalid file formats and LAN ID counts."
+            ],
+            "status": "pending",
+            "code_files": [
+              "data-retrieval-service/routes/bulkDownload.js"
+            ]
+          },
+          {
+            "id": "BE-007",
+            "description": "Implement RBAC (Role-Based Access Control) for authorization.",
+            "dependencies": [
+              "BE-002"
+            ],
+            "estimated_time": "1 day",
+            "agent_role": "backend_developer",
+            "acceptance_criteria": [
+              "Only Team Leaders and Process Managers can access the dashboard.",
+              "Different roles have different permissions.",
+              "RBAC is enforced at the API Gateway level.",
+              "RBAC configuration is stored in the database."
+            ],
+            "status": "pending",
+            "code_files": [
+              "api-gateway/middleware/auth.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Frontend Development",
+        "description": "Tasks for frontend development development",
+        "work_items": [
+          {
+            "id": "FE-001",
+            "description": "Create React-based User Interface (Dashboard) with login page.",
+            "dependencies": [],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "Login page allows users to authenticate.",
+              "Login page integrates with the Authentication Service.",
+              "Dashboard displays a welcome message after successful login.",
+              "UI is responsive and user-friendly."
+            ],
+            "status": "pending",
+            "code_files": [
+              "ui/src/components/Login.js",
+              "ui/src/App.js"
+            ]
+          },
+          {
+            "id": "FE-002",
+            "description": "Implement V-KYC recording search functionality in the UI.",
+            "dependencies": [
+              "FE-001",
+              "BE-003",
+              "BE-005"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "UI allows users to search for recordings by LAN ID, date, and month.",
+              "Search results are displayed in a tabular format.",
+              "Search results are paginated (10 records per page).",
+              "UI integrates with the V-KYC Data Retrieval Service via the API Gateway.",
+              "UI handles errors gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "ui/src/components/Search.js",
+              "ui/src/components/ResultsTable.js"
+            ]
+          },
+          {
+            "id": "FE-003",
+            "description": "Implement V-KYC recording download functionality in the UI.",
+            "dependencies": [
+              "FE-002",
+              "BE-003",
+              "BE-005"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "UI allows users to download individual recordings.",
+              "UI provides a \"Download All\" option for downloading all recordings on the current page (10 records).",
+              "Download functionality integrates with the V-KYC Data Retrieval Service via the API Gateway.",
+              "UI handles errors gracefully."
+            ],
+            "status": "pending",
+            "code_files": [
+              "ui/src/components/ResultsTable.js"
+            ]
+          },
+          {
+            "id": "FE-004",
+            "description": "Implement bulk video download functionality in the UI.",
+            "dependencies": [
+              "FE-002",
+              "BE-003",
+              "BE-005"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "frontend_developer",
+            "acceptance_criteria": [
+              "UI allows users to upload an Excel or text file containing a list of LAN IDs (2-50).",
+              "UI triggers a call to the backend API to process the request.",
+              "UI displays the results in a tabular format, accompanied by a \"Download All\" option.",
+              "UI handles errors gracefully, including invalid file formats and LAN ID counts."
+            ],
+            "status": "pending",
+            "code_files": [
+              "ui/src/components/BulkUpload.js",
+              "ui/src/components/ResultsTable.js"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "General Development",
+        "description": "Tasks for general development development",
+        "work_items": [
+          {
+            "id": "DE-001",
+            "description": "Set up Docker containers for each microservice (Authentication, V-KYC Data Retrieval, Reporting, API Gateway, UI).",
+            "dependencies": [
+              "BE-002",
+              "BE-003",
+              "BE-004",
+              "BE-005",
+              "FE-004",
+              "BE-006"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Each microservice has a Dockerfile.",
+              "Docker containers can be built and run successfully.",
+              "Containers are configured to communicate with each other.",
+              "Containers are optimized for performance and security."
+            ],
+            "status": "pending",
+            "code_files": [
+              "auth-service/Dockerfile",
+              "data-retrieval-service/Dockerfile",
+              "reporting-service/Dockerfile",
+              "api-gateway/Dockerfile",
+              "ui/Dockerfile"
+            ]
+          },
+          {
+            "id": "DE-002",
+            "description": "Set up CI/CD pipeline using GitHub Actions to automate testing and deployment.",
+            "dependencies": [
+              "DE-001"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "CI/CD pipeline is configured to run tests automatically on code changes.",
+              "CI/CD pipeline automatically builds and deploys Docker containers to a staging environment.",
+              "CI/CD pipeline supports manual deployment to production environment.",
+              "Pipeline includes unit tests, integration tests, and end-to-end tests."
+            ],
+            "status": "pending",
+            "code_files": [
+              ".github/workflows/main.yml"
+            ]
+          },
+          {
+            "id": "DE-003",
+            "description": "Deploy the application to AWS using Kubernetes.",
+            "dependencies": [
+              "DE-002"
+            ],
+            "estimated_time": "3 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Kubernetes cluster is running on AWS.",
+              "All microservices are deployed to the Kubernetes cluster.",
+              "Services are accessible through the API Gateway.",
+              "Application is scalable and resilient.",
+              "Monitoring and logging are configured."
+            ],
+            "status": "pending",
+            "code_files": [
+              "kubernetes/auth-service.yaml",
+              "kubernetes/data-retrieval-service.yaml",
+              "kubernetes/reporting-service.yaml",
+              "kubernetes/api-gateway.yaml",
+              "kubernetes/ui.yaml"
+            ]
+          },
+          {
+            "id": "DE-004",
+            "description": "Configure monitoring and logging using Prometheus, Grafana, and ELK stack.",
+            "dependencies": [
+              "DE-003"
+            ],
+            "estimated_time": "2 days",
+            "agent_role": "devops_engineer",
+            "acceptance_criteria": [
+              "Prometheus is collecting metrics from all microservices.",
+              "Grafana dashboards are configured to visualize metrics.",
+              "ELK stack is collecting logs from all microservices.",
+              "Alerting is configured for critical issues."
+            ],
+            "status": "pending",
+            "code_files": [
+              "prometheus/prometheus.yml",
+              "grafana/dashboards/dashboard.json",
+              "elk/logstash.conf"
+            ]
+          }
+        ]
+      }
+    ],
+    "total_work_items": 15,
+    "metadata": {
+      "estimated_total_time": "35 days",
+      "risk_assessment": "Security vulnerabilities, performance bottlenecks, integration issues, data breaches.",
+      "assumptions": "The NFS server containing VKYC recordings is accessible. The format of the LAN IDs in the uploaded file is consistent and valid.",
+      "constraints": "Access to the screen will be available to very limited users (only Team leaders)."
+    },
+    "plan_type": "simplified_workitem_backlog"
+  },
+  "workflow_state_snapshot": {}
+}
