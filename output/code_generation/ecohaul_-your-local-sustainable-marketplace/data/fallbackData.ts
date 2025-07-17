@@ -1,0 +1,58 @@
+import { Product } from '../types';
+
+export const fallbackProducts: Product[] = [
+  {
+    id: 'fallback-1',
+    name: 'Hand-poured Soy Wax Candle',
+    vendor: 'Indiranagar Candles',
+    price: '₹750',
+    category: 'Household',
+    tags: ['Handmade', 'Eco-friendly', 'Aromatherapy'],
+    imageUrl: 'https://images.unsplash.com/photo-1614036855322-c3f2b4515a0c?w=400&h=300&fit=crop',
+  },
+  {
+    id: 'fallback-2',
+    name: 'Organic Heirloom Tomatoes',
+    vendor: 'Koramangala Farms',
+    price: '₹120',
+    category: 'Produce',
+    tags: ['Organic', 'Fresh', 'Local'],
+    imageUrl: 'https://images.unsplash.com/photo-1561138030-798c9de9a4b5?w=400&h=300&fit=crop',
+  },
+  {
+    id: 'fallback-3',
+    name: 'Zero-Waste Shampoo Bar',
+    vendor: 'HSR Layout Soaps',
+    price: '₹450',
+    category: 'Personal Care',
+    tags: ['Zero-Waste', 'Natural', 'Vegan'],
+    imageUrl: 'https://images.unsplash.com/photo-1629198735660-e39ea93f5a87?w=400&h=300&fit=crop',
+  },
+  {
+    id: 'fallback-4',
+    name: 'Upcycled Denim Tote Bag',
+    vendor: 'Jayanagar Artisans',
+    price: '₹1200',
+    category: 'Fashion',
+    tags: ['Upcycled', 'Handmade', 'Durable'],
+    imageUrl: 'https://images.unsplash.com/photo-1599405652254-28918625fb3f?w=400&h=300&fit=crop',
+  },
+  {
+    id: 'fallback-5',
+    name: 'Spicy Mango Pickle',
+    vendor: 'Grandma\'s Kitchen',
+    price: '₹250',
+    category: 'Food',
+    tags: ['Homemade', 'Preservative-free'],
+    imageUrl: 'https://images.unsplash.com/photo-1594970876615-38acc6457312?w=400&h=300&fit=crop',
+  },
+  {
+    id: 'fallback-6',
+    name: 'Bamboo Toothbrush Set (4-pack)',
+    vendor: 'Whitefield Eco Goods',
+    price: '₹300',
+    category: 'Personal Care',
+    tags: ['Biodegradable', 'Sustainable', 'Plastic-free'],
+    imageUrl: 'https://images.unsplash.com/photo-1583339949438-24535c56743b?w=400&h=300&fit=crop',
+  },
+];
